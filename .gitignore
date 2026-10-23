@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+.env
+.env.local
+data/db.json
+data/*.json
+!data/.gitkeep
+data/*.tmp
+public/uploads/*
+!public/uploads/.gitkeep
+*.log
+.DS_Store
+tsconfig.tsbuildinfo

@@ -8,6 +8,8 @@ export interface ChatSummary {
   name: string;
   avatarColor: string;
   memberIds: string[];
+  /** Nama + warna anggota (untuk kolase avatar grup) */
+  memberAvatars: Array<{ name: string; color: string }>;
   pinned: boolean;
   muted: boolean;
   archived: boolean;

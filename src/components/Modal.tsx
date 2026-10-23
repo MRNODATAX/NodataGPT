@@ -17,20 +17,27 @@ export function Modal({ title, onClose, children, footer, maxWidth }: Props) {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previous;
     };
   }, [onClose]);
 
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={maxWidth ? { maxWidth } : undefined} role="dialog" aria-modal="true" aria-label={title}>
+    <div className="overlay" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div
+        className="modal"
+        style={maxWidth ? { maxWidth } : undefined}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Tutup">
-            <X size={19} />
+          <button className="wa-icon-btn" onClick={onClose} aria-label="Tutup">
+            <X size={20} />
           </button>
         </div>
         {children}
@@ -50,8 +57,8 @@ interface SwitchProps {
 
 export function SwitchRow({ checked, onChange, label, description, disabled }: SwitchProps) {
   return (
-    <div className="switch-row">
-      <div className="switch-text">
+    <div className="wa-row-toggle">
+      <div className="txt">
         <strong>{label}</strong>
         {description ? <span>{description}</span> : null}
       </div>
@@ -60,10 +67,10 @@ export function SwitchRow({ checked, onChange, label, description, disabled }: S
         role="switch"
         aria-checked={checked}
         aria-label={label}
+        aria-disabled={disabled}
         disabled={disabled}
-        className={`switch ${checked ? "on" : ""}`}
+        className={`wa-switch ${checked ? "on" : ""}`}
         onClick={() => onChange(!checked)}
-        style={disabled ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
       />
     </div>
   );

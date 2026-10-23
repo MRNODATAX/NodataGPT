@@ -6,6 +6,31 @@ Dibangun dengan Next.js 15 (App Router) + React 19 + TypeScript. Tidak perlu Pos
 
 ---
 
+## 0. Tampilan
+
+Klon visual 1:1 alur kerja WhatsApp Web (redesign 2025) dengan penyempurnaan sendiri:
+
+| | |
+| --- | --- |
+| ![Light](docs/ui-02-group-light.png) | ![Dark](docs/ui-03-group-dark.png) |
+| Mode terang — rail navigasi, header 60px, wallpaper doodle, bubble ber-ekor | Mode gelap — palet `#0b141a / #202c33 / #005c4b`, kontras lebih rendah |
+
+| Info chat | Mobile |
+| --- | --- |
+| ![Info](docs/ui-04-info.png) | ![Mobile](docs/ui-06-mobile-chat.png) |
+
+**Yang direplikasi dari WhatsApp Web:** rail navigasi kiri (Obrolan/Status/Saluran/Arsip), header statis 60px,
+search bar pil, chip filter, baris chat 72px dengan kolase avatar grup 2×2, centang biru `#53bdeb`,
+bubble keluar `#d9fdd3` / `#005c4b` dengan ekor, chip tanggal, wallpaper doodle, composer pil dengan
+emoji/attachment/kirim, panel info chat 400px, indikator "mengetik", dan layout responsif satu-kolom di ponsel.
+
+**Penyempurnaan sendiri:** tema gelap/terang yang bisa diganti manual (tersimpan di `localStorage`, tanpa flash),
+aksen ungu `#6c5ce7` + label `AI` untuk pesan hasil auto-responder, panel pengaturan AI, pencarian dalam chat
+dengan hit-count & sorotan, tooltip rail, serta emoji berwarna yang tetap tampil di Linux minimal
+(webfont Noto Color Emoji, diunduh hanya bila sistem tidak punya glyph emoji).
+
+---
+
 ## 1. Fitur
 
 ### Percakapan
@@ -13,7 +38,10 @@ Dibangun dengan Next.js 15 (App Router) + React 19 + TypeScript. Tidak perlu Pos
 - Kirim teks, emoji, dan gambar (upload hingga 8 MB: PNG/JPG/WEBP/GIF).
 - Balas pesan (quote), hapus pesan untuk diri sendiri atau untuk semua orang.
 - Status terkirim/dibaca (centang ganda biru), penanda "AI" pada pesan hasil auto-reply.
-- Daftar chat dengan pencarian, filter **Semua / Belum dibaca / Grup / Arsip**, badge belum dibaca.
+- Daftar chat dengan pencarian, filter **Semua / Belum dibaca / Grup / Arsip**, baris "Diarsipkan", badge belum dibaca.
+- Rail navigasi: Obrolan, Status, Saluran, Asisten AI, Arsip, ganti tema, profil.
+- Pencarian **di dalam chat** dengan jumlah hasil + navigasi hasil sebelumnya/berikutnya dan sorotan bubble.
+- Tema terang/gelap manual (default mengikuti sistem).
 - Sematkan (pin), bisukan, dan arsipkan chat.
 - Indikator "sedang mengetik" untuk balasan AI, plus auto-scroll dan tombol ke pesan terbaru.
 - Responsif: sidebar + panel chat di desktop, tampilan penuh dengan tombol kembali di ponsel.
@@ -79,13 +107,16 @@ Vibe-Chat/
 │  └─ db.json                 # DATABASE (dibuat otomatis, di-gitignore)
 ├─ public/
 │  └─ uploads/                # gambar hasil upload
+├─ docs/                      # tangkapan layar UI
 ├─ scripts/
 │  └─ reset-db.mjs            # reset/seed ulang
+├─ tests/
+│  └─ e2e.mjs                 # 23 uji end-to-end (Playwright) + provider AI tiruan
 ├─ src/
 │  ├─ app/
 │  │  ├─ layout.tsx           # root layout + metadata
 │  │  ├─ page.tsx             # server component: cek sesi → AuthGate / ChatApp
-│  │  ├─ globals.css          # design system (token warna, light/dark, responsif)
+│  │  ├─ globals.css          # design system: token warna, wallpaper, light/dark, responsif
 │  │  └─ api/
 │  │     ├─ auth/login|register|logout/
 │  │     ├─ me/               # profil sendiri (GET/PATCH)
@@ -283,7 +314,36 @@ VIBECHAT_DB=/path/db.json # lokasi file database
 
 ---
 
-## 7. Keamanan & batasan
+## 7. Pengujian
+
+Suite E2E ada di `tests/e2e.mjs` (Playwright). Skrip menyalakan dua provider AI tiruan
+(port `4010` OpenAI-compatible, `4011` Gemini) lalu menguji 23 skenario:
+
+```bash
+npm run dev                    # terminal 1
+npx playwright install chromium  # sekali saja
+npm run test:e2e               # terminal 2
+```
+
+Hasil terakhir: **23/23 lolos, 0 error JavaScript, 0 respons HTTP ≥ 400.**
+
+| Kelompok | Skenario |
+| --- | --- |
+| Daftar chat | 7 chat termuat, pencarian, filter, baris arsip |
+| Pesan | kirim teks, kirim gambar (upload), emoji, menu lampiran |
+| Interaksi | balas kutipan, hapus untuk semua, sematkan, arsipkan/keluarkan |
+| Status baca | akun kedua membaca → centang berubah biru di akun pertama |
+| Pencarian | cari dalam chat, jumlah hasil, sorotan bubble |
+| AI | uji koneksi Gemini (adapter), indikator mengetik, balasan tersimpan, provider mati → pesan peringatan |
+| Akun | registrasi akun baru + chat sambutan Vibe AI |
+| Responsif | mobile: daftar → chat → kembali |
+
+Uji manual cepat: `curl` ke `/api/...` juga dipakai saat pengembangan
+(login → `GET /api/chats` → `POST /api/chats/:id/messages`).
+
+---
+
+## 8. Keamanan & batasan
 
 - Hash password `scrypt` + perbandingan `timingSafeEqual`; sesi HMAC-SHA256 (30 hari).
 - Semua endpoint memvalidasi keanggotaan chat sebelum membaca/menulis.
@@ -293,7 +353,7 @@ VIBECHAT_DB=/path/db.json # lokasi file database
 
 ---
 
-## 8. Roadmap (terstruktur)
+## 9. Roadmap (terstruktur)
 
 **Fase 1 — Fondasi (selesai)**
 - [x] Auth, seed, JSON store atomic + queue
@@ -322,7 +382,7 @@ VIBECHAT_DB=/path/db.json # lokasi file database
 
 ---
 
-## 9. Referensi internet
+## 10. Referensi internet
 
 - Gemini API — generate content: <https://ai.google.dev/api/generate-content>
 - Gemini API — model & kuota: <https://ai.google.dev/gemini-api/docs/models>
@@ -333,11 +393,21 @@ VIBECHAT_DB=/path/db.json # lokasi file database
 - MDN — `fetch`, `FormData`, cookie & same-site: <https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API>
 - Node.js `crypto.scrypt` & `fs.rename` (atomic write): <https://nodejs.org/api/crypto.html#cryptoscryptpassword-salt-keylen-options-callback>
 - Next.js App Router & Route Handlers: <https://nextjs.org/docs/app/building-your-application/routing/route-handlers>
+- Meta Design — pembaruan antarmuka WhatsApp (palet hijau, ikon rounded): <https://www.meta.com/design-at-meta/blog/whatsapp-user-interface-update/>
+- WABetaInfo — sidebar baru WhatsApp Web: <https://wabetainfo.com/whatsapp-announces-a-freshly-redesigned-interface-for-the-web-client/>
+- Android Police — bedah perubahan redesign web 2025: <https://www.androidpolice.com/whatsapp-web-redesign-subtle-changes/>
+- WWeb Customizer — nilai warna persis WhatsApp Web (light & dark): <https://www.wwebcustomizer.com/blog/how-to-get-dark-mode-on-whatsapp-web-beyond-the-default>
+- Panduan token desain WhatsApp (tipografi, breakpoint, palette): <https://github.com/Khalidabdi1/design-ai/blob/main/design-md/whatsapp/DESIGN.md>
+- Noto Color Emoji (SIL OFL) — webfont emoji untuk sistem tanpa font emoji: <https://github.com/googlefonts/noto-emoji>
 - REA — Reverse Engineer Anything (skill analisis produk/aplikasi): <https://github.com/morluto/rea>
   - Alur kerja yang dipakai saat merancang VibeChat: memetakan fitur acuan (aplikasi chat populer) → menyusun perilaku yang bisa diamati dari sisi produk (daftar chat, centang dibaca, pin, arsip, balasan kutipan) → membangun ulang versi sendiri dengan data & kode sendiri, tanpa menyalin aset atau kode proprietary.
 
 ---
 
-## 10. Lisensi & catatan
+## 11. Lisensi & catatan
 
-Proyek ini adalah **reimplementasi independen** untuk tujuan pembelajaran/portofolio. Bukan afiliasi WhatsApp/Meta. Nama, merek, dan aset pihak ketiga tidak disertakan.
+Proyek ini adalah **reimplementasi independen** untuk tujuan pembelajaran/portofolio. Bukan afiliasi WhatsApp/Meta.
+Seluruh kode, teks, ikon (lucide), dan data contoh dibuat sendiri; tidak ada aset gambar, logo, atau kode milik WhatsApp/Meta
+yang disalin. Wallpaper doodle dibuat sebagai SVG kustom di `globals.css`.
+Font emoji Noto Color Emoji disertakan di `public/fonts` dengan lisensi SIL Open Font License
+(lihat `public/fonts/OFL-NotoColorEmoji.txt`).

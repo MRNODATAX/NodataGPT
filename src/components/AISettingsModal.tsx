@@ -85,18 +85,20 @@ export function AISettingsModal({ onClose, onSaved }: Props) {
     setError("");
     setTestResult(null);
     try {
-      if (apiKey.trim()) {
-        await api("/api/settings/ai", {
+      // Simpan dulu key/endpoint yang sedang diketik tanpa mengubah status aktif
+      if (apiKey.trim() || settings) {
+        const saved = await api<{ settings: AISettingsDTO }>("/api/settings/ai", {
           method: "PUT",
           body: JSON.stringify({
-            enabled: false,
-            apiKey: apiKey.trim(),
+            enabled: settings?.enabled ?? false,
+            apiKey: apiKey.trim() || undefined,
             provider: settings?.provider,
             baseUrl: settings?.baseUrl,
             model: settings?.model,
           }),
         });
-        setApiKey("");
+        if (apiKey.trim()) setApiKey("");
+        setSettings(saved.settings);
       }
       const data = await api<{ reply: string; latencyMs: number; model: string }>(
         "/api/settings/ai/test",

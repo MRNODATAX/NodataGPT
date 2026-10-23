@@ -13,3 +13,4 @@ public/uploads/*
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+image-search/

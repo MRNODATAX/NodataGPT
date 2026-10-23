@@ -30,6 +30,7 @@ export interface ChatSummaryDTO {
   name: string;
   avatarColor: string;
   memberIds: string[];
+  memberAvatars: Array<{ name: string; color: string }>;
   pinned: boolean;
   muted: boolean;
   archived: boolean;
@@ -134,6 +135,16 @@ export function formatDateDivider(iso: string): string {
   if (isSameDay(date, yesterday)) return "Kemarin";
   if (now.getFullYear() === date.getFullYear()) return dayFmt.format(date);
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(date);
+}
+
+export function formatLastSeen(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  if (isSameDay(date, now)) return `terakhir dilihat hari ini pukul ${formatClock(iso)}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (isSameDay(date, yesterday)) return `terakhir dilihat kemarin pukul ${formatClock(iso)}`;
+  return `terakhir dilihat ${shortDayFmt.format(date)} pukul ${formatClock(iso)}`;
 }
 
 export function relativeTime(iso: string): string {

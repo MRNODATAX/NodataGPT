@@ -50,6 +50,10 @@ export function toSummary(
       ? users.find((u) => u.id !== viewerId && chat.memberIds.includes(u.id))?.avatarColor ?? chat.avatarColor
       : chat.avatarColor,
     memberIds: chat.memberIds,
+    memberAvatars: chat.memberIds
+      .map((id) => users.find((u) => u.id === id))
+      .filter((u): u is PublicUserShape => Boolean(u))
+      .map((u) => ({ name: u.name, color: u.avatarColor })),
     pinned: chat.pinned,
     muted: chat.muted,
     archived: chat.archived,

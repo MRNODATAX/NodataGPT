@@ -97,7 +97,7 @@ export function NewChatModal({ users, onClose, onCreated }: Props) {
           </div>
         ) : null}
 
-        <div className="search-field">
+        <div className="wa-search-field">
           <Search size={16} />
           <input
             placeholder="Cari kontak…"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, Loader2, Sparkles, Trash2, X } from "lucide-react";
+import { Archive, Bell, Bot, Loader2, Pin, Sparkles, Trash2, X } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { SwitchRow } from "./Modal";
 import type { ChatDetailDTO } from "@/lib/client";
@@ -20,7 +20,10 @@ export function ChatInfoPane({ chat, meId, onClose, onPatch, onDelete, globalAIE
   const [savingPersona, setSavingPersona] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => setPersona(chat.aiPersona), [chat.aiPersona, chat.id]);
+  useEffect(() => {
+    setPersona(chat.aiPersona);
+    setConfirmDelete(false);
+  }, [chat.aiPersona, chat.id]);
 
   async function savePersona() {
     setSavingPersona(true);
@@ -32,49 +35,57 @@ export function ChatInfoPane({ chat, meId, onClose, onPatch, onDelete, globalAIE
   }
 
   return (
-    <aside className="info-drawer">
-      <div className="info-drawer-header">
-        <h3>Info chat</h3>
-        <button className="icon-btn" onClick={onClose} aria-label="Tutup info chat">
-          <X size={18} />
+    <aside className="wa-info">
+      <header className="wa-info-header">
+        <button className="wa-icon-btn" onClick={onClose} aria-label="Tutup info chat">
+          <X size={20} />
         </button>
+        <h2>{chat.type === "group" ? "Info grup" : "Info kontak"}</h2>
+      </header>
+
+      <div className="wa-info-hero">
+        <Avatar
+          name={chat.name}
+          color={chat.avatarColor}
+          size={132}
+          members={chat.type === "group" ? chat.memberAvatars : undefined}
+        />
+        <h3>{chat.name}</h3>
+        <p>
+          {chat.type === "group"
+            ? `Grup · ${chat.members.length} anggota`
+            : chat.members.find((member) => member.id !== meId)?.phone ?? "Chat pribadi"}
+        </p>
+        <p style={{ fontSize: 12.5 }}>
+          {chat.members.find((member) => member.id !== meId)?.about ?? ""}
+        </p>
       </div>
 
-      <div className="info-section" style={{ alignItems: "center", textAlign: "center" }}>
-        <Avatar name={chat.name} color={chat.avatarColor} size={86} />
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 17 }}>{chat.name}</div>
-          <div style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 2 }}>
-            {chat.type === "group" ? `Grup · ${chat.members.length} anggota` : "Chat pribadi"}
-          </div>
-        </div>
-      </div>
-
-      <div className="info-section">
-        <div className="section-title">Preferensi</div>
+      <div className="wa-info-section">
+        <div className="sec-title">Preferensi chat</div>
         <SwitchRow
           checked={chat.pinned}
           onChange={(next) => void onPatch({ pinned: next })}
           label="Sematkan chat"
-          description="Tampil di paling atas daftar chat."
+          description="Selalu tampil di bagian paling atas daftar."
         />
         <SwitchRow
           checked={chat.muted}
           onChange={(next) => void onPatch({ muted: next })}
           label="Bisukan notifikasi"
-          description="Tidak menghitung badge belum dibaca."
+          description="Chat tidak dihitung pada badge belum dibaca."
         />
         <SwitchRow
           checked={chat.archived}
           onChange={(next) => void onPatch({ archived: next })}
           label="Arsipkan chat"
-          description="Sembunyikan dari daftar utama."
+          description="Pindahkan ke folder arsip."
         />
       </div>
 
-      <div className="info-section">
-        <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Bot size={13} /> Auto responder
+      <div className="wa-info-section">
+        <div className="sec-title">
+          <Bot size={13} /> Auto-responder AI
         </div>
         <SwitchRow
           checked={chat.aiEnabled}
@@ -83,21 +94,25 @@ export function ChatInfoPane({ chat, meId, onClose, onPatch, onDelete, globalAIE
           description={
             globalAIEnabled
               ? chat.type === "group"
-                ? "Vibe AI akan membalas di grup setelah pesanmu."
-                : "Balasan dikirim atas nama lawan bicara, mengikuti persona di bawah."
-              : "Aktifkan dulu auto-responder global di Pengaturan → AI."
+                ? "Vibe AI membalas sebagai akun sistem setelah pesanmu."
+                : "Balasan dikirim atas nama lawan bicara sesuai persona di bawah."
+              : "Aktifkan auto-responder global dulu di ikon ✦ pada rail kiri."
           }
         />
+
         <div className="field">
           <label htmlFor="persona">Persona khusus chat ini</label>
           <textarea
             id="persona"
             className="textarea"
-            style={{ minHeight: 90 }}
+            style={{ minHeight: 96 }}
             value={persona}
-            placeholder="Ceritakan siapa yang membalas: gaya bahasa, kebiasaan, dan konteksnya."
+            placeholder="Contoh: Aisyah, desainer muda yang ramah, suka kopi, balasannya singkat dan hangat."
             onChange={(event) => setPersona(event.target.value)}
           />
+          <span className="hint">
+            Persona ini menimpa persona global hanya untuk chat ini.
+          </span>
           <button className="btn ghost" onClick={() => void savePersona()} disabled={savingPersona}>
             {savingPersona ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}
             Simpan persona
@@ -105,27 +120,44 @@ export function ChatInfoPane({ chat, meId, onClose, onPatch, onDelete, globalAIE
         </div>
       </div>
 
-      <div className="info-section">
-        <div className="section-title">Anggota</div>
+      <div className="wa-info-section">
+        <div className="sec-title">Anggota · {chat.members.length}</div>
         {chat.members.map((member) => (
-          <div className="member-row" key={member.id}>
-            <Avatar name={member.name} color={member.avatarColor} size={34} />
-            <span>
-              {member.name}
-              {member.id === meId ? <small> · kamu</small> : null}
-            </span>
-            {member.isSystem ? <small>AI</small> : null}
+          <div className="wa-member" key={member.id}>
+            <Avatar name={member.name} color={member.avatarColor} size={40} />
+            <div className="m-body">
+              <strong>
+                {member.name}
+                {member.id === meId ? " (kamu)" : ""}
+              </strong>
+              <span>{member.isSystem ? "Asisten AI VibeChat" : member.about}</span>
+            </div>
+            {member.isSystem ? <span className="wa-tag-ai">AI</span> : null}
           </div>
         ))}
       </div>
 
-      <div className="info-section">
-        <button className="btn danger full" onClick={() => setConfirmDelete(true)}>
-          <Trash2 size={16} /> Hapus chat
+      <div className="wa-info-section">
+        <div className="sec-title">Tindakan</div>
+        <button className="wa-icon-btn" hidden aria-hidden />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn ghost" onClick={() => void onPatch({ pinned: !chat.pinned })}>
+            <Pin size={15} /> {chat.pinned ? "Lepas sematan" : "Sematkan"}
+          </button>
+          <button className="btn ghost" onClick={() => void onPatch({ muted: !chat.muted })}>
+            <Bell size={15} /> {chat.muted ? "Aktifkan notifikasi" : "Bisukan"}
+          </button>
+          <button className="btn ghost" onClick={() => void onPatch({ archived: !chat.archived })}>
+            <Archive size={15} /> {chat.archived ? "Keluarkan dari arsip" : "Arsipkan"}
+          </button>
+        </div>
+
+        <button className="wa-danger-row" onClick={() => setConfirmDelete(true)}>
+          <Trash2 size={17} /> Hapus chat ini
         </button>
         {confirmDelete ? (
           <div className="alert error">
-            Chat dan seluruh pesannya akan dihapus permanen dari JSON.
+            Chat dan seluruh pesannya akan dihapus permanen dari <code>data/db.json</code>.
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button className="btn ghost" onClick={() => setConfirmDelete(false)}>
                 Batal

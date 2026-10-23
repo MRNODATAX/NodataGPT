@@ -1,7 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Bot, Check, Loader2, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Check, Loader2, Lock, MessageSquare, Server, Sparkles } from "lucide-react";
 import { api } from "@/lib/client";
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function AuthScreen({ onAuthenticated }: Props) {
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -24,6 +26,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
       const path = mode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body = mode === "login" ? { phone, password } : { name, phone, password };
       await api(path, { method: "POST", body: JSON.stringify(body) });
+      router.refresh();
       onAuthenticated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memproses permintaan");
@@ -32,57 +35,65 @@ export function AuthScreen({ onAuthenticated }: Props) {
     }
   }
 
-  function useDemo() {
-    setMode("login");
-    setPhone("628111111111");
-    setPassword("vibe123");
-    setError("");
-  }
-
   return (
     <div className="auth-page">
       <section className="auth-hero">
-        <div className="brand-mark" style={{ width: 52, height: 52, fontSize: 24, borderRadius: 16 }}>
-          V
+        <div className="auth-brand">
+          <div className="mark">V</div>
+          <strong>VibeChat</strong>
         </div>
+
         <h1>
-          Ngobrol santai,
+          Obrolan yang terasa familiar,
           <br />
-          dibalas otomatis oleh AI.
+          dengan asisten AI di dalamnya.
         </h1>
         <p>
-          VibeChat adalah klon aplikasi chat modern yang berjalan tanpa database —
-          semua percakapan disimpan dalam satu berkas JSON. Tambahkan API key Gemini
-          atau endpoint AI pribadimu untuk mengaktifkan auto-responder.
+          Klon klien chat modern dengan penyimpanan JSON tanpa database. Pasang API key Gemini atau
+          endpoint AI pribadimu, lalu biarkan asisten membalas otomatis sesuai persona yang kamu
+          tulis.
         </p>
-        <div className="hero-list">
-          <div>
+
+        <div className="auth-features">
+          <div className="auth-feature">
             <MessageSquare size={17} />
-            <span>Chat pribadi & grup, balas pesan, kirim gambar, arsip, dan pin chat.</span>
+            <div>
+              <strong>Chat pribadi, grup, dan lampiran</strong>
+              <span>Balas kutipan, centang dibaca, sematkan, bisukan, arsipkan, cari di dalam chat.</span>
+            </div>
           </div>
-          <div>
+          <div className="auth-feature">
             <Bot size={17} />
-            <span>Auto-responder AI per chat dengan persona yang bisa kamu atur sendiri.</span>
+            <div>
+              <strong>Auto-responder AI per chat</strong>
+              <span>Gemini atau endpoint OpenAI-compatible, dengan persona global maupun khusus.</span>
+            </div>
           </div>
-          <div>
-            <ShieldCheck size={17} />
-            <span>API key disimpan di server dan tidak pernah dikirim utuh ke browser.</span>
+          <div className="auth-feature">
+            <Server size={17} />
+            <div>
+              <strong>Tanpa database</strong>
+              <span>Satu berkas <code>data/db.json</code> dengan penulisan atomik — mudah dicadangkan.</span>
+            </div>
           </div>
-          <div>
-            <Check size={17} />
-            <span>Penyimpanan JSON atomik: tanpa install database, mudah di-backup.</span>
+          <div className="auth-feature">
+            <Lock size={17} />
+            <div>
+              <strong>API key tetap di server</strong>
+              <span>Hanya status &amp; cuplikan key yang dikirim ke browser.</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="auth-form-wrap">
+      <section className="auth-side">
         <form className="auth-form" onSubmit={submit}>
           <div>
-            <h2>Masuk ke VibeChat</h2>
+            <h2>{mode === "login" ? "Masuk ke VibeChat" : "Buat akun baru"}</h2>
             <p className="sub">
               {mode === "login"
-                ? "Gunakan nomor telepon dan password akunmu."
-                : "Buat akun baru, langsung mulai ngobrol."}
+                ? "Nomor telepon dan password akunmu."
+                : "Cukup nama, nomor, dan password. Langsung mulai."}
             </p>
           </div>
 
@@ -101,13 +112,13 @@ export function AuthScreen({ onAuthenticated }: Props) {
 
           {mode === "register" ? (
             <div className="field">
-              <label htmlFor="name">Nama</label>
+              <label htmlFor="name">Nama tampilan</label>
               <input
                 id="name"
                 className="input"
-                placeholder="Nama tampilan"
+                placeholder="Nama kamu"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(event) => setName(event.target.value)}
                 autoComplete="name"
                 required
               />
@@ -121,7 +132,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
               className="input"
               placeholder="6281xxxxxxxxx"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(event) => setPhone(event.target.value)}
               inputMode="tel"
               autoComplete="tel"
               required
@@ -136,7 +147,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
               type="password"
               placeholder="Minimal 6 karakter"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               required
             />
@@ -149,14 +160,28 @@ export function AuthScreen({ onAuthenticated }: Props) {
             {mode === "login" ? "Masuk" : "Buat akun"}
           </button>
 
-          <button type="button" className="btn ghost full" onClick={useDemo}>
-            Gunakan akun demo
+          <button
+            type="button"
+            className="btn ghost full"
+            onClick={() => {
+              setMode("login");
+              setPhone("628111111111");
+              setPassword("vibe123");
+              setError("");
+            }}
+          >
+            <Check size={16} /> Isi akun demo
           </button>
 
-          <p className="demo-note">
-            Akun demo: <strong>628111111111</strong> / password <strong>vibe123</strong>.
-            Data contoh diisi otomatis saat server pertama kali dijalankan
-            (<code>data/db.json</code>).
+          <div className="demo-note">
+            Akun demo: <strong>628111111111</strong> · password <strong>vibe123</strong>. Data contoh
+            dibuat otomatis saat server pertama kali berjalan.
+          </div>
+
+          <p className="auth-foot">
+            Reimplementasi independen untuk pembelajaran — bukan afiliasi WhatsApp/Meta.
+            <br />
+            Semua merek dan aset milik pemiliknya masing-masing.
           </p>
         </form>
       </section>

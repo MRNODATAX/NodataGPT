@@ -1,15 +1,16 @@
 "use client";
 
-import { CheckCheck, CornerUpLeft, MoreVertical, Sparkles, Trash2, UserX } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, CornerUpLeft, Sparkles, Trash2, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
-import { formatTime, type MessageDTO, type PublicUser } from "@/lib/client";
+import { formatClock, type MessageDTO, type PublicUser } from "@/lib/client";
 
 interface Props {
   message: MessageDTO;
   sender: PublicUser | undefined;
   isMine: boolean;
   showSender: boolean;
+  showTail: boolean;
   replyMessage?: MessageDTO;
   replySender?: PublicUser;
   isRead: boolean;
@@ -17,17 +18,20 @@ interface Props {
   onReply: (message: MessageDTO) => void;
   onDelete: (message: MessageDTO, scope: "me" | "all") => void;
   onOpenImage: (url: string) => void;
+  onJumpTo: (messageId: string) => void;
+  highlight?: boolean;
 }
 
-const COLOR_BY_ID: Record<string, string> = {};
-const PALETTE = ["#f87171", "#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f472b6", "#22d3ee"];
+const PALETTE = ["#e8636f", "#a78bfa", "#31a3d6", "#1fa855", "#c99516", "#d97706", "#db6bb3", "#0ea5b7"];
+const memory: Record<string, string> = {};
+
 function senderColor(id: string): string {
-  if (!COLOR_BY_ID[id]) {
+  if (!memory[id]) {
     let hash = 0;
     for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-    COLOR_BY_ID[id] = PALETTE[hash % PALETTE.length];
+    memory[id] = PALETTE[hash % PALETTE.length];
   }
-  return COLOR_BY_ID[id];
+  return memory[id];
 }
 
 export function MessageBubble({
@@ -35,6 +39,7 @@ export function MessageBubble({
   sender,
   isMine,
   showSender,
+  showTail,
   replyMessage,
   replySender,
   isRead,
@@ -42,36 +47,78 @@ export function MessageBubble({
   onReply,
   onDelete,
   onOpenImage,
+  onJumpTo,
+  highlight,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    const close = () => setMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
   }, [menuOpen]);
 
-  return (
-    <div className={`bubble-row ${isMine ? "out" : "in"}`} ref={ref}>
-      {!isMine && chatType === "group" ? (
-        <Avatar name={sender?.name ?? "?"} color={sender?.avatarColor ?? "sky"} size={30} />
-      ) : null}
-      <div style={{ minWidth: 0 }}>
-        <div className="bubble">
-          {showSender && !isMine && chatType === "group" ? (
-            <div className="bubble-sender" style={{ color: senderColor(message.senderId) }}>
-              {sender?.name ?? "Anggota"}
-            </div>
-          ) : null}
+  const isImageOnly = message.type === "image" && message.body === "📷 Foto";
+  const holdTimer = useRef<number | null>(null);
 
+  // long-press (mobile) untuk membuka menu opsi pesan
+  function startHold() {
+    if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => setMenuOpen(true), 420);
+  }
+
+  function cancelHold() {
+    if (holdTimer.current) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }
+
+  return (
+    <div
+      id={`msg-${message.id}`}
+      ref={wrapRef}
+      className={`msg-row ${isMine ? "out" : "in"} ${message.viaAI ? "ai" : ""} ${showTail ? "tail" : ""} ${highlight ? "hit" : ""}`}
+    >
+      {!isMine && chatType === "group" ? (
+        <Avatar
+          name={sender?.name ?? "?"}
+          color={sender?.avatarColor ?? "sky"}
+          size={28}
+          className="msg-avatar"
+        />
+      ) : null}
+
+      <div className="msg-stack">
+        {showSender && !isMine && chatType === "group" ? (
+          <div className="msg-sender" style={{ color: senderColor(message.senderId) }}>
+            {sender?.name ?? "Anggota"}
+          </div>
+        ) : null}
+
+        <div
+          className="bubble"
+          onTouchStart={startHold}
+          onTouchEnd={cancelHold}
+          onTouchMove={cancelHold}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setMenuOpen(true);
+          }}
+        >
           {replyMessage ? (
-            <div className="bubble-quote">
-              <strong>{replySender?.name ?? "Pesan"}: </strong>
-              {replyMessage.body.slice(0, 90)}
+            <div
+              className="bubble-quote"
+              role="button"
+              tabIndex={0}
+              onClick={() => onJumpTo(replyMessage.id)}
+              onKeyDown={(event) => event.key === "Enter" && onJumpTo(replyMessage.id)}
+            >
+              <b>{replySender?.name ?? "Pesan"}</b>
+              <span>{replyMessage.body.slice(0, 120)}</span>
             </div>
           ) : null}
 
@@ -81,47 +128,68 @@ export function MessageBubble({
               className="bubble-image"
               src={message.mediaUrl}
               alt="Lampiran gambar"
+              loading="lazy"
               onClick={() => onOpenImage(message.mediaUrl!)}
             />
           ) : null}
 
-          {message.type === "image" && message.body === "📷 Foto" ? null : (
-            <div className="bubble-text">{message.body}</div>
-          )}
+          {isImageOnly ? null : <div className="bubble-text">{message.body}</div>}
 
           <div className="bubble-meta">
             {message.viaAI ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontWeight: 600 }}>
-                <Sparkles size={11} /> AI
+              <span className="ai-label">
+                <Sparkles size={9} /> AI
               </span>
             ) : null}
-            <span>{formatTime(message.createdAt)}</span>
+            <span>{formatClock(message.createdAt)}</span>
             {isMine ? (
               <span className={`tick ${isRead ? "read" : ""}`} title={isRead ? "Dibaca" : "Terkirim"}>
-                <CheckCheck size={14} />
+                {isRead ? <CheckCheck size={15} /> : <Check size={15} />}
               </span>
             ) : null}
           </div>
 
-          <div className="bubble-tools">
-            <div className="popover-wrap">
+          <div className="bubble-tools" onClick={(event) => event.stopPropagation()}>
+            <div className="wa-menu-wrap">
               <button
                 type="button"
                 aria-label="Opsi pesan"
-                onClick={() => setMenuOpen((open) => !open)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMenuOpen((open) => !open);
+                }}
               >
-                <MoreVertical size={14} />
+                <ChevronDown size={15} />
               </button>
               {menuOpen ? (
-                <div className="popover" style={{ minWidth: 180 }}>
+                <div className="wa-menu" style={{ minWidth: 200, top: "calc(100% + 6px)" }}>
                   <button
                     onClick={() => {
                       onReply(message);
                       setMenuOpen(false);
                     }}
                   >
-                    <CornerUpLeft size={15} /> Balas
+                    <CornerUpLeft size={16} /> Balas
                   </button>
+                  <button
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(message.body);
+                      setCopied(true);
+                      window.setTimeout(() => setCopied(false), 1200);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Copy size={16} /> {copied ? "Tersalin" : "Salin teks"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      onJumpTo(message.id);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Info size={16} /> Lihat detail
+                  </button>
+                  <hr />
                   <button
                     className="danger"
                     onClick={() => {
@@ -129,7 +197,7 @@ export function MessageBubble({
                       setMenuOpen(false);
                     }}
                   >
-                    <UserX size={15} /> Hapus untuk saya
+                    <Trash2 size={16} /> Hapus untuk saya
                   </button>
                   {isMine ? (
                     <button
@@ -139,7 +207,7 @@ export function MessageBubble({
                         setMenuOpen(false);
                       }}
                     >
-                      <Trash2 size={15} /> Hapus untuk semua
+                      <Trash2 size={16} /> Hapus untuk semua
                     </button>
                   ) : null}
                 </div>

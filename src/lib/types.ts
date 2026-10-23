@@ -1,5 +1,8 @@
 export type ChatType = "dm" | "group";
 
+/** Jenis konten pesan. `file` mencakup dokumen/arsip, `audio` voice note/lagu. */
+export type MessageType = "text" | "image" | "video" | "audio" | "file";
+
 export interface User {
   id: string;
   name: string;
@@ -36,9 +39,13 @@ export interface Message {
   id: string;
   chatId: string;
   senderId: string;
-  type: "text" | "image";
+  type: MessageType;
   body: string;
   mediaUrl?: string;
+  /** Metadata lampiran (nama asli, ukuran byte, mime) */
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
   replyToId?: string;
   createdAt: string;
   readBy: string[];

@@ -3,6 +3,7 @@
 import { Check, CheckCheck, ChevronDown, CornerUpLeft, Sparkles, Trash2, Copy, Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
+import { AudioPlayer, FileCard, VideoPlayer } from "./Attachment";
 import { formatClock, type MessageDTO, type PublicUser } from "@/lib/client";
 
 interface Props {
@@ -21,6 +22,13 @@ interface Props {
   onJumpTo: (messageId: string) => void;
   highlight?: boolean;
 }
+
+const AUTO_LABELS: Record<string, string> = {
+  image: "📷 Foto",
+  video: "🎬 Video",
+  audio: "🎵 Pesan suara",
+  file: "📄 Dokumen",
+};
 
 const PALETTE = ["#e8636f", "#a78bfa", "#31a3d6", "#1fa855", "#c99516", "#d97706", "#db6bb3", "#0ea5b7"];
 const memory: Record<string, string> = {};
@@ -61,7 +69,8 @@ export function MessageBubble({
     return () => window.removeEventListener("click", close);
   }, [menuOpen]);
 
-  const isImageOnly = message.type === "image" && message.body === "📷 Foto";
+  const isMediaOnly =
+    message.type !== "text" && message.body === (message.type === "file" ? `📄 ${message.fileName}` : AUTO_LABELS[message.type]);
   const holdTimer = useRef<number | null>(null);
 
   // long-press (mobile) untuk membuka menu opsi pesan
@@ -101,6 +110,7 @@ export function MessageBubble({
 
         <div
           className="bubble"
+          data-media={message.type === "text" ? undefined : message.type}
           onTouchStart={startHold}
           onTouchEnd={cancelHold}
           onTouchMove={cancelHold}
@@ -133,7 +143,21 @@ export function MessageBubble({
             />
           ) : null}
 
-          {isImageOnly ? null : <div className="bubble-text">{message.body}</div>}
+          {message.type === "video" && message.mediaUrl ? <VideoPlayer url={message.mediaUrl} /> : null}
+
+          {message.type === "audio" && message.mediaUrl ? <AudioPlayer url={message.mediaUrl} /> : null}
+
+          {message.type === "file" && message.mediaUrl ? (
+            <FileCard
+              url={message.mediaUrl}
+              name={message.fileName}
+              size={message.fileSize}
+              mime={message.mimeType}
+              isMine={isMine}
+            />
+          ) : null}
+
+          {isMediaOnly ? null : <div className="bubble-text">{message.body}</div>}
 
           <div className="bubble-meta">
             {message.viaAI ? (

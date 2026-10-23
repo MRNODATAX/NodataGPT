@@ -21,6 +21,7 @@ export interface ChatSummary {
     createdAt: string;
     type: Message["type"];
     viaAI?: boolean;
+    fileName?: string;
   } | null;
   unreadCount: number;
   updatedAt: string;

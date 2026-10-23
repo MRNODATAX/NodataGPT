@@ -10,13 +10,18 @@ export interface PublicUser {
   createdAt: string;
 }
 
+export type MessageKind = "text" | "image" | "video" | "audio" | "file";
+
 export interface MessageDTO {
   id: string;
   chatId: string;
   senderId: string;
-  type: "text" | "image";
+  type: MessageKind;
   body: string;
   mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
   replyToId?: string;
   createdAt: string;
   readBy: string[];
@@ -40,8 +45,9 @@ export interface ChatSummaryDTO {
     body: string;
     senderId: string;
     createdAt: string;
-    type: "text" | "image";
+    type: MessageKind;
     viaAI?: boolean;
+    fileName?: string;
   } | null;
   unreadCount: number;
   updatedAt: string;
@@ -135,6 +141,14 @@ export function formatDateDivider(iso: string): string {
   if (isSameDay(date, yesterday)) return "Kemarin";
   if (now.getFullYear() === date.getFullYear()) return dayFmt.format(date);
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(date);
+}
+
+/** 1.4 MB / 850 KB — untuk kartu lampiran. */
+export function formatBytes(bytes?: number): string {
+  if (!bytes || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatLastSeen(iso: string): string {

@@ -12,7 +12,10 @@
  *
  * Base URL bisa diubah lewat BASE_URL=http://localhost:3000
  */
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { chromium as pw } from "playwright-core";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
@@ -43,13 +46,70 @@ startMock(4011, (_req, res) => {
   );
 });
 
+// --- Berkas uji (dibuat saat runtime, tidak perlu aset di repo) --------------
+const FIX = fs.mkdtempSync(path.join(os.tmpdir(), "vibechat-e2e-"));
+const IMG = path.join(FIX, "gambar-uji.png");
+const PDF = path.join(FIX, "dokumen-uji.pdf");
+const VID = path.join(FIX, "video-uji.mp4");
+const WAV = path.join(FIX, "suara-uji.wav");
+
+// PNG 1x1 piksel
+fs.writeFileSync(
+  IMG,
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
+fs.writeFileSync(PDF, "%PDF-1.4\n% dokumen uji\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
+// mp4 minimal (kotak ftyp) — cukup untuk menguji jalur unggah & elemen <video>
+fs.writeFileSync(
+  VID,
+  Buffer.concat([Buffer.from("00000018667479706d703432000000006d70343269736f6d", "hex"), Buffer.alloc(1200)]),
+);
+// WAV 0,5 detik 8 kHz (nada 440 Hz)
+{
+  const rate = 8000;
+  const samples = rate / 2;
+  const buf = Buffer.alloc(44 + samples * 2);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(36 + samples * 2, 4);
+  buf.write("WAVEfmt ", 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i += 1) {
+    buf.writeInt16LE(Math.round(3000 * Math.sin((2 * Math.PI * 440 * i) / rate)), 44 + i * 2);
+  }
+  fs.writeFileSync(WAV, buf);
+}
+
 const results = [];
 const check = (name, pass, extra = "") => {
   results.push({ name, pass });
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${extra ? " :: " + extra : ""}`);
 };
 
-const browser = await pw.launch({ executablePath: await chromium.executablePath(), args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"], headless: true });
+// Browser: set CHROME_PATH bila memakai Chromium eksternal (mis. unduhan playwright / binary Lambda).
+const executablePath = process.env.CHROME_PATH || pw.executablePath();
+const browser = await pw.launch({
+  executablePath,
+  args: [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    // mikrofon palsu untuk skenario pesan suara
+    "--use-fake-ui-for-media-stream",
+    "--use-fake-device-for-media-stream",
+  ],
+  headless: true,
+});
 const errors = [];
 const api = [];
 const attach = (page, label) => {
@@ -104,11 +164,55 @@ await page.keyboard.press("Escape");
 await page.mouse.click(800, 120);
 
 /* upload gambar */
-await page.setInputFiles('input[type="file"]', "/tmp/t.png");
+await page.setInputFiles('input[type="file"][accept*="image"]', IMG);
 await page.waitForTimeout(1000);
 await page.click(".composer-send");
 await page.waitForTimeout(1400);
 check("Kirim gambar (upload server)", (await page.locator(".bubble-image").count()) > 0);
+
+/* upload dokumen */
+await page.click('button[aria-label="Lampiran"]');
+await page.waitForTimeout(250);
+await page.click('.wa-pop button.opt:has-text("Dokumen")');
+await page.setInputFiles('input[type="file"]:not([accept])', PDF);
+await page.waitForSelector(".composer-attachment", { timeout: 10000 });
+await page.click(".composer-send");
+await page.waitForTimeout(1600);
+const docText = await page.locator(".file-card").last().innerText().catch(() => "");
+check("Kirim dokumen (kartu unduh)", docText.includes("dokumen-uji.pdf"), docText.replace(/\n/g, " | "));
+
+/* upload video */
+await page.click('button[aria-label="Lampiran"]');
+await page.waitForTimeout(250);
+await page.click('.wa-pop button.opt:has-text("Video")');
+await page.setInputFiles('input[type="file"][accept*="video"]', VID);
+await page.waitForSelector(".attach-kind", { timeout: 10000 });
+await page.click(".composer-send");
+await page.waitForTimeout(1600);
+check("Kirim video (elemen pemutar)", (await page.locator(".bubble-video").count()) > 0);
+
+/* pesan suara direkam di peramban */
+await page.click(".send-fab");
+await page.waitForSelector(".composer-recording", { timeout: 15000 });
+await page.waitForTimeout(1200);
+const recLabel = await page.locator(".composer-recording").innerText();
+await page.click(".composer-recording .btn.primary");
+await page.waitForTimeout(2600);
+check(
+  "Rekam pesan suara",
+  recLabel.includes("Merekam") && (await page.locator(".audio-bubble audio").count()) > 0,
+  recLabel.split("\n")[0],
+);
+
+/* unggah berkas audio dari galeri */
+await page.click('button[aria-label="Lampiran"]');
+await page.waitForTimeout(250);
+await page.click('.wa-pop button.opt:has-text("Audio")');
+await page.setInputFiles('input[type="file"][accept*="audio"]', WAV);
+await page.waitForSelector(".attach-kind", { timeout: 10000 });
+await page.click(".composer-send");
+await page.waitForTimeout(1600);
+check("Kirim audio dari galeri", (await page.locator(".audio-bubble audio").count()) > 1);
 
 /* balasan kutipan */
 const target = page.locator(".msg-row.in").first();

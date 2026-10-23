@@ -46,6 +46,7 @@ import {
   type ChatDetailDTO,
   type ChatSummaryDTO,
   type MessageDTO,
+  type MessageKind,
   type PublicUser,
 } from "@/lib/client";
 
@@ -286,7 +287,14 @@ export function ChatApp({ initialUser }: Props) {
   }, [detail, messages, otherMember]);
 
   /* ------------------------------ actions ------------------------------- */
-  async function sendMessage(payload: { body: string; type: "text" | "image"; mediaUrl?: string }) {
+  async function sendMessage(payload: {
+    body: string;
+    type: MessageKind;
+    mediaUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+  }) {
     if (!activeId) return;
     const data = await api<{ message: MessageDTO }>(`/api/chats/${activeId}/messages`, {
       method: "POST",
@@ -302,10 +310,11 @@ export function ChatApp({ initialUser }: Props) {
               ...chat,
               lastMessage: {
                 id: data.message.id,
-                body: payload.type === "image" ? "📷 Foto" : payload.body,
+                body: data.message.body || payload.body,
                 senderId: me.id,
                 createdAt: data.message.createdAt,
-                type: payload.type,
+                type: data.message.type,
+                fileName: data.message.fileName,
               },
               updatedAt: data.message.createdAt,
             }

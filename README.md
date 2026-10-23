@@ -19,6 +19,10 @@ Klon visual 1:1 alur kerja WhatsApp Web (redesign 2025) dengan penyempurnaan sen
 | --- | --- |
 | ![Info](docs/ui-04-info.png) | ![Mobile](docs/ui-06-mobile-chat.png) |
 
+| Lampiran (video/audio/dokumen) | Lampiran di ponsel |
+| --- | --- |
+| ![Lampiran](docs/ui-07-media.png) | ![Lampiran mobile](docs/ui-08-media-mobile.png) |
+
 **Yang direplikasi dari WhatsApp Web:** rail navigasi kiri (Obrolan/Status/Saluran/Arsip), header statis 60px,
 search bar pil, chip filter, baris chat 72px dengan kolase avatar grup 2×2, centang biru `#53bdeb`,
 bubble keluar `#d9fdd3` / `#005c4b` dengan ekor, chip tanggal, wallpaper doodle, composer pil dengan
@@ -35,7 +39,8 @@ dengan hit-count & sorotan, tooltip rail, serta emoji berwarna yang tetap tampil
 
 ### Percakapan
 - Chat pribadi (DM) dan grup dengan anggota bebas.
-- Kirim teks, emoji, dan gambar (upload hingga 8 MB: PNG/JPG/WEBP/GIF).
+- Kirim teks, emoji, **gambar, video, audio/pesan suara, dan dokumen** (lihat batas di §1.1).
+- **Pesan suara direkam langsung di peramban** (MediaRecorder) — tanpa layanan pihak ketiga.
 - Balas pesan (quote), hapus pesan untuk diri sendiri atau untuk semua orang.
 - Status terkirim/dibaca (centang ganda biru), penanda "AI" pada pesan hasil auto-reply.
 - Daftar chat dengan pencarian, filter **Semua / Belum dibaca / Grup / Arsip**, baris "Diarsipkan", badge belum dibaca.
@@ -45,6 +50,33 @@ dengan hit-count & sorotan, tooltip rail, serta emoji berwarna yang tetap tampil
 - Sematkan (pin), bisukan, dan arsipkan chat.
 - Indikator "sedang mengetik" untuk balasan AI, plus auto-scroll dan tombol ke pesan terbaru.
 - Responsif: sidebar + panel chat di desktop, tampilan penuh dengan tombol kembali di ponsel.
+
+### 1.1 Lampiran: berkas, gambar, video, audio
+
+Semua lampiran disimpan di `public/uploads/` pada disk server sendiri — **tanpa S3, tanpa CDN, tanpa biaya**.
+Nama berkas diacak (`<timestamp>-<uuid>.<ext>`) agar tidak bisa ditebak/di-traversal; nama asli disimpan
+sebagai metadata pesan (`fileName`) dan dipakai untuk label + tombol unduh.
+
+| Kategori | Format | Batas | Tampilan di bubble |
+| --- | --- | --- | --- |
+| Gambar | PNG, JPG, WEBP, GIF | 8 MB | pratinjau penuh, klik untuk memperbesar |
+| Video | MP4, WEBM, MOV | 25 MB | pemutar `<video>` dengan kontrol bawaan |
+| Audio | MP3, M4A, OGG, WEBA, WAV + rekaman mikrofon | 16 MB | pemutar `<audio>` ringkas ala WhatsApp |
+| Dokumen | PDF, TXT, CSV, MD, JSON, ZIP, DOC/DOCX, XLS/XLSX, PPT/PPTX | 25 MB | kartu berikon + nama + ukuran + tombol unduh |
+
+Catatan teknis:
+- Validasi **dua lapis**: MIME whitelist + cadangan ekstensi bila peramban mengirim `application/octet-stream`.
+- Balasan API `POST /api/upload` → `{ url, type, kind, size, name }`; `kind` (`image|video|audio|file`) menentukan
+  tipe pesan yang dikirim.
+- Pesan lampiran tetap punya teks opsional (caption). Tanpa caption, server mengisi label fallback
+  (`📷 Foto`, `🎬 Video`, `🎵 Pesan suara`, `📄 nama.pdf`) yang juga dipakai sebagai preview di daftar chat.
+- Pesan suara direkam dengan `MediaRecorder` → blob `audio/webm` → diunggah sebagai pesan `audio`.
+  Butuh izin mikrofon dan konteks aman (HTTPS atau `localhost`).
+
+**Batasan jujur:** berkas ikut volume disk server (bukan objek storage), tidak ada pemindaian virus,
+tidak ada thumbnail video/kompresi, dan URL `/uploads/...` bersifat publik bagi siapa pun yang tahu namanya.
+Untuk produksi: aktifkan pemindaian antivirus (mis. ClamAV), pindahkan ke object storage + signed URL,
+dan tambahkan kuota per pengguna.
 
 ### Akun
 - Registrasi & login dengan nomor telepon + password.
@@ -97,6 +129,24 @@ Semua akun seed memakai password `vibe123`. Ada 7 pengguna, 7 chat (DM + grup), 
 npm run db:reset   # hapus data/db.json; seed dibuat ulang saat server start
 ```
 
+### 2.1 Menjalankan tanpa biaya (tanpa kartu kredit)
+
+| Kebutuhan | Pilihan gratis | Catatan |
+| --- | --- | --- |
+| Hosting aplikasi | **Cloudflare Workers/Pages** (100k request/hari) atau **Vercel Hobby** | Vercel butuh fungsi serverless; disk **tidak** persisten → wajib object storage |
+| Hosting VM | **Oracle Cloud Always Free** (2 OCPU/12 GB ARM, 200 GB disk, 10 TB egress) | paling pas untuk VibeChat apa adanya (butuh disk untuk `db.json` + `uploads/`), tapi wajib kartu untuk verifikasi |
+| Penyimpanan berkas | **Cloudflare R2** (10 GB, egress gratis) | bila deploy ke serverless; `public/uploads` diganti adapter R2 |
+| Database | JSON file (bawaan) atau **Cloudflare D1** (5 GB) | D1 hanya untuk skenario Workers |
+| AI | **Gemini API free tier** | cukup untuk auto-responder pribadi |
+| Alternatif kanal chat gratis | **Telegram Bot API** | upload 50 MB, unduh 20 MB (self-host `telegram-bot-api` → 2 GB), tanpa biaya |
+| Tunnel ke laptop sendiri | **Cloudflare Tunnel** (`cloudflared`) | domain gratis `*.trycloudflare.com`, tanpa buka port router |
+
+Resep paling murah: satu VM Oracle Always Free + `pm2`/`systemd` + Cloudflare Tunnel (opsional untuk HTTPS),
+lalu `npm run build && npm start`. Total biaya 0 selama kuota free tier tidak dilampaui.
+
+> Catatan: Vercel/Cloudflare serverless punya filesystem read-only, sehingga `data/db.json` dan `public/uploads/`
+> **tidak akan bertahan**. Untuk jalur itu perlu adapter (R2/KV/D1) — lihat §9 roadmap.
+
 ---
 
 ## 3. Struktur proyek
@@ -106,12 +156,12 @@ Vibe-Chat/
 ├─ data/
 │  └─ db.json                 # DATABASE (dibuat otomatis, di-gitignore)
 ├─ public/
-│  └─ uploads/                # gambar hasil upload
+│  └─ uploads/                # lampiran hasil upload (gambar, video, audio, dokumen)
 ├─ docs/                      # tangkapan layar UI
 ├─ scripts/
 │  └─ reset-db.mjs            # reset/seed ulang
 ├─ tests/
-│  └─ e2e.mjs                 # 23 uji end-to-end (Playwright) + provider AI tiruan
+│  └─ e2e.mjs                 # 27 uji end-to-end (Playwright) + provider AI tiruan
 ├─ src/
 │  ├─ app/
 │  │  ├─ layout.tsx           # root layout + metadata
@@ -130,12 +180,13 @@ Vibe-Chat/
 │  │     ├─ messages/[id]/    # hapus pesan (scope=me|all)
 │  │     ├─ settings/ai/      # baca & simpan pengaturan AI
 │  │     │  └─ test/          # uji koneksi provider
-│  │     └─ upload/           # upload gambar
+│  │     └─ upload/           # upload lampiran (gambar/video/audio/dokumen)
 │  ├─ components/             # UI (client components)
 │  │  ├─ ChatApp.tsx          # shell utama, polling, state
 │  │  ├─ ChatInfoPane.tsx     # panel info + toggle AI per chat
-│  │  ├─ Composer.tsx         # input pesan, emoji, lampiran
+│  │  ├─ Composer.tsx         # input pesan, emoji, lampiran, rekam pesan suara
 │  │  ├─ MessageBubble.tsx    # bubble, reply, menu hapus
+│  │  ├─ Attachment.tsx       # pemutar video/audio + kartu dokumen
 │  │  ├─ AISettingsModal.tsx  # pengaturan provider AI
 │  │  ├─ NewChatModal.tsx     # buat DM/grup
 │  │  ├─ AuthScreen.tsx       # login/daftar
@@ -317,7 +368,8 @@ VIBECHAT_DB=/path/db.json # lokasi file database
 ## 7. Pengujian
 
 Suite E2E ada di `tests/e2e.mjs` (Playwright). Skrip menyalakan dua provider AI tiruan
-(port `4010` OpenAI-compatible, `4011` Gemini) lalu menguji 23 skenario:
+(port `4010` OpenAI-compatible, `4011` Gemini), membuat sendiri berkas uji (PNG/PDF/MP4/WAV) di direktori temporer,
+lalu menguji 27 skenario:
 
 ```bash
 npm run dev                    # terminal 1
@@ -325,12 +377,18 @@ npx playwright install chromium  # sekali saja
 npm run test:e2e               # terminal 2
 ```
 
-Hasil terakhir: **23/23 lolos, 0 error JavaScript, 0 respons HTTP ≥ 400.**
+Bila memakai Chromium eksternal (bukan unduhan Playwright), arahkan env:
+
+```bash
+CHROME_PATH=/path/ke/chromium LD_LIBRARY_PATH=/path/ke/lib npm run test:e2e
+```
+
+Hasil terakhir: **27/27 lolos, 0 error JavaScript, 0 respons HTTP ≥ 400.**
 
 | Kelompok | Skenario |
 | --- | --- |
 | Daftar chat | 7 chat termuat, pencarian, filter, baris arsip |
-| Pesan | kirim teks, kirim gambar (upload), emoji, menu lampiran |
+| Pesan | kirim teks, gambar, dokumen, video, audio dari galeri, rekam pesan suara, emoji, menu lampiran |
 | Interaksi | balas kutipan, hapus untuk semua, sematkan, arsipkan/keluarkan |
 | Status baca | akun kedua membaca → centang berubah biru di akun pertama |
 | Pencarian | cari dalam chat, jumlah hasil, sorotan bubble |
@@ -347,7 +405,10 @@ Uji manual cepat: `curl` ke `/api/...` juga dipakai saat pengembangan
 
 - Hash password `scrypt` + perbandingan `timingSafeEqual`; sesi HMAC-SHA256 (30 hari).
 - Semua endpoint memvalidasi keanggotaan chat sebelum membaca/menulis.
-- Upload dibatasi tipe MIME dan ukuran 8 MB.
+- Upload dibatasi whitelist MIME **dan** ekstensi cadangan, plus batas ukuran per kategori
+  (gambar 8 MB, video 25 MB, audio 16 MB, dokumen 25 MB). Nama simpan diacak, nama asli hanya metadata.
+- Berkas di `public/uploads/` **tidak** melewati autentikasi (butuh URL persis). Untuk data sensitif,
+  ganti dengan route ber-sesi + signed URL.
 - **Batas yang disadari:** belum ada rate limit per akun, belum ada enkripsi end-to-end (ini klon UI/produk, bukan klien WhatsApp asli), dan API key tersimpan plain text di `data/db.json` — jangan commit file itu (sudah di-gitignore) dan batasi akses server.
 - Auto-responder berjalan sebagai timer in-process. Cocok untuk `next start` satu instance; pada platform serverless, jadikan worker terpisah (lihat roadmap).
 

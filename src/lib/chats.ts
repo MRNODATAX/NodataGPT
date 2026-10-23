@@ -61,11 +61,12 @@ export function toSummary(
     lastMessage: last
       ? {
           id: last.id,
-          body: last.type === "image" ? "📷 Foto" : last.body,
+          body: previewOf(last),
           senderId: last.senderId,
           createdAt: last.createdAt,
           type: last.type,
           viaAI: last.viaAI,
+          fileName: last.fileName,
         }
       : null,
     unreadCount,
@@ -92,3 +93,19 @@ export function toDetail(
 
 export type { ChatSummary, ChatDetail };
 export { isMember };
+
+/** Ringkasan teks pesan untuk daftar chat. */
+export function previewOf(message: Message): string {
+  switch (message.type) {
+    case "image":
+      return "📷 Foto";
+    case "video":
+      return "🎬 Video";
+    case "audio":
+      return "🎵 Pesan suara";
+    case "file":
+      return `📄 ${message.fileName || "Dokumen"}`;
+    default:
+      return message.body;
+  }
+}

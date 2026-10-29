@@ -21,7 +21,7 @@ const FLASH_MODEL_ID = 'fbb127bbb056c959';
 const SESSION_TTL_MS = 8 * 60 * 1000;
 
 const GOOGLE_WEB_ERROR_PHRASES = [
-  "Sorry, something went wrong. Please try your request again.",
+  'Sorry, something went wrong. Please try your request again.',
   'I encountered an error doing what you asked. Could you try again?',
   'Something went wrong. Please try again.',
   'An error occurred. Please try again.',
@@ -40,7 +40,7 @@ const RPC_ERROR_LABELS = {
   1060: 'IP_TEMPORARILY_BLOCKED (IP server sementara dibatasi oleh Google)',
 };
 
-/** @type {{ jar: Map<string, string>, bl: string, fsid: string, at: string, hl: string, sessionId: string, reqid: number, mode: 'guest' | 'cookie', mintedAt: number } | null} */
+/** @type {{ jar: Map<string, string>, bl: string, fsid: string, at: string, hl: string, sessionId: string, reqid: number, mode: 'guest' | 'cookie', initUrl: string, mintedAt: number } | null} */
 let cachedSession = null;
 
 function extractSetCookies(headers) {
@@ -118,7 +118,6 @@ export function scanTopLevelJsonArrays(rawBody) {
   let i = 0;
 
   while (i < len) {
-    // Locate start of a JSON array frame `[[` or `["wrb.fr"`
     const start = rawBody.indexOf('[', i);
     if (start === -1) break;
 
@@ -283,6 +282,27 @@ export function build81SlotPayload({
   return { outerJson, requestUuid };
 }
 
+export function buildZibri104Payload(prompt, language = 'en') {
+  const inner = new Array(104).fill(null);
+  inner[0] = [prompt, 0, null, null, null, null, null];
+  inner[1] = [language];
+  inner[2] = ['', '', '', null, null, null, null, null, null, ''];
+  inner[3] = '';
+  inner[4] = '';
+  inner[5] = null;
+  inner[6] = [0];
+  inner[7] = 1;
+  inner[10] = 1;
+  inner[11] = 1;
+  inner[17] = [[0]];
+  inner[18] = 1;
+  inner[27] = 1;
+  inner[30] = [4];
+  inner[41] = [2];
+  inner[103] = [];
+  return JSON.stringify([null, JSON.stringify(inner)]);
+}
+
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -307,7 +327,6 @@ async function mintGeminiSession(forceRefresh = false) {
   const jar = new Map();
   let mode = 'guest';
 
-  // Optional cookie upgrade if owner configures GEMINI_1PSID in environment later
   const envPsid = (process.env.GEMINI_1PSID || '').trim();
   const envPsidts = (process.env.GEMINI_1PSIDTS || '').trim();
   if (envPsid) {
@@ -316,7 +335,6 @@ async function mintGeminiSession(forceRefresh = false) {
     mode = 'cookie';
   }
 
-  // Step 1: Anonymous preflight on www.google.com to acquire NID / AEC / ENID cookies
   if (mode === 'guest') {
     try {
       const preflightRes = await fetchWithTimeout(
@@ -326,20 +344,16 @@ async function mintGeminiSession(forceRefresh = false) {
           redirect: 'follow',
           headers: {
             'User-Agent': CHROME_UA,
-            Accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
           },
         },
-        8000
+        7000
       );
       updateCookieJar(jar, preflightRes);
     } catch {
-      // Continue directly to gemini.google.com/app even if preflight hiccups
+      // Proceed to /app even if google.com preflight fails
     }
   }
 
-  // Step 2: Fetch https://gemini.google.com/app?hl=en to extract cfb2h (bl), FdrFJe (f.sid), SNlM0e (at)
   const fetchInitPage = async () => {
     const cookieHeader = serializeCookieJar(jar);
     const res = await fetchWithTimeout(
@@ -349,15 +363,12 @@ async function mintGeminiSession(forceRefresh = false) {
         redirect: 'follow',
         headers: {
           'User-Agent': CHROME_UA,
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
           Origin: 'https://gemini.google.com',
           Referer: 'https://gemini.google.com/',
           ...(cookieHeader ? { Cookie: cookieHeader } : {}),
         },
       },
-      10000
+      9000
     );
     updateCookieJar(jar, res);
     const html = await res.text();
@@ -367,8 +378,10 @@ async function mintGeminiSession(forceRefresh = false) {
   let { res: initRes, html } = await fetchInitPage();
   const finalUrl = initRes.url || '';
 
-  // Handle Google EU/global consent screen redirect automatically
-  if (finalUrl.includes('consent.google.com') || (!html.includes('cfb2h') && html.includes('consent.google.com'))) {
+  if (
+    finalUrl.includes('consent.google.com') ||
+    (!html.includes('cfb2h') && html.includes('consent.google.com'))
+  ) {
     jar.set('SOCS', CONSENT_SOCS_COOKIE);
     ({ res: initRes, html } = await fetchInitPage());
   }
@@ -403,23 +416,25 @@ async function mintGeminiSession(forceRefresh = false) {
     sessionId: crypto.randomUUID().toUpperCase(),
     reqid: 100000 + Math.floor(Math.random() * 800000),
     mode: at ? 'cookie' : mode,
+    initUrl: initRes.url || GEMINI_INIT_URL,
     mintedAt: Date.now(),
   };
 
   return cachedSession;
 }
 
-async function invokeStreamGenerate(session, promptText, variant = 'default', thinking = false) {
-  const thinkingLevel = thinking ? 2 : 1;
-  const modelNumber =
-    variant === 'flash-lite' ? 6 : variant === 'flash' ? 1 : 1;
+async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81', thinking = false) {
+  const stepStart = Date.now();
+  let outerJson = '';
+  let requestUuid = crypto.randomUUID().toUpperCase();
 
-  const { outerJson, requestUuid } = build81SlotPayload({
-    prompt: promptText,
-    language: session.hl || 'en',
-    modelNumber,
-    thinkingLevel,
-  });
+  const headers = {
+    'User-Agent': CHROME_UA,
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+    Origin: 'https://gemini.google.com',
+    Referer: 'https://gemini.google.com/app',
+    'X-Same-Domain': '1',
+  };
 
   const params = new URLSearchParams({
     hl: session.hl || 'en',
@@ -430,28 +445,27 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
   if (session.bl) params.set('bl', session.bl);
   if (session.fsid) params.set('f.sid', session.fsid);
 
-  const headers = {
-    'User-Agent': CHROME_UA,
-    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-    Origin: 'https://gemini.google.com',
-    Referer: 'https://gemini.google.com/',
-    'X-Same-Domain': '1',
-    'x-goog-ext-525005358-jspb': `["${requestUuid}",1]`,
-  };
+  const formParams = new URLSearchParams();
 
-  const cookieHeader = serializeCookieJar(session.jar);
-  if (cookieHeader) {
-    headers.Cookie = cookieHeader;
-  }
-
-  if (variant === 'flash-lite' || variant === 'flash') {
-    const modelId = variant === 'flash-lite' ? FLASH_LITE_MODEL_ID : FLASH_MODEL_ID;
-    const modelArr = [
+  if (variant === 'zibri-104') {
+    outerJson = buildZibri104Payload(promptText, session.hl || 'en');
+    formParams.set('f.req', outerJson);
+  } else if (variant === 'argon-81') {
+    const built = build81SlotPayload({
+      prompt: promptText,
+      language: session.hl || 'en',
+      modelNumber: 6,
+      thinkingLevel: 2,
+    });
+    outerJson = built.outerJson;
+    requestUuid = built.requestUuid;
+    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
+    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
       1,
       null,
       null,
       null,
-      modelId,
+      FLASH_LITE_MODEL_ID,
       null,
       null,
       0,
@@ -461,22 +475,101 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
       1,
       null,
       null,
-      modelNumber,
-      thinkingLevel,
-      session.sessionId,
-    ];
-    headers['x-goog-ext-525001261-jspb'] = JSON.stringify(modelArr);
+      1,
+    ]);
     headers['x-goog-ext-73010989-jspb'] = '[0]';
     headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
+    if (session.at) formParams.set('at', session.at);
+    formParams.set('f.req', outerJson);
+  } else if (variant === 'flash-lite-81') {
+    const thinkingLevel = thinking ? 2 : 1;
+    const built = build81SlotPayload({
+      prompt: promptText,
+      language: session.hl || 'en',
+      modelNumber: 6,
+      thinkingLevel,
+    });
+    outerJson = built.outerJson;
+    requestUuid = built.requestUuid;
+    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
+    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
+      1,
+      null,
+      null,
+      null,
+      FLASH_LITE_MODEL_ID,
+      null,
+      null,
+      0,
+      [4, 5, 6, 8],
+      null,
+      null,
+      1,
+      null,
+      null,
+      6,
+      thinkingLevel,
+      session.sessionId,
+    ]);
+    headers['x-goog-ext-73010989-jspb'] = '[0]';
+    headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
+    formParams.set('at', session.at || '');
+    formParams.set('f.req', outerJson);
+  } else {
+    // Default 'hanaoka-81': let Google pick guest-eligible model without forcing restricted model hash
+    const thinkingLevel = thinking ? 2 : 1;
+    const built = build81SlotPayload({
+      prompt: promptText,
+      language: session.hl || 'en',
+      modelNumber: 1,
+      thinkingLevel,
+    });
+    outerJson = built.outerJson;
+    requestUuid = built.requestUuid;
+    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
+    formParams.set('at', session.at || '');
+    formParams.set('f.req', outerJson);
   }
 
-  const formParams = new URLSearchParams();
-  if (session.at) {
-    formParams.set('at', session.at);
-  } else if (variant !== 'no-at-key') {
-    formParams.set('at', '');
+  if (variant === 'flash-81') {
+    const built = build81SlotPayload({
+      prompt: promptText,
+      language: session.hl || 'en',
+      modelNumber: 1,
+      thinkingLevel: 1,
+    });
+    outerJson = built.outerJson;
+    requestUuid = built.requestUuid;
+    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
+    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
+      1,
+      null,
+      null,
+      null,
+      FLASH_MODEL_ID,
+      null,
+      null,
+      0,
+      [4, 5, 6, 8],
+      null,
+      null,
+      1,
+      null,
+      null,
+      1,
+      1,
+      session.sessionId,
+    ]);
+    headers['x-goog-ext-73010989-jspb'] = '[0]';
+    headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
+    formParams.set('at', session.at || '');
+    formParams.set('f.req', outerJson);
   }
-  formParams.set('f.req', outerJson);
+
+  const cookieHeader = serializeCookieJar(session.jar);
+  if (cookieHeader && variant !== 'cookie-free-81') {
+    headers.Cookie = cookieHeader;
+  }
 
   const url = `${GEMINI_STREAM_GENERATE_URL}?${params.toString()}`;
   const res = await fetchWithTimeout(
@@ -487,7 +580,7 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
       headers,
       body: formParams.toString(),
     },
-    22000
+    19000
   );
 
   updateCookieJar(session.jar, res);
@@ -496,7 +589,10 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
   if (res.status === 429 || location.includes('/sorry')) {
     return {
       ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
       httpStatus: res.status,
+      location,
       retryable: false,
       error: 'IP server terkena pembatasan CAPTCHA Google (/sorry).',
     };
@@ -506,10 +602,12 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
   if (!res.ok) {
     return {
       ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
       httpStatus: res.status,
       retryable: res.status >= 500 || res.status === 400,
       error: `StreamGenerate mengembalikan HTTP ${res.status}.`,
-      rawPreview: rawBody.slice(0, 260),
+      rawPreview: rawBody.slice(0, 320),
     };
   }
 
@@ -520,6 +618,8 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
       RPC_ERROR_LABELS[parsed.rpcErrorCode] || `RPC_ERROR_${parsed.rpcErrorCode}`;
     return {
       ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
       httpStatus: 200,
       rpcErrorCode: parsed.rpcErrorCode,
       retryable:
@@ -528,33 +628,40 @@ async function invokeStreamGenerate(session, promptText, variant = 'default', th
         parsed.rpcErrorCode === 1052,
       error: `Google Gemini menolak request: ${label}`,
       wrbFrameCount: parsed.wrbFrameCount,
+      rawPreview: rawBody.slice(0, 320),
     };
   }
 
   if (!parsed.text) {
     return {
       ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
       httpStatus: 200,
       retryable: true,
       error: `Respons WRB kosong dari Gemini (${parsed.wrbFrameCount} frame).`,
-      rawPreview: rawBody.slice(0, 260),
+      rawPreview: rawBody.slice(0, 320),
     };
   }
 
   if (isGoogleWebErrorReply(parsed.text)) {
     return {
       ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
       httpStatus: 200,
       googleTemplateError: true,
       retryable: true,
       error: `Template penolakan Google Web: "${parsed.text}"`,
+      wrbFrameCount: parsed.wrbFrameCount,
     };
   }
 
   return {
     ok: true,
-    httpStatus: 200,
     variant,
+    stepMs: Date.now() - stepStart,
+    httpStatus: 200,
     text: parsed.text,
     thoughts: parsed.thoughts,
     cid: parsed.cid,
@@ -575,17 +682,25 @@ export default async function handler(req, res) {
 
   const startedAt = Date.now();
   const isProbe = req.query?.probe === '1';
+  const requestedVariant =
+    typeof req.query?.variant === 'string' && req.query.variant.trim()
+      ? req.query.variant.trim()
+      : '';
 
   let text = '';
   let system = '';
   let thinking = false;
 
   if (req.method === 'GET') {
-    text = typeof req.query?.text === 'string' ? req.query.text : (req.query?.q || req.query?.prompt || '');
+    text =
+      typeof req.query?.text === 'string'
+        ? req.query.text
+        : req.query?.q || req.query?.prompt || '';
     system = typeof req.query?.system === 'string' ? req.query.system : '';
     thinking = req.query?.thinking === '1' || req.query?.thinking === 'true';
   } else if (req.method === 'POST') {
-    const payload = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const payload =
+      typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
     text = payload.text || payload.prompt || payload.q || '';
     system = payload.system || '';
     thinking = Boolean(payload.thinking);
@@ -608,30 +723,39 @@ export default async function handler(req, res) {
   const attemptDiagnostics = [];
 
   try {
-    let session = await mintGeminiSession(false);
+    const session = await mintGeminiSession(false);
+    const sessionSummary = {
+      mode: session.mode,
+      bl: session.bl,
+      hasFsid: Boolean(session.fsid),
+      hasAt: Boolean(session.at),
+      hl: session.hl,
+      cookieNames: Array.from(session.jar.keys()),
+      initUrl: session.initUrl,
+    };
 
-    // Strategy chain:
-    // 1. Default HanaokaYuzu Guest 81-slot (let Google select guest-eligible model, at="")
-    // 2. Explicit Flash-Lite 17-element model header on refreshed session
-    // 3. Omitted `at` parameter fallback (Zibri guest style)
-    const variants = ['default', 'flash-lite', 'no-at-key'];
+    const variants = requestedVariant
+      ? [requestedVariant]
+      : isProbe
+        ? ['hanaoka-81']
+        : ['hanaoka-81', 'flash-lite-81'];
 
     for (let idx = 0; idx < variants.length; idx++) {
       const variant = variants[idx];
-      if (idx === 1) {
-        // Refresh guest cookies/bl/fsid once if cached session stalled or failed
-        session = await mintGeminiSession(true);
-      } else if (idx > 1) {
+      if (idx > 0) {
         session.reqid += 100000;
       }
 
       const outcome = await invokeStreamGenerate(session, finalPrompt, variant, thinking);
       attemptDiagnostics.push({
-        variant,
+        variant: outcome.variant,
         ok: outcome.ok,
+        stepMs: outcome.stepMs,
         httpStatus: outcome.httpStatus,
         rpcErrorCode: outcome.rpcErrorCode ?? null,
+        wrbFrameCount: outcome.wrbFrameCount ?? 0,
         error: outcome.error ?? null,
+        ...(isProbe && outcome.rawPreview ? { rawPreview: outcome.rawPreview } : {}),
       });
 
       if (outcome.ok) {
@@ -645,7 +769,7 @@ export default async function handler(req, res) {
           latencyMs: Date.now() - startedAt,
           ...(outcome.thoughts ? { thinking: outcome.thoughts } : {}),
           result: outcome.text,
-          ...(isProbe ? { diagnostics: attemptDiagnostics } : {}),
+          ...(isProbe ? { session: sessionSummary, diagnostics: attemptDiagnostics } : {}),
         });
       }
 
@@ -655,7 +779,7 @@ export default async function handler(req, res) {
     }
 
     const lastDiag = attemptDiagnostics[attemptDiagnostics.length - 1];
-    return res.status(502).json({
+    return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
       provider: 'Google Gemini Direct (81-Slot Web RPC)',
@@ -663,12 +787,13 @@ export default async function handler(req, res) {
       error:
         lastDiag?.error ||
         'Gagal memperoleh jawaban dari endpoint StreamGenerate Gemini.',
+      ...(isProbe ? { session: sessionSummary } : {}),
       diagnostics: attemptDiagnostics,
     });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'Kesalahan koneksi ke Gemini Web.';
-    return res.status(502).json({
+    return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
       provider: 'Google Gemini Direct (81-Slot Web RPC)',

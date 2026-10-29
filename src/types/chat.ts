@@ -1,35 +1,55 @@
 export type MessageRole = 'user' | 'assistant';
 
-export interface ChatAttachment {
-  name: string;
-  content: string;
-  size: number;
-}
-
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
-  status?: 'streaming' | 'done' | 'error';
-  errorDetail?: string;
-  feedback?: 'up' | 'down' | null;
+  isError?: boolean;
+  answeredById?: string;
+  answeredByName?: string;
+  usedFallback?: boolean;
+  imageUrl?: string;
   attachmentName?: string;
-  durationMs?: number;
 }
 
-export interface ChatSession {
+export interface Conversation {
   id: string;
   title: string;
-  pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  pinned?: boolean;
   messages: ChatMessage[];
 }
 
-export interface WormGptSettings {
-  apiUrl: string;
-  userName: string;
-  contextMemory: boolean;
-  streamEffect: boolean;
+export interface AppSettings {
+  selectedModelId: string;
+  autoFallback: boolean;
+  memoryContextEnabled: boolean;
+  enterToSend: boolean;
+  customPersona: string;
+  geminiApiKey: string;
+  deepseekApiKey: string;
+}
+
+export type ModelCategory =
+  | 'auto'
+  | 'utama'
+  | 'reasoning'
+  | 'bintang'
+  | 'khusus'
+  | 'resmi';
+
+export interface AIModelDefinition {
+  id: string;
+  name: string;
+  shortName: string;
+  provider: string;
+  priority: number;
+  category: ModelCategory;
+  description: string;
+  maxPromptChars: number;
+  timeoutMs: number;
+  requiresKey?: 'gemini' | 'deepseek';
+  accent: 'cyan' | 'orange' | 'dual';
 }

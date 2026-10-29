@@ -1,272 +1,277 @@
 import { useEffect, useState } from 'react';
-import { Play, RotateCcw, Trash2, X } from 'lucide-react';
-import { DEFAULT_WORMGPT_API } from '../services/wormgptApi';
-import type { WormGptSettings } from '../types/chat';
+import { KeyRound, Trash2, X } from 'lucide-react';
+import type { AppSettings } from '../types/chat';
 
 interface SettingsModalProps {
   isOpen: boolean;
-  settings: WormGptSettings;
-  totalSessions: number;
+  settings: AppSettings;
+  conversationCount: number;
   onClose: () => void;
-  onSaveSettings: (next: WormGptSettings) => void;
-  onReplaySplash: () => void;
-  onClearAllHistory: () => void;
+  onUpdateSettings: (next: AppSettings) => void;
+  onClearAllChats: () => void;
 }
 
 export function SettingsModal({
   isOpen,
   settings,
-  totalSessions,
+  conversationCount,
   onClose,
-  onSaveSettings,
-  onReplaySplash,
-  onClearAllHistory,
+  onUpdateSettings,
+  onClearAllChats,
 }: SettingsModalProps) {
-  const [userName, setUserName] = useState(settings.userName);
-  const [apiUrl, setApiUrl] = useState(settings.apiUrl);
-  const [contextMemory, setContextMemory] = useState(settings.contextMemory);
-  const [streamEffect, setStreamEffect] = useState(settings.streamEffect);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [urlError, setUrlError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setUserName(settings.userName);
-      setApiUrl(settings.apiUrl);
-      setContextMemory(settings.contextMemory);
-      setStreamEffect(settings.streamEffect);
+    if (!isOpen) {
       setConfirmClear(false);
-      setUrlError(null);
+      return;
     }
-  }, [isOpen, settings]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedUrl = apiUrl.trim();
-    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
-      setUrlError('URL endpoint harus diawali dengan https:// atau http://');
-      return;
-    }
-    setUrlError(null);
-    onSaveSettings({
-      ...settings,
-      userName: userName.trim() || 'Sobat',
-      apiUrl: trimmedUrl,
-      contextMemory,
-      streamEffect,
-    });
-    onClose();
-  };
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="wormgpt-settings-title"
+      aria-labelledby="nodatagpt-settings-title"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
+      onClick={onClose}
     >
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-xs"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+        className="animate-sheet-up flex max-h-[88dvh] w-full flex-col rounded-t-[26px] border border-[#1C2433] bg-[#0B0F17] shadow-2xl sm:max-w-lg sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-center pt-2.5 sm:hidden">
+          <div className="h-1 w-10 rounded-full bg-[#293548]" />
+        </div>
 
-      <div className="relative z-10 max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[#2A2A34] bg-[#121216] p-5 text-[#FAFAFA] sm:p-6">
-        <div className="flex items-center justify-between">
-          <h2 id="wormgpt-settings-title" className="font-display text-lg font-semibold">
-            Pengaturan WormGPT
+        <div className="flex items-center justify-between border-b border-[#1C2433] px-5 py-3.5 sm:py-4">
+          <h2
+            id="nodatagpt-settings-title"
+            className="font-display text-base font-bold text-white sm:text-lg"
+          >
+            Pengaturan NodataGPT
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Tutup pengaturan"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-[#B4B4BE] hover:bg-[#1B1B22] hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#B6C0D0] hover:bg-[#151C28] hover:text-white cursor-pointer"
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label
-              htmlFor="setting-user-name"
-              className="mb-1.5 block text-xs font-semibold text-[#FAFAFA]"
-            >
-              Nama Sapaan
-            </label>
-            <input
-              id="setting-user-name"
-              type="text"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              placeholder="Sobat"
-              className="min-h-11 w-full rounded-xl border border-[#262630] bg-[#0B0B0F] px-3.5 text-sm text-[#FAFAFA] placeholder:text-[#9E9EA8] focus:border-[#F97316]"
-            />
-            <p className="mt-1 text-xs text-[#9E9EA8]">
-              Ditampilkan pada sapaan pembuka halaman utama.
-            </p>
-          </div>
-
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label
-                htmlFor="setting-api-url"
-                className="text-xs font-semibold text-[#FAFAFA]"
-              >
-                Endpoint API WormGPT
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setApiUrl(DEFAULT_WORMGPT_API);
-                  setUrlError(null);
-                }}
-                className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium text-[#FB923C] hover:bg-[#1E1513]"
-              >
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Reset Default</span>
-              </button>
+        <div className="pb-safe flex-1 space-y-4 overflow-y-auto p-5">
+          {/* Auto Fallback */}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Auto-Fallback Multi-Server
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#9BA6B8]">
+                Otomatis beralih ke model sehat berikutnya bila server yang dipilih mengalami timeout atau gangguan.
+              </p>
             </div>
-            <input
-              id="setting-api-url"
-              type="url"
-              value={apiUrl}
-              onChange={(e) => {
-                setApiUrl(e.target.value);
-                if (urlError) setUrlError(null);
-              }}
-              className="min-h-11 w-full rounded-xl border border-[#262630] bg-[#0B0B0F] px-3.5 font-mono text-xs text-[#FAFAFA] focus:border-[#F97316]"
-            />
-            {urlError ? (
-              <p role="alert" className="mt-1 text-xs text-[#F87171]">
-                {urlError}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-[#9E9EA8]">
-                Pertanyaan akan dikirim secara otomatis melalui parameter kueri URL ini.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2.5 rounded-xl border border-[#22222B] bg-[#0C0C10] p-3.5">
-            <label
-              htmlFor="setting-memory-checkbox"
-              className="flex min-h-11 items-center justify-between gap-3"
-            >
-              <span>
-                <span className="block text-sm font-medium text-[#FAFAFA]">
-                  Memori Konteks Percakapan
-                </span>
-                <span className="block text-xs text-[#9E9EA8]">
-                  Sertakan ringkasan pesan sebelumnya saat mengirim pertanyaan lanjutan
-                </span>
-              </span>
-              <input
-                id="setting-memory-checkbox"
-                type="checkbox"
-                checked={contextMemory}
-                onChange={(e) => setContextMemory(e.target.checked)}
-                className="h-5 w-5 shrink-0 accent-[#F97316]"
-              />
-            </label>
-
-            <div className="border-t border-[#1D1D25]" />
-
-            <label
-              htmlFor="setting-stream-checkbox"
-              className="flex min-h-11 items-center justify-between gap-3"
-            >
-              <span>
-                <span className="block text-sm font-medium text-[#FAFAFA]">
-                  Animasi Teks Bertahap
-                </span>
-                <span className="block text-xs text-[#9E9EA8]">
-                  Tampilkan jawaban mengalir halus seperti ruang chat Gemini
-                </span>
-              </span>
-              <input
-                id="setting-stream-checkbox"
-                type="checkbox"
-                checked={streamEffect}
-                onChange={(e) => setStreamEffect(e.target.checked)}
-                className="h-5 w-5 shrink-0 accent-[#F97316]"
-              />
-            </label>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#22222B] bg-[#0C0C10] p-3.5">
             <button
               type="button"
-              onClick={() => {
-                onClose();
-                onReplaySplash();
-              }}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#3B1B15] bg-[#181110] px-3.5 text-xs font-medium text-[#FB923C] hover:bg-[#231714]"
+              role="switch"
+              aria-checked={settings.autoFallback}
+              onClick={() =>
+                onUpdateSettings({
+                  ...settings,
+                  autoFallback: !settings.autoFallback,
+                })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                settings.autoFallback ? 'bg-[#0E7490]' : 'bg-[#263042]'
+              }`}
             >
-              <Play className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Putar Ulang Opening</span>
+              <span
+                className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                  settings.autoFallback ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`}
+              />
             </button>
+          </div>
+
+          {/* Memory Context */}
+          <div className="flex items-start justify-between gap-4 border-t border-[#1C2433] pt-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Ingatan Konteks Percakapan
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#9BA6B8]">
+                Sertakan ringkasan pesan sebelumnya agar diskusi tetap nyambung pada API stateless.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.memoryContextEnabled}
+              onClick={() =>
+                onUpdateSettings({
+                  ...settings,
+                  memoryContextEnabled: !settings.memoryContextEnabled,
+                })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                settings.memoryContextEnabled ? 'bg-[#0E7490]' : 'bg-[#263042]'
+              }`}
+            >
+              <span
+                className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                  settings.memoryContextEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Enter to Send */}
+          <div className="flex items-start justify-between gap-4 border-t border-[#1C2433] pt-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Kirim dengan Tombol Enter (Desktop)
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#9BA6B8]">
+                Tekan Enter untuk mengirim dan Shift + Enter untuk baris baru.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.enterToSend}
+              onClick={() =>
+                onUpdateSettings({
+                  ...settings,
+                  enterToSend: !settings.enterToSend,
+                })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                settings.enterToSend ? 'bg-[#0E7490]' : 'bg-[#263042]'
+              }`}
+            >
+              <span
+                className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                  settings.enterToSend ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Custom Persona for Rin aicostum */}
+          <div className="space-y-1.5 border-t border-[#1C2433] pt-4">
+            <label
+              htmlFor="nodatagpt-persona-input"
+              className="block text-sm font-medium text-white"
+            >
+              Instruksi Karakter (Model AI Persona Kustom)
+            </label>
+            <textarea
+              id="nodatagpt-persona-input"
+              rows={2}
+              value={settings.customPersona}
+              onChange={(e) =>
+                onUpdateSettings({ ...settings, customPersona: e.target.value })
+              }
+              placeholder="Contoh: Kamu adalah mentor senior full-stack yang lugas..."
+              className="w-full rounded-xl border border-[#1C2433] bg-[#10141D] p-2.5 text-xs leading-relaxed text-white placeholder-[#9BA6B8] focus:border-[#22D3EE] focus:outline-none"
+            />
+          </div>
+
+          {/* Optional Personal API Keys */}
+          <div className="space-y-3 rounded-xl border border-[#1C2433] bg-[#10141D] p-3.5">
+            <div className="flex items-center gap-2 text-xs font-semibold text-[#22D3EE]">
+              <KeyRound className="h-4 w-4" />
+              <span>Kunci API Pribadi (Opsional, Prioritas 0)</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-[#9BA6B8]">
+              Disimpan lokal di perangkat Anda saja. Kosongkan bila ingin memakai 23 model tanpa kunci.
+            </p>
+            <div>
+              <label
+                htmlFor="gemini-key-input"
+                className="mb-1 block text-xs font-medium text-[#B6C0D0]"
+              >
+                Google AI Studio API Key (Gemini 2.5 Flash)
+              </label>
+              <input
+                id="gemini-key-input"
+                type="password"
+                value={settings.geminiApiKey}
+                onChange={(e) =>
+                  onUpdateSettings({ ...settings, geminiApiKey: e.target.value })
+                }
+                placeholder="AIzaSy..."
+                className="h-9 w-full rounded-lg border border-[#1C2433] bg-[#080A0F] px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="deepseek-key-input"
+                className="mb-1 block text-xs font-medium text-[#B6C0D0]"
+              >
+                DeepSeek Official API Key
+              </label>
+              <input
+                id="deepseek-key-input"
+                type="password"
+                value={settings.deepseekApiKey}
+                onChange={(e) =>
+                  onUpdateSettings({ ...settings, deepseekApiKey: e.target.value })
+                }
+                placeholder="sk-..."
+                className="h-9 w-full rounded-lg border border-[#1C2433] bg-[#080A0F] px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Clear History */}
+          <div className="border-t border-[#1C2433] pt-4">
+            <p className="text-sm font-medium text-white">Data Percakapan Lokal</p>
+            <p className="mt-0.5 text-xs text-[#9BA6B8]">
+              Tersimpan {conversationCount} percakapan di peramban ini.
+            </p>
 
             {!confirmClear ? (
               <button
                 type="button"
-                disabled={totalSessions === 0}
+                disabled={conversationCount === 0}
                 onClick={() => setConfirmClear(true)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#451A1A] bg-[#1A0E0E] px-3.5 text-xs font-medium text-[#F87171] hover:bg-[#261313] disabled:opacity-40"
+                className="mt-3 inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/10 px-3.5 py-2 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#FB923C]/20 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
               >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Hapus Semua Riwayat ({totalSessions})</span>
+                <Trash2 className="h-4 w-4" />
+                <span>Hapus Semua Riwayat</span>
               </button>
             ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmClear(false)}
-                  className="min-h-11 rounded-xl px-3 text-xs font-medium text-[#B4B4BE] hover:bg-[#1B1B22]"
-                >
-                  Batal
-                </button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    onClearAllHistory();
+                    onClearAllChats();
                     setConfirmClear(false);
                   }}
-                  className="min-h-11 rounded-xl bg-[#B91C1C] px-3.5 text-xs font-semibold text-white hover:bg-[#991B1B]"
+                  className="inline-flex min-h-[42px] items-center rounded-xl bg-[#EA580C] px-4 py-2 text-xs font-semibold text-white hover:bg-[#F97316] cursor-pointer"
                 >
                   Ya, Hapus Permanen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="inline-flex min-h-[42px] items-center rounded-xl border border-[#293548] px-3.5 py-2 text-xs font-medium text-[#B6C0D0] hover:text-white cursor-pointer"
+                >
+                  Batal
                 </button>
               </div>
             )}
           </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-11 rounded-xl border border-[#2B2B36] bg-[#18181F] px-4 text-xs font-semibold text-[#FAFAFA] hover:bg-[#22222B]"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              className="min-h-11 rounded-xl bg-[#B91C1C] px-5 text-xs font-semibold text-white transition-colors hover:bg-[#C2410C]"
-            >
-              Simpan Perubahan
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );

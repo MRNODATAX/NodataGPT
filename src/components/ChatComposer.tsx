@@ -1,25 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Brain,
+  ArrowUp,
+  ChevronDown,
+  FileText,
+  ImageIcon,
   Mic,
   MicOff,
   Paperclip,
-  SendHorizontal,
   Square,
   X,
 } from 'lucide-react';
-import type { ChatAttachment } from '../types/chat';
+import type { AIModelDefinition } from '../types/chat';
 
 interface ChatComposerProps {
   value: string;
-  isGenerating: boolean;
-  contextMemory: boolean;
-  attachment: ChatAttachment | null;
-  onChange: (value: string) => void;
-  onSend: () => void;
+  onChange: (val: string) => void;
+  onSend: (attachmentText?: string, attachmentName?: string, imageMode?: boolean) => void;
   onStop: () => void;
-  onToggleMemory: () => void;
-  onAttachFile: (attachment: ChatAttachment | null) => void;
+  isLoading: boolean;
+  enterToSend: boolean;
+  activeModel: AIModelDefinition;
+  imageMode: boolean;
+  onToggleImageMode: () => void;
+  onOpenModelPicker: () => void;
 }
 
 interface SpeechRecognitionInstance {
@@ -29,92 +32,71 @@ interface SpeechRecognitionInstance {
   onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
   onerror: (() => void) | null;
   onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-function getSpeechConstructor(): (new () => SpeechRecognitionInstance) | null {
-  if (typeof window === 'undefined') return null;
-  const win = window as unknown as {
-    SpeechRecognition?: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
-  };
-  return win.SpeechRecognition || win.webkitSpeechRecognition || null;
+  start: () => void;
+  stop: () => void;
 }
 
 export function ChatComposer({
   value,
-  isGenerating,
-  contextMemory,
-  attachment,
   onChange,
   onSend,
   onStop,
-  onToggleMemory,
-  onAttachFile,
+  isLoading,
+  enterToSend,
+  activeModel,
+  imageMode,
+  onToggleImageMode,
+  onOpenModelPicker,
 }: ChatComposerProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
 
-  const speechSupported = Boolean(getSpeechConstructor());
+  const [attachment, setAttachment] = useState<{ name: string; content: string } | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+    const nextHeight = Math.min(el.scrollHeight, 160);
+    el.style.height = `${nextHeight}px`;
   }, [value]);
 
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.stop();
-    };
-  }, []);
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileError(null);
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    if (file.size > 150 * 1024) {
-      setFileError('Ukuran file melebihi batas 150 KB untuk lampiran teks.');
-      return;
-    }
-
-    try {
-      const content = await file.text();
-      onAttachFile({
-        name: file.name,
-        content,
-        size: file.size,
-      });
-    } catch {
-      setFileError('File tidak dapat dibaca sebagai teks.');
-    }
-  };
+  const speechConstructor =
+    typeof window !== 'undefined'
+      ? (
+          window as unknown as {
+            SpeechRecognition?: new () => SpeechRecognitionInstance;
+            webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+          }
+        ).SpeechRecognition ||
+        (
+          window as unknown as {
+            webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+          }
+        ).webkitSpeechRecognition
+      : undefined;
 
   const toggleVoiceInput = () => {
-    const SpeechCtor = getSpeechConstructor();
-    if (!SpeechCtor) return;
+    if (!speechConstructor) return;
 
-    if (isListening) {
-      recognitionRef.current?.stop();
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
       setIsListening(false);
       return;
     }
 
-    const recognition = new SpeechCtor();
+    const recognition = new speechConstructor();
     recognition.lang = 'id-ID';
     recognition.interimResults = false;
     recognition.continuous = false;
 
     recognition.onresult = (event) => {
       const transcript = event.results?.[0]?.[0]?.transcript || '';
-      if (transcript.trim()) {
-        onChange(value ? `${value.trim()} ${transcript.trim()}` : transcript.trim());
+      if (transcript) {
+        onChange(value ? `${value.trim()} ${transcript}` : transcript);
       }
     };
     recognition.onerror = () => setIsListening(false);
@@ -125,163 +107,204 @@ export function ChatComposer({
     recognition.start();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isGenerating) {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 150 * 1024) {
+      setFileError('Ukuran berkas teks maksimum 150 KB.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setAttachment({ name: file.name, content: text.slice(0, 12000) });
+      if (imageMode) onToggleImageMode();
+    } catch {
+      setFileError('Gagal membaca berkas teks.');
+    }
+    e.target.value = '';
+  };
+
+  const triggerSubmit = () => {
+    if (isLoading) {
       onStop();
       return;
     }
     if (!value.trim() && !attachment) return;
-    onSend();
+    onSend(attachment?.content, attachment?.name, imageMode);
+    setAttachment(null);
+    setFileError(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 640;
+    if (e.key === 'Enter' && !e.shiftKey && enterToSend && !isMobileViewport) {
+      e.preventDefault();
+      triggerSubmit();
+    }
   };
 
   const canSend = Boolean(value.trim() || attachment);
 
   return (
-    <footer className="shrink-0 bg-[#09090B] px-3 pt-2 pb-3 pb-safe sm:px-6 sm:pb-4">
+    <div className="pb-safe w-full shrink-0 bg-[#080A0F] px-3 pt-1.5 sm:px-6 sm:pt-2">
       <div className="mx-auto w-full max-w-3xl">
         {fileError && (
-          <div
-            role="alert"
-            className="mb-2 flex items-center justify-between rounded-xl border border-[#7F1D1D] bg-[#190D0D] px-3.5 py-2 text-xs text-[#F87171]"
-          >
+          <div className="mb-1.5 flex items-center justify-between rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/10 px-3 py-1.5 text-xs text-[#FED7AA]">
             <span>{fileError}</span>
             <button
               type="button"
               onClick={() => setFileError(null)}
-              aria-label="Tutup peringatan lampiran"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#F87171] hover:bg-[#281414]"
+              aria-label="Tutup peringatan"
+              className="p-1 hover:text-white cursor-pointer"
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-[24px] border border-[#26262F] bg-[#121216] px-3.5 pt-2.5 pb-2 transition-all focus-within:border-[#F97316]/80 focus-within:shadow-[0_0_24px_-6px_rgba(249,115,22,0.28)] sm:px-4"
+        <div
+          className={`rounded-[24px] border bg-[#10141D] px-3 pt-2.5 pb-2 transition-colors focus-within:bg-[#131824] ${
+            imageMode
+              ? 'border-[#FB923C]/60 focus-within:border-[#FB923C]'
+              : 'border-[#1C2433] focus-within:border-[#22D3EE]/60'
+          }`}
         >
-          <div className="mb-1 flex items-center justify-between">
-            <label
-              htmlFor="wormgpt-prompt"
-              className="text-xs font-medium text-[#B4B4BE]"
-            >
-              Tanya WormGPT
-            </label>
-            {attachment && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#3B1B15] bg-[#1B1210] pl-2.5 text-xs text-[#FB923C]">
-                <Paperclip className="h-3 w-3" aria-hidden="true" />
-                <span className="max-w-[160px] truncate">{attachment.name}</span>
-                <button
-                  type="button"
-                  onClick={() => onAttachFile(null)}
-                  aria-label={`Hapus lampiran ${attachment.name}`}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#B4B4BE] hover:bg-[#271815] hover:text-white"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Attachment Chip */}
+          {attachment && (
+            <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-[#223047] bg-[#0B0F17] px-2.5 py-1 text-xs text-[#FAFAFA]">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+              <span className="max-w-[200px] truncate">{attachment.name}</span>
+              <button
+                type="button"
+                onClick={() => setAttachment(null)}
+                aria-label="Hapus lampiran"
+                className="ml-0.5 rounded p-0.5 text-[#9BA6B8] hover:text-white cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
+          {/* Auto-growing Prompt Input */}
+          <label htmlFor="nodatagpt-prompt-input" className="sr-only">
+            Tulis pesan untuk NodataGPT
+          </label>
           <textarea
+            id="nodatagpt-prompt-input"
             ref={textareaRef}
-            id="wormgpt-prompt"
             rows={1}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (!isGenerating && canSend) {
-                  onSend();
-                }
-              }
-            }}
-            placeholder="Ketik pesan langsung ke WormGPT..."
-            className="composer-input max-h-[180px] min-h-[36px] w-full resize-none bg-transparent py-1 text-[15px] leading-relaxed text-[#FAFAFA] placeholder:text-[#9E9EA8]"
+            onKeyDown={handleKeyDown}
+            placeholder={
+              imageMode
+                ? 'Deskripsikan gambar AI yang ingin dibuat...'
+                : 'Tanya NodataGPT apa saja...'
+            }
+            className="max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[15px] leading-relaxed text-[#FAFAFA] placeholder-[#9BA6B8] focus:outline-none sm:text-base"
           />
 
-          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 border-t border-[#1E1E26] pt-2">
-            <div className="flex flex-wrap items-center gap-1.5">
+          {/* Compact Single-Row Gemini Bottom Action Bar (Never wraps on 320px+) */}
+          <div className="mt-1.5 flex items-center justify-between gap-1.5">
+            <div className="flex min-w-0 items-center gap-1">
               <input
-                id="wormgpt-file-upload"
+                ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.php,.html,.css,.sql,.csv,.yml,.yaml,.sh,.xml,.log"
+                accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.html,.css,.csv,.sql,.sh,.yaml,.yml,.xml"
                 onChange={handleFileChange}
-                className="sr-only"
+                className="hidden"
               />
-              <label
-                htmlFor="wormgpt-file-upload"
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-[#B4B4BE] transition-colors hover:bg-[#1B1B22] hover:text-[#FAFAFA]"
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Lampirkan berkas teks atau kode"
+                title="Lampirkan berkas teks atau kode"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#B6C0D0] transition-colors hover:bg-[#192131] hover:text-white cursor-pointer"
               >
-                <Paperclip className="h-4 w-4 text-[#FB923C]" aria-hidden="true" />
-                <span>Lampirkan</span>
-              </label>
+                <Paperclip className="h-[18px] w-[18px]" />
+              </button>
 
               <button
                 type="button"
-                onClick={onToggleMemory}
-                aria-pressed={contextMemory}
-                className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-colors ${
-                  contextMemory
-                    ? 'border border-[#4D2016] bg-[#211310] text-[#FB923C]'
-                    : 'text-[#9E9EA8] hover:bg-[#1B1B22] hover:text-[#FAFAFA]'
+                onClick={onToggleImageMode}
+                aria-pressed={imageMode}
+                title="Mode Pembuat Gambar AI"
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                  imageMode
+                    ? 'border-[#FB923C]/60 bg-[#FB923C]/15 text-[#FB923C]'
+                    : 'border-[#1C2433] bg-[#0C1018] text-[#B6C0D0] hover:border-[#293548] hover:text-white'
                 }`}
               >
-                <Brain className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{contextMemory ? 'Memori: Aktif' : 'Memori: Nonaktif'}</span>
+                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>Gambar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenModelPicker}
+                title="Pilih model AI"
+                className="inline-flex h-9 min-w-0 items-center gap-1 rounded-full border border-[#1C2433] bg-[#0C1018] px-2.5 text-xs font-medium text-[#22D3EE] transition-colors hover:border-[#293548] cursor-pointer"
+              >
+                <span className="max-w-[92px] truncate sm:max-w-[150px]">
+                  {imageMode ? '4 Engine Gambar' : activeModel.shortName}
+                </span>
+                {!imageMode && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#9BA6B8]" />}
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {speechSupported && (
+            <div className="flex shrink-0 items-center gap-1">
+              {speechConstructor && (
                 <button
                   type="button"
                   onClick={toggleVoiceInput}
-                  aria-label={isListening ? 'Hentikan dikte suara' : 'Dikte pesan dengan suara'}
-                  aria-pressed={isListening}
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors ${
+                  aria-label={isListening ? 'Hentikan dikte suara' : 'Dikte suara'}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors cursor-pointer ${
                     isListening
-                      ? 'bg-[#B91C1C] text-white'
-                      : 'text-[#B4B4BE] hover:bg-[#1B1B22] hover:text-[#FAFAFA]'
+                      ? 'bg-[#FB923C]/20 text-[#FB923C]'
+                      : 'text-[#B6C0D0] hover:bg-[#192131] hover:text-white'
                   }`}
                 >
                   {isListening ? (
-                    <MicOff className="h-4 w-4" aria-hidden="true" />
+                    <MicOff className="h-[18px] w-[18px]" />
                   ) : (
-                    <Mic className="h-4 w-4" aria-hidden="true" />
+                    <Mic className="h-[18px] w-[18px]" />
                   )}
                 </button>
               )}
 
-              {isGenerating ? (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  aria-label="Hentikan respons WormGPT"
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-[#B91C1C] text-white transition-colors hover:bg-[#991B1B]"
-                >
-                  <Square className="h-4 w-4 fill-current" aria-hidden="true" />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!canSend}
-                  aria-label="Kirim pesan ke WormGPT"
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-[#B91C1C] text-white transition-colors hover:bg-[#C2410C] disabled:bg-[#23232B] disabled:text-[#9E9EA8]"
-                >
-                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={triggerSubmit}
+                disabled={!isLoading && !canSend}
+                aria-label={isLoading ? 'Hentikan respons' : 'Kirim pesan'}
+                className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+                  isLoading
+                    ? 'bg-[#EA580C] text-white hover:bg-[#F97316] cursor-pointer'
+                    : canSend
+                      ? imageMode
+                        ? 'bg-[#EA580C] text-white hover:bg-[#F97316] cursor-pointer'
+                        : 'bg-[#0E7490] text-white hover:bg-[#0891B2] cursor-pointer'
+                      : 'bg-[#192131] text-[#64748B] cursor-not-allowed'
+                }`}
+              >
+                {isLoading ? (
+                  <Square className="h-4 w-4 fill-current" />
+                ) : (
+                  <ArrowUp className="h-5 w-5" />
+                )}
+              </button>
             </div>
           </div>
-        </form>
+        </div>
 
-        <p className="mt-2 text-center text-xs text-[#9E9EA8]">
-          Terhubung langsung ke API WormGPT tanpa filter instruksi tambahan.
+        <p className="mt-1.5 hidden text-center text-[11px] text-[#9BA6B8] sm:block">
+          NodataGPT otomatis mengalihkan ke model sehat jika server utama sibuk.
         </p>
       </div>
-    </footer>
+    </div>
   );
 }

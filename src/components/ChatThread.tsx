@@ -1,47 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle,
+  AlertTriangle,
+  ArrowDown,
   Check,
   Copy,
-  Paperclip,
-  Pencil,
-  RotateCw,
-  ThumbsDown,
-  ThumbsUp,
+  Download,
+  FileText,
+  RefreshCw,
+  Shuffle,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import type { ChatMessage } from '../types/chat';
+import type { RouterStatusUpdate } from '../services/aiRouter';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ChatThreadProps {
   messages: ChatMessage[];
-  isGenerating: boolean;
-  elapsedMs: number;
-  onRetryMessage: (assistantMessageId: string) => void;
-  onEditUserMessage: (userMessageId: string, updatedText: string) => void;
-  onFeedback: (messageId: string, value: 'up' | 'down' | null) => void;
-  onFlushStream: () => void;
+  isLoading: boolean;
+  routerStatus: RouterStatusUpdate | null;
+  onRegenerate: (assistantMessageId: string) => void;
 }
 
 export function ChatThread({
   messages,
-  isGenerating,
-  elapsedMs,
-  onRetryMessage,
-  onEditUserMessage,
-  onFeedback,
-  onFlushStream,
+  isLoading,
+  routerStatus,
+  onRegenerate,
 }: ChatThreadProps) {
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState('');
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, isGenerating]);
+    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, isLoading, routerStatus?.attempt]);
 
   useEffect(() => {
     return () => {
@@ -51,309 +46,279 @@ export function ChatThread({
     };
   }, []);
 
-  const copyText = async (id: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const area = document.createElement('textarea');
-      area.value = text;
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand('copy');
-      document.body.removeChild(area);
-    }
-    setCopiedId(id);
-    setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1800);
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBottom(distanceFromBottom > 220);
   };
 
-  const toggleSpeech = (id: string, text: string) => {
+  const scrollToBottom = () => {
+    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  };
+
+  const handleCopyMessage = async (msg: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      setCopiedId(msg.id);
+      window.setTimeout(() => setCopiedId(null), 1800);
+    } catch {
+      // Ignore clipboard failures
+    }
+  };
+
+  const handleSpeakMessage = (msg: ChatMessage) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
-    if (speakingId === id) {
+    if (speakingId === msg.id) {
       window.speechSynthesis.cancel();
       setSpeakingId(null);
       return;
     }
 
     window.speechSynthesis.cancel();
-    const plain = text
-      .replace(/```[\s\S]*?```/g, ' blok kode. ')
-      .replace(/[#*_`>-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const utterance = new SpeechSynthesisUtterance(plain);
+    const plainText = msg.content.replace(/[#*`_~[\]()>-]/g, ' ');
+    const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = 'id-ID';
     utterance.onend = () => setSpeakingId(null);
     utterance.onerror = () => setSpeakingId(null);
-    setSpeakingId(id);
+    setSpeakingId(msg.id);
     window.speechSynthesis.speak(utterance);
   };
 
   const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 space-y-7 px-4 pt-4 pb-8 sm:px-6">
-      {messages.map((msg, idx) => {
-        const isLast = idx === messages.length - 1;
-
-        if (msg.role === 'user') {
-          const isEditing = editingUserId === msg.id;
-
-          if (isEditing) {
+    <div
+      ref={scrollContainerRef}
+      onScroll={handleScroll}
+      className="relative flex-1 overflow-y-auto px-3.5 pt-4 pb-5 sm:px-6 sm:pt-6"
+    >
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 sm:gap-7">
+        {messages.map((msg, idx) => {
+          if (msg.role === 'user') {
             return (
-              <div key={msg.id} className="ml-auto w-full max-w-2xl">
-                <div className="rounded-[18px] border border-[#F97316]/70 bg-[#141419] p-3.5">
-                  <label htmlFor={`edit-msg-${msg.id}`} className="mb-1.5 block text-xs font-medium text-[#B4B4BE]">
-                    Ubah pesan dan kirim ulang
-                  </label>
-                  <textarea
-                    id={`edit-msg-${msg.id}`}
-                    rows={3}
-                    value={editDraft}
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    className="w-full resize-y rounded-lg bg-[#0C0C10] p-2.5 text-sm text-[#FAFAFA] focus:outline-none"
-                  />
-                  <div className="mt-2.5 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingUserId(null)}
-                      className="min-h-11 rounded-xl px-4 text-xs font-medium text-[#B4B4BE] hover:bg-[#1E1E26] hover:text-[#FAFAFA]"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!editDraft.trim() || isGenerating}
-                      onClick={() => {
-                        const trimmed = editDraft.trim();
-                        if (!trimmed) return;
-                        setEditingUserId(null);
-                        onEditUserMessage(msg.id, trimmed);
-                      }}
-                      className="min-h-11 rounded-xl bg-[#B91C1C] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#991B1B] disabled:opacity-50"
-                    >
-                      Kirim Ulang
-                    </button>
-                  </div>
+              <div key={msg.id} className="flex justify-end">
+                <div className="max-w-[90%] rounded-2xl rounded-tr-sm border border-[#1E3144] bg-[#121C26] px-4 py-2.5 text-[#FAFAFA] sm:max-w-[78%] sm:px-4.5 sm:py-3">
+                  {msg.attachmentName && (
+                    <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-[#243B52] bg-[#0B121A] px-2.5 py-1 text-xs text-[#22D3EE]">
+                      <FileText className="h-3.5 w-3.5 shrink-0" />
+                      <span className="max-w-[200px] truncate">{msg.attachmentName}</span>
+                    </div>
+                  )}
+                  <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed sm:text-base">
+                    {msg.content}
+                  </p>
                 </div>
               </div>
             );
           }
 
+          const isLastAssistant = idx === messages.length - 1;
+
           return (
-            <article key={msg.id} className="flex flex-col items-end">
-              {msg.attachmentName && (
-                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-[#2C1A16] bg-[#161110] px-2.5 py-1 text-xs text-[#FB923C]">
-                  <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{msg.attachmentName}</span>
-                </div>
-              )}
-
-              <div className="max-w-[88%] rounded-[18px] rounded-tr-sm border border-[#3B1B15] bg-[#1D1412] px-4 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-[#FAFAFA] sm:max-w-[78%]">
-                {msg.content}
+            <article
+              key={msg.id}
+              aria-label="Respons NodataGPT"
+              className="flex items-start gap-2.5 sm:gap-3.5"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#1C2433] bg-black p-1 sm:h-8 sm:w-8">
+                <img
+                  src="/logo-transparent.png"
+                  alt="NodataGPT"
+                  width={24}
+                  height={24}
+                  className="h-full w-full object-contain"
+                />
               </div>
 
-              <div className="mt-1 flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => copyText(msg.id, msg.content)}
-                  aria-label="Salin pesan Anda"
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#9E9EA8] transition-colors hover:bg-[#14141A] hover:text-[#FAFAFA]"
-                >
-                  {copiedId === msg.id ? (
-                    <Check className="h-3.5 w-3.5 text-[#FB923C]" aria-hidden="true" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </button>
+              <div className="min-w-0 flex-1">
+                {/* Sender + Model Pill */}
+                <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className="font-display text-xs font-bold tracking-tight">
+                    <span className="text-[#22D3EE]">Nodata</span>
+                    <span className="text-[#FB923C]">GPT</span>
+                  </span>
 
-                <button
-                  type="button"
-                  disabled={isGenerating}
-                  onClick={() => {
-                    setEditingUserId(msg.id);
-                    setEditDraft(msg.content);
-                  }}
-                  aria-label="Ubah dan kirim ulang pesan ini"
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#9E9EA8] transition-colors hover:bg-[#14141A] hover:text-[#FAFAFA] disabled:opacity-40"
-                >
-                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            </article>
-          );
-        }
-
-        // Assistant message
-        const isWaitingContent = msg.status === 'streaming' && msg.content.length === 0;
-        const isStreamingText = msg.status === 'streaming' && msg.content.length > 0;
-
-        return (
-          <article key={msg.id} className="flex items-start gap-3 sm:gap-4">
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#2C1814] bg-[#0E0B0B]">
-              <img
-                src="/logo-transparent.png"
-                alt="WormGPT"
-                width={22}
-                height={22}
-                className={`h-[22px] w-[22px] object-contain ${
-                  msg.status === 'streaming' ? 'animate-orbital' : ''
-                }`}
-              />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              {isWaitingContent ? (
-                <div className="space-y-2.5 pt-1" role="status" aria-live="polite">
-                  <div className="flex items-center justify-between text-xs text-[#B4B4BE]">
-                    <span>WormGPT sedang menyusun jawaban...</span>
-                    <span className="font-mono tabular-nums text-[#FB923C]">
-                      {(elapsedMs / 1000).toFixed(1)} dtk
+                  {msg.answeredByName && (
+                    <span className="inline-flex items-center rounded-md border border-[#1C2433] bg-[#10141D] px-2 py-0.5 font-mono-code text-[10px] text-[#B6C0D0]">
+                      {msg.answeredByName}
                     </span>
-                  </div>
-                  <div className="shimmer-bar h-3.5 w-full rounded-md" />
-                  <div className="shimmer-bar h-3.5 w-5/6 rounded-md" />
-                  <div className="shimmer-bar h-3.5 w-3/5 rounded-md" />
-                </div>
-              ) : msg.status === 'error' ? (
-                <div
-                  role="alert"
-                  className="rounded-[14px] border border-[#7F1D1D] bg-[#190D0D] p-4"
-                >
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle
-                      className="mt-0.5 h-4 w-4 shrink-0 text-[#F87171]"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[#F87171]">
-                        Respons gagal dimuat
-                      </p>
-                      <p className="mt-1 text-sm leading-relaxed text-[#FAFAFA]">
-                        {msg.errorDetail || 'Terjadi kendala saat menghubungi endpoint API.'}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={isGenerating}
-                        onClick={() => onRetryMessage(msg.id)}
-                        className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#B91C1C] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#991B1B] disabled:opacity-50"
-                      >
-                        <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span>Coba Lagi</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <MarkdownRenderer content={msg.content} />
-
-                  {isStreamingText && isLast && (
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={onFlushStream}
-                        className="min-h-11 rounded-lg px-3 text-xs font-medium text-[#FB923C] hover:bg-[#191412]"
-                      >
-                        Tampilkan seluruh jawaban sekarang
-                      </button>
-                    </div>
                   )}
 
-                  {msg.status === 'done' && (
-                    <div className="mt-2 flex flex-wrap items-center gap-0.5">
+                  {msg.usedFallback && (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-[#FB923C]/35 bg-[#FB923C]/10 px-2 py-0.5 font-mono-code text-[10px] font-medium text-[#FB923C]">
+                      <Shuffle className="h-2.5 w-2.5" />
+                      Auto-fallback
+                    </span>
+                  )}
+                </div>
+
+                {msg.isError ? (
+                  <div className="rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/10 p-3.5 text-sm text-[#FED7AA]">
+                    <div className="mb-1.5 flex items-center gap-2 font-semibold text-[#FB923C]">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>Permintaan belum berhasil</span>
+                    </div>
+                    <p className="m-0 leading-relaxed text-[#FAFAFA]">{msg.content}</p>
+                    <button
+                      type="button"
+                      onClick={() => onRegenerate(msg.id)}
+                      className="mt-3 inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#FB923C]/50 bg-[#161210] px-3 py-1.5 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#221914] cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Coba Lagi dengan Auto-Fallback</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {msg.imageUrl && (
+                      <div className="mb-3 overflow-hidden rounded-2xl border border-[#1C2433] bg-[#0B0F17]">
+                        <img
+                          src={msg.imageUrl}
+                          alt={msg.content}
+                          width={768}
+                          height={768}
+                          loading="lazy"
+                          className="max-h-[420px] w-full object-contain bg-black"
+                        />
+                        <div className="flex items-center justify-between border-t border-[#1C2433] px-3.5 py-2">
+                          <span className="truncate text-xs text-[#9BA6B8]">
+                            Hasil Gambar AI
+                          </span>
+                          <a
+                            href={msg.imageUrl}
+                            download={`nodatagpt-image-${msg.id.slice(0, 6)}.jpg`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Unduh</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    <MarkdownRenderer content={msg.content} />
+
+                    {/* Message Action Bar */}
+                    <div className="mt-2 flex flex-wrap items-center gap-1 text-[#9BA6B8]">
                       <button
                         type="button"
-                        onClick={() => copyText(msg.id, msg.content)}
-                        aria-label={copiedId === msg.id ? 'Jawaban tersalin' : 'Salin jawaban'}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#9E9EA8] transition-colors hover:bg-[#14141A] hover:text-[#FAFAFA]"
+                        onClick={() => handleCopyMessage(msg)}
+                        aria-label="Salin jawaban"
+                        className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[#10141D] hover:text-white cursor-pointer"
                       >
                         {copiedId === msg.id ? (
-                          <Check className="h-4 w-4 text-[#FB923C]" aria-hidden="true" />
+                          <>
+                            <Check className="h-3.5 w-3.5 text-[#22D3EE]" />
+                            <span className="text-[#22D3EE]">Tersalin</span>
+                          </>
                         ) : (
-                          <Copy className="h-4 w-4" aria-hidden="true" />
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Salin</span>
+                          </>
                         )}
                       </button>
 
-                      <button
-                        type="button"
-                        disabled={isGenerating}
-                        onClick={() => onRetryMessage(msg.id)}
-                        aria-label="Buat ulang respons"
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#9E9EA8] transition-colors hover:bg-[#14141A] hover:text-[#FAFAFA] disabled:opacity-40"
-                      >
-                        <RotateCw className="h-4 w-4" aria-hidden="true" />
-                      </button>
-
-                      {canSpeak && (
+                      {canSpeak && !msg.imageUrl && (
                         <button
                           type="button"
-                          onClick={() => toggleSpeech(msg.id, msg.content)}
+                          onClick={() => handleSpeakMessage(msg)}
                           aria-label={
-                            speakingId === msg.id ? 'Hentikan pembacaan suara' : 'Bacakan jawaban'
+                            speakingId === msg.id ? 'Hentikan suara' : 'Bacakan jawaban'
                           }
-                          aria-pressed={speakingId === msg.id}
-                          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors hover:bg-[#14141A] ${
-                            speakingId === msg.id
-                              ? 'text-[#FB923C]'
-                              : 'text-[#9E9EA8] hover:text-[#FAFAFA]'
-                          }`}
+                          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[#10141D] hover:text-white cursor-pointer"
                         >
                           {speakingId === msg.id ? (
-                            <VolumeX className="h-4 w-4" aria-hidden="true" />
+                            <>
+                              <VolumeX className="h-3.5 w-3.5 text-[#FB923C]" />
+                              <span className="text-[#FB923C]">Berhenti</span>
+                            </>
                           ) : (
-                            <Volume2 className="h-4 w-4" aria-hidden="true" />
+                            <>
+                              <Volume2 className="h-3.5 w-3.5" />
+                              <span>Suara</span>
+                            </>
                           )}
                         </button>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onFeedback(msg.id, msg.feedback === 'up' ? null : 'up')
-                        }
-                        aria-label="Tandai jawaban membantu"
-                        aria-pressed={msg.feedback === 'up'}
-                        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors hover:bg-[#14141A] ${
-                          msg.feedback === 'up'
-                            ? 'text-[#FB923C]'
-                            : 'text-[#9E9EA8] hover:text-[#FAFAFA]'
-                        }`}
-                      >
-                        <ThumbsUp className="h-4 w-4" aria-hidden="true" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onFeedback(msg.id, msg.feedback === 'down' ? null : 'down')
-                        }
-                        aria-label="Tandai jawaban kurang tepat"
-                        aria-pressed={msg.feedback === 'down'}
-                        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors hover:bg-[#14141A] ${
-                          msg.feedback === 'down'
-                            ? 'text-[#F87171]'
-                            : 'text-[#9E9EA8] hover:text-[#FAFAFA]'
-                        }`}
-                      >
-                        <ThumbsDown className="h-4 w-4" aria-hidden="true" />
-                      </button>
-
-                      {typeof msg.durationMs === 'number' && msg.durationMs > 0 && (
-                        <span className="ml-2 font-mono text-xs text-[#9E9EA8]">
-                          {(msg.durationMs / 1000).toFixed(1)} dtk
-                        </span>
+                      {isLastAssistant && !isLoading && (
+                        <button
+                          type="button"
+                          onClick={() => onRegenerate(msg.id)}
+                          aria-label="Muat ulang jawaban"
+                          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[#10141D] hover:text-white cursor-pointer"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span>Ulangi</span>
+                        </button>
                       )}
                     </div>
-                  )}
-                </>
-              )}
+                  </>
+                )}
+              </div>
+            </article>
+          );
+        })}
+
+        {/* Live Multi-Model Loading & Fallback Indicator */}
+        {isLoading && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-start gap-2.5 sm:gap-3.5"
+          >
+            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#22D3EE]/50 bg-black p-1 sm:h-8 sm:w-8">
+              <img
+                src="/logo-transparent.png"
+                alt="Memproses"
+                width={24}
+                height={24}
+                className="h-full w-full animate-pulse object-contain"
+              />
             </div>
-          </article>
-        );
-      })}
-      <div ref={bottomRef} className="h-2" />
+            <div className="flex flex-1 flex-col gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                {routerStatus?.isFallback ? (
+                  <span className="text-[#FB923C]">
+                    {routerStatus.previousFailedModel
+                      ? `${routerStatus.previousFailedModel} sibuk, beralih ke ${routerStatus.modelName}...`
+                      : `Beralih otomatis ke ${routerStatus.modelName}...`}
+                  </span>
+                ) : (
+                  <span className="text-[#B6C0D0]">
+                    Menghubungi{' '}
+                    <strong className="text-[#22D3EE]">
+                      {routerStatus?.modelName || 'NodataGPT'}
+                    </strong>
+                    ...
+                  </span>
+                )}
+              </div>
+              <div className="h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-[#121824]">
+                <div className="animate-shimmer h-full w-24 rounded-full bg-gradient-to-r from-[#22D3EE] to-[#FB923C]" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomAnchorRef} className="h-2" />
+      </div>
+
+      {showScrollBottom && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="Gulir ke pesan terbaru"
+          className="fixed right-4 bottom-28 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-[#293548] bg-[#10141D] text-white shadow-lg transition-colors hover:border-[#22D3EE] cursor-pointer sm:right-8 sm:bottom-32"
+        >
+          <ArrowDown className="h-4 w-4 text-[#22D3EE]" />
+        </button>
+      )}
     </div>
   );
 }

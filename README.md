@@ -1,41 +1,30 @@
-# WormGPT (Web & PWA APK)
+# NodataGPT (Web + Multi-Model Router + PWA APK)
 
-Aplikasi web percakapan AI dan Progressive Web App (PWA / WebAPK) dengan tata letak terinspirasi Google Gemini dan skema warna Hitam, Oranye, serta Merah.
+**NodataGPT** adalah aplikasi web percakapan AI multi-model responsif untuk perangkat **Mobile** maupun **Desktop**, dilengkapi sistem **Auto-Fallback** otomatis saat server sibuk, pembuatan gambar AI 4-engine, dan dukungan pemasangan **PWA / WebAPK Android**.
+
+![Logo NodataGPT](./public/logo.png)
 
 ## Fitur Utama
+- **Identitas & Tema NodataGPT:** Logo simpul heksagonal setengah Cyan (`#22D3EE`) dan setengah Oranye (`#FB923C`) di atas latar Obsidian (`#000000` / `#080A0F`) lengkap dengan layar pembuka berprogres.
+- **24+ Jalur Model AI + Auto-Fallback & Circuit Breaker:**
+  - Mencakup Gemini, ChatGPT Cepat, Stenly, LLM7, DeepSeek V3.2/V4, Claude Sonnet/Haiku, Qwen3 Coder/80B, Llama 4 Scout, BintangAPI, WormGPT Classic, MathGPT, hingga dukungan kunci pribadi resmi Google AI Studio & DeepSeek.
+  - Apabila model yang dipilih mengalami gangguan atau *timeout*, router otomatis mengalihkan permintaan ke server sehat berikutnya dan menandai server bermasalah selama 10 menit setelah 3 kegagalan beruntun.
+- **Pembuat Gambar AI Multi-Engine:** Terintegrasi 4 mesin gambar AI (`Pollinations Flux`, `Rin Flux`, `Rin Text2Img`, `Varhad Image`) dengan pengalihan otomatis.
+- **Tata Letak Responsif Mobile & Desktop (Gaya Google Gemini):**
+  - **Mobile (`320px–430px`):** Bilah atas ringkas bebas tumpang tindih, *Bottom Sheet* pemilih model, chip pembuka 2x2 satu layar penuh, dan kapsul komposer satu baris.
+  - **Desktop (`>= 1024px`):** Bilah samping yang dapat diciutkan (`72px` / `284px`), kolom baca terpusat, kartu ide terstruktur, dan pintasan `Ctrl/Cmd + K`.
+- **Serverless Gateway (`/api/proxy`):** Menangani *forwarding* ke server AI pihak ketiga dari sisi server Vercel agar bebas kendala CORS di peramban HP maupun desktop.
 
-- **Opening Progress Screen**: Layar pembuka hitam pekat menampilkan logo WormGPT, nama **WormGPT** tepat di bawah logo, serta indikator progres `0%` hingga `100%`.
-- **Tata Letak Gaya Google Gemini**:
-  - Panel samping yang dapat diciutkan menjadi bilah ikon `72px` di desktop atau dibuka sebagai laci geser di ponsel.
-  - Sapaan pembuka dengan kartu instruksi awal untuk kode, arsitektur, dan dokumentasi.
-  - Kotak input melayang di bagian bawah dengan tinggi baris otomatis, lampiran file teks/kode (`.ts`, `.js`, `.py`, `.json`, `.md`, `.sql`, dll.), dikte suara (Web Speech API), dan tombol pilih mode kerja.
-- **Format Respons & Kode**:
-  - Mendukung Markdown lengkap, tabel responsif, dan pewarnaan sintaks kode otomatis.
-  - Tombol **Salin** dan **Unduh** langsung pada setiap blok kode.
-  - Fitur salin jawaban, buat ulang respons, ubah pesan pengguna, baca suara (Text-to-Speech), dan ekspor percakapan ke file `.md`.
-- **Integrasi Endpoint API**:
-  - Terhubung langsung ke `https://bintangapi.my.id/api/aichat/wormgpt?q=` dan dapat disesuaikan melalui menu **Pengaturan**.
-- **Siap Dipasang sebagai PWA / Android APK**:
-  - Dilengkapi `manifest.webmanifest`, Workbox Service Worker offline shell, ikon `192x192`, `512x512`, `maskable`, serta `public/twa-manifest.json`.
-
-## Menjalankan Proyek Secara Lokal
+## Menjalankan Secara Lokal
 
 ```bash
 npm install
 npm run dev
 ```
 
-Untuk membuat bundel produksi:
+## Build Produksi & PWA
 
 ```bash
 npm run build
 npm run preview
 ```
-
-## Cara Memasang sebagai Aplikasi Android (PWA / APK)
-
-1. **WebAPK Langsung (Tanpa Build Tambahan)**:
-   - Deploy hasil `npm run build` (folder `dist/`) ke layanan HTTPS seperti Vercel, Netlify, atau Cloudflare Pages.
-   - Buka URL di Google Chrome Android, lalu ketuk tombol **Pasang APK** di bagian atas aplikasi (atau menu titik tiga Chrome -> **Tambahkan ke layar utama** -> **Instal**).
-2. **File `.apk` / `.aab` Mandiri**:
-   - Masukkan URL hasil deploy ke [PWABuilder](https://www.pwabuilder.com/) atau jalankan `@bubblewrap/cli` menggunakan konfigurasi yang sudah disediakan pada `public/twa-manifest.json`.

@@ -4,156 +4,115 @@ interface SplashScreenProps {
   onComplete: () => void;
 }
 
-function getBootStageLabel(progress: number): string {
-  if (progress < 32) return 'Menyiapkan antarmuka...';
-  if (progress < 68) return 'Memuat sesi lokal...';
-  if (progress < 96) return 'Menghubungkan endpoint WormGPT...';
-  return 'Siap digunakan';
-}
-
 export function SplashScreen({ onComplete }: SplashScreenProps) {
-  const [progress, setProgress] = useState<number>(0);
-  const [exiting, setExiting] = useState<boolean>(false);
+  const [progress, setProgress] = useState(0);
+  const [fadingOut, setFadingOut] = useState(false);
 
   useEffect(() => {
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const durationMs = prefersReducedMotion ? 450 : 2100;
     const startTime = performance.now();
-    let frameId = 0;
-    let finishTimer: ReturnType<typeof setTimeout> | undefined;
+    const duration = 1200;
+    let rafId = 0;
 
     const tick = (now: number) => {
       const elapsed = now - startTime;
-      const linear = Math.min(1, elapsed / durationMs);
-      // Cubic ease-out feels snappy at start and settles cleanly at 100%
-      const eased = 1 - Math.pow(1 - linear, 3);
-      const current = Math.min(100, Math.round(eased * 100));
-      setProgress(current);
+      const ratio = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - ratio, 3);
+      setProgress(Math.round(eased * 100));
 
-      if (linear < 1) {
-        frameId = requestAnimationFrame(tick);
+      if (ratio < 1) {
+        rafId = requestAnimationFrame(tick);
       } else {
-        setExiting(true);
-        finishTimer = setTimeout(() => {
+        setFadingOut(true);
+        window.setTimeout(() => {
           onComplete();
-        }, prefersReducedMotion ? 60 : 300);
+        }, 220);
       }
     };
 
-    frameId = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(frameId);
-      if (finishTimer) clearTimeout(finishTimer);
-    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [onComplete]);
-
-  const handleSkip = () => {
-    setProgress(100);
-    setExiting(true);
-    setTimeout(onComplete, 120);
-  };
-
-  const radius = 66;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (progress / 100) * circumference;
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-between bg-black px-6 py-10 transition-opacity duration-300 ${
-        exiting ? 'pointer-events-none opacity-0' : 'opacity-100'
-      }`}
       role="status"
       aria-live="polite"
+      aria-label="Memuat NodataGPT"
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-black px-6 transition-opacity duration-200 ${
+        fadingOut ? 'pointer-events-none opacity-0' : 'opacity-100'
+      }`}
     >
-      <div className="h-11" aria-hidden="true" />
-
-      <div className="flex w-full max-w-xs flex-col items-center text-center">
-        <div
-          className="relative flex h-36 w-36 items-center justify-center"
-          style={{
-            filter: 'drop-shadow(0 0 28px rgba(173, 9, 10, 0.35))',
-          }}
+      <div className="relative flex items-center justify-center">
+        {/* Dual Cyan-Orange Orbital Ring */}
+        <svg
+          width="136"
+          height="136"
+          viewBox="0 0 136 136"
+          className="animate-orbit-slow -rotate-90"
+          aria-hidden="true"
         >
-          <svg
-            className="absolute inset-0 h-full w-full -rotate-90"
-            viewBox="0 0 144 144"
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id="wormgpt-splash-arc" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#AD090A" />
-                <stop offset="55%" stopColor="#EF4444" />
-                <stop offset="100%" stopColor="#F97316" />
-              </linearGradient>
-            </defs>
-            <circle
-              cx="72"
-              cy="72"
-              r={radius}
-              fill="none"
-              stroke="#17171D"
-              strokeWidth="2.5"
-            />
-            <circle
-              cx="72"
-              cy="72"
-              r={radius}
-              fill="none"
-              stroke="url(#wormgpt-splash-arc)"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-            />
-          </svg>
-
-          <img
-            src="/logo.png"
-            alt="Logo WormGPT"
-            width={104}
-            height={104}
-            fetchPriority="high"
-            className="h-[104px] w-[104px] rounded-full object-contain select-none"
+          <defs>
+            <linearGradient id="nodata-ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#22D3EE" />
+              <stop offset="50%" stopColor="#06B6D4" />
+              <stop offset="52%" stopColor="#F97316" />
+              <stop offset="100%" stopColor="#FB923C" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx="68"
+            cy="68"
+            r="60"
+            fill="none"
+            stroke="#141B26"
+            strokeWidth="2.5"
           />
-        </div>
+          <circle
+            cx="68"
+            cy="68"
+            r="60"
+            fill="none"
+            stroke="url(#nodata-ring-grad)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={377}
+            strokeDashoffset={377 - (377 * Math.max(progress, 18)) / 100}
+          />
+        </svg>
 
-        <div className="mt-5 font-display text-3xl font-bold tracking-tight text-[#FAFAFA] sm:text-4xl">
-          <span>Worm</span>
-          <span className="text-[#F97316]">GPT</span>
-        </div>
-
-        <div className="mt-7 w-full">
-          <div
-            role="progressbar"
-            aria-label="Progres pembukaan WormGPT"
-            aria-valuenow={progress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            className="h-1.5 w-full overflow-hidden rounded-full bg-[#16161C]"
-          >
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#AD090A] via-[#DC2626] to-[#F97316] transition-[width] duration-75 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-[#B4B4BE]">{getBootStageLabel(progress)}</span>
-            <span className="font-mono font-medium tabular-nums text-[#FB923C]">
-              {progress}%
-            </span>
-          </div>
-        </div>
+        <img
+          src="/logo.png"
+          alt="Logo NodataGPT"
+          width={88}
+          height={88}
+          className="absolute h-[88px] w-[88px] rounded-full object-contain select-none"
+        />
       </div>
 
-      <button
-        type="button"
-        onClick={handleSkip}
-        className="min-h-11 rounded-lg px-5 text-xs font-medium text-[#9E9EA8] transition-colors hover:bg-[#141418] hover:text-[#FAFAFA]"
-      >
-        Lewati pembuka
-      </button>
+      {/* Brand Wordmark directly below logo */}
+      <div className="mt-5 text-center">
+        <div className="font-display text-2xl font-bold tracking-tight sm:text-[28px]">
+          <span className="text-[#22D3EE]">Nodata</span>
+          <span className="text-[#FB923C]">GPT</span>
+        </div>
+        <p className="mt-1 text-xs font-medium tracking-wide text-[#9BA6B8]">
+          Menyiapkan jaringan multi-model AI...
+        </p>
+      </div>
+
+      {/* Linear Progress Bar */}
+      <div className="mt-5 w-52 max-w-[72vw]">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#121824]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#22D3EE] via-[#06B6D4] to-[#FB923C] transition-[width] duration-75 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between font-mono-code text-[11px] text-[#9BA6B8]">
+          <span>MULTI-MODEL</span>
+          <span>{progress}%</span>
+        </div>
+      </div>
     </div>
   );
 }

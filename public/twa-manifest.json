@@ -1,13 +1,13 @@
 {
-  "packageId": "app.wormgpt.ai",
-  "name": "WormGPT",
-  "launcherName": "WormGPT",
+  "packageId": "app.nodatagpt.ai",
+  "name": "NodataGPT",
+  "launcherName": "NodataGPT",
   "display": "standalone",
   "themeColor": "#000000",
   "navigationColor": "#000000",
   "navigationColorDark": "#000000",
-  "navigationDividerColor": "#18181B",
-  "navigationDividerColorDark": "#18181B",
+  "navigationDividerColor": "#161C28",
+  "navigationDividerColorDark": "#161C28",
   "backgroundColor": "#000000",
   "enableNotifications": false,
   "startUrl": "/",
@@ -15,6 +15,6 @@
   "maskableIconUrl": "/pwa-maskable-512x512.png",
   "splashScreenFadeOutDuration": 300,
   "orientation": "portrait",
-  "appVersionName": "2.5.0",
-  "appVersionCode": 1
+  "appVersionName": "3.0.0",
+  "appVersionCode": 3
 }

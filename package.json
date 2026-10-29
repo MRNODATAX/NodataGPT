@@ -1,8 +1,8 @@
 {
-  "name": "wormgpt-pwa",
+  "name": "nodatagpt-pwa",
   "private": true,
-  "version": "2.5.0",
-  "description": "WormGPT: Aplikasi Web Chat AI dan PWA dengan referensi tata letak Google Gemini",
+  "version": "3.0.0",
+  "description": "NodataGPT: Aplikasi Web Chat AI Multi-Model dengan Auto-Fallback dan PWA Android",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",

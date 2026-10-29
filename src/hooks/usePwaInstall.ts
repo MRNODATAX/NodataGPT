@@ -2,73 +2,69 @@ import { useCallback, useEffect, useState } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
   prompt(): Promise<void>;
-}
-
-export type DevicePlatform = 'android' | 'ios' | 'desktop';
-
-function detectPlatform(): DevicePlatform {
-  if (typeof navigator === 'undefined') return 'desktop';
-  const ua = navigator.userAgent.toLowerCase();
-  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
-  if (/android/.test(ua)) return 'android';
-  return 'desktop';
-}
-
-function checkStandalone(): boolean {
-  if (typeof window === 'undefined') return false;
-  const standaloneMedia = window.matchMedia('(display-mode: standalone)').matches;
-  const iosStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
-  return standaloneMedia || iosStandalone;
 }
 
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isStandalone, setIsStandalone] = useState<boolean>(() => checkStandalone());
-  const [platform] = useState<DevicePlatform>(() => detectPlatform());
+  const [isInstalled, setIsInstalled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    );
+  });
 
   useEffect(() => {
-    const onBeforeInstall = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
-    const onInstalled = () => {
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
       setDeferredPrompt(null);
-      setIsStandalone(true);
     };
 
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    const onDisplayChange = (e: MediaQueryListEvent) => {
-      setIsStandalone(e.matches);
-    };
-
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    window.addEventListener('appinstalled', onInstalled);
-    mediaQuery.addEventListener('change', onDisplayChange);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      window.removeEventListener('appinstalled', onInstalled);
-      mediaQuery.removeEventListener('change', onDisplayChange);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  const triggerNativeInstall = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
-    if (!deferredPrompt) return 'unavailable';
+  const triggerInstall = useCallback(async (): Promise<'accepted' | 'dismissed' | 'manual'> => {
+    if (!deferredPrompt) {
+      return 'manual';
+    }
     await deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
     if (choice.outcome === 'accepted') {
       setDeferredPrompt(null);
+      return 'accepted';
     }
-    return choice.outcome;
+    return 'dismissed';
   }, [deferredPrompt]);
 
+  const isIos =
+    typeof navigator !== 'undefined' &&
+    /iphone|ipad|ipod/i.test(navigator.userAgent) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream;
+
+  const isAndroid =
+    typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+
   return {
-    canPromptNatively: Boolean(deferredPrompt),
-    isStandalone,
-    platform,
-    triggerNativeInstall,
+    canPromptNativeInstall: Boolean(deferredPrompt),
+    isInstalled,
+    isIos,
+    isAndroid,
+    triggerInstall,
   };
 }

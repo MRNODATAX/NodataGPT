@@ -5,13 +5,16 @@ const ACTIVE_CHAT_KEY = 'nodatagpt.activeChatId.v3';
 const SETTINGS_KEY = 'nodatagpt.settings.v3';
 const SIDEBAR_COLLAPSED_KEY = 'nodatagpt.sidebarCollapsed.v3';
 
+const LEGACY_PERSONA_DEFAULT =
+  'Kamu adalah asisten AI NodataGPT yang cerdas, lugas, dan membantu.';
+
 export const DEFAULT_SETTINGS: AppSettings = {
   selectedModelId: 'auto',
   autoFallback: true,
   starfieldEnabled: true,
   memoryContextEnabled: true,
   enterToSend: true,
-  customPersona: 'Kamu adalah asisten AI NodataGPT yang cerdas, lugas, dan membantu.',
+  customPersona: '',
   geminiApiKey: '',
   deepseekApiKey: '',
 };
@@ -83,7 +86,8 @@ export function loadSettings(): AppSettings {
           ? parsed.enterToSend
           : DEFAULT_SETTINGS.enterToSend,
       customPersona:
-        typeof parsed?.customPersona === 'string'
+        typeof parsed?.customPersona === 'string' &&
+        parsed.customPersona !== LEGACY_PERSONA_DEFAULT
           ? parsed.customPersona
           : DEFAULT_SETTINGS.customPersona,
       geminiApiKey: typeof parsed?.geminiApiKey === 'string' ? parsed.geminiApiKey : '',

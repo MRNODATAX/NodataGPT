@@ -198,14 +198,22 @@ export function SettingsModal({
             </button>
           </div>
 
-          {/* Custom Persona */}
-          <div className="space-y-1.5 border-t border-white/10 pt-4">
-            <label
-              htmlFor="nodatagpt-persona-input"
-              className="block text-sm font-medium text-white"
-            >
-              Instruksi Karakter (Model AI Persona Kustom)
-            </label>
+          {/* Global NodataGPT Personalization */}
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="nodatagpt-persona-input"
+                className="block text-sm font-medium text-white"
+              >
+                Personalisasi Global NodataGPT
+              </label>
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-0.5 font-mono-code text-[10px] font-semibold text-[#67E8F9]">
+                Aktif di 25 Model · Mr.NODATA
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed text-[#94A3B8]">
+              Identitas resmi sebagai asisten AI NodataGPT buatan Mr.NODATA otomatis diterapkan ke seluruh model AI yang dipanggil. Anda juga dapat menambahkan preferensi gaya bicara di bawah ini:
+            </p>
             <textarea
               id="nodatagpt-persona-input"
               rows={2}
@@ -213,7 +221,7 @@ export function SettingsModal({
               onChange={(e) =>
                 onUpdateSettings({ ...settings, customPersona: e.target.value })
               }
-              placeholder="Contoh: Kamu adalah mentor senior full-stack yang lugas..."
+              placeholder="Opsional: Tambahkan gaya khusus (misal: gunakan gaya santai, sertakan analogi praktis, atau fokus pada TypeScript)..."
               className="w-full rounded-xl border border-white/10 bg-black/45 p-2.5 text-xs leading-relaxed text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
             />
           </div>

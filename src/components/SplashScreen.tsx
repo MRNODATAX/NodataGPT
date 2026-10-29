@@ -139,8 +139,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             GPT
           </span>
         </div>
-        <p className="mt-1 font-mono-code text-[10px] font-semibold uppercase tracking-[0.22em] text-[#CBD5E1]">
-          MULTI-MODEL COSMIC AI
+        <p className="mt-1 font-mono-code text-[10px] font-semibold uppercase tracking-[0.2em] text-[#CBD5E1]">
+          MULTI-MODEL AI • BY MR.NODATA
         </p>
       </div>
 

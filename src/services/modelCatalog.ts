@@ -1,4 +1,4 @@
-import type { AIModelDefinition } from '../types/chat';
+import type { AIModelDefinition, ImageModelCategory } from '../types/chat';
 
 export const AI_MODELS: AIModelDefinition[] = [
   {
@@ -370,17 +370,35 @@ export const DEFAULT_FALLBACK_ORDER: string[] = [
 export interface ImageEngineDefinition {
   id: string;
   name: string;
+  shortName: string;
   provider: string;
+  category: ImageModelCategory;
+  badge: string;
+  description: string;
   delivery: 'gateway' | 'hybrid-json' | 'browser-img';
   buildUrl: (prompt: string, ratio?: string) => string;
   timeoutMs: number;
+}
+
+export interface ImageModelOption {
+  id: string;
+  name: string;
+  shortName: string;
+  provider: string;
+  category: ImageModelCategory;
+  badge: string;
+  description: string;
 }
 
 export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
     id: 'nexray-magicstudio',
     name: 'MagicStudio HD · Nexray',
+    shortName: 'MagicStudio HD',
     provider: 'Nexray AI',
+    category: 'cepat',
+    badge: 'Tercepat ~1.6s',
+    description: 'Render fotorealistik dan ilustrasi PNG tajam berkecepatan tinggi.',
     delivery: 'gateway',
     buildUrl: (prompt) =>
       `https://api.nexray.eu.cc/ai/magicstudio?prompt=${encodeURIComponent(prompt)}`,
@@ -388,8 +406,12 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   },
   {
     id: 'nexray-flux-v1',
-    name: 'Flux v1 · Nexray',
+    name: 'Flux v1 Pro · Nexray',
+    shortName: 'Flux v1',
     provider: 'Nexray AI',
+    category: 'artistik',
+    badge: 'Artistik & Anime',
+    description: 'Pencahayaan sinematik, konsep seni detail, anime, dan cyberpunk.',
     delivery: 'gateway',
     buildUrl: (prompt) =>
       `https://api.nexray.eu.cc/ai/v1/flux?prompt=${encodeURIComponent(prompt)}`,
@@ -398,7 +420,11 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
     id: 'nexray-writecream',
     name: 'WriteCream Studio · Nexray',
+    shortName: 'WriteCream',
     provider: 'Nexray AI',
+    category: 'cepat',
+    badge: 'Multi-Rasio 16:9 / 9:16',
+    description: 'Mendukung rasio kustom otomatis (1:1, 16:9, 9:16, 4:5, 3:2, 21:9) untuk wallpaper & story.',
     delivery: 'gateway',
     buildUrl: (prompt, ratio = '1:1') =>
       `https://api.nexray.eu.cc/ai/writecreamimg?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}`,
@@ -407,7 +433,11 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
     id: 'nexray-ideogram',
     name: 'Ideogram Ultra · Nexray',
+    shortName: 'Ideogram Ultra',
     provider: 'Nexray AI',
+    category: 'desain',
+    badge: 'Ultra HD + Tipografi',
+    description: 'Resolusi tinggi (~1.5 MB PNG), paling akurat untuk poster, banner, dan teks di dalam gambar.',
     delivery: 'gateway',
     buildUrl: (prompt) =>
       `https://api.nexray.eu.cc/ai/ideogram?prompt=${encodeURIComponent(prompt)}`,
@@ -415,8 +445,12 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   },
   {
     id: 'varhad-img',
-    name: 'Varhad Text2Image',
-    provider: 'Varhad API',
+    name: 'Varhad Text2Image v2',
+    shortName: 'Varhad Image',
+    provider: 'Varhad API v2',
+    category: 'artistik',
+    badge: 'Hybrid v2',
+    description: 'Generator gambar kreatif Varhad API v2 dengan koneksi langsung + cadangan gateway.',
     delivery: 'hybrid-json',
     buildUrl: (prompt) =>
       `https://v2.api-varhad.my.id/ai/text2image?prompt=${encodeURIComponent(prompt)}`,
@@ -425,16 +459,37 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
     id: 'rin-flux',
     name: 'Rin Flux Direct',
+    shortName: 'Rin Flux',
     provider: 'Rin API',
+    category: 'direct',
+    badge: 'Direct Browser',
+    description: 'Mesin Flux alternatif yang dirender langsung melalui browser perangkat Anda.',
     delivery: 'browser-img',
     buildUrl: (prompt) =>
       `https://apiii-xrina.my.id/ai-image/flux?prompt=${encodeURIComponent(prompt)}`,
     timeoutMs: 30000,
   },
   {
+    id: 'rin-text2img',
+    name: 'Rin Text2Img Direct',
+    shortName: 'Rin Text2Img',
+    provider: 'Rin API',
+    category: 'direct',
+    badge: 'Direct Browser',
+    description: 'Generator foto & ilustrasi cepat jalur langsung browser klien.',
+    delivery: 'browser-img',
+    buildUrl: (prompt) =>
+      `https://apiii-xrina.my.id/ai-image/text2img?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 30000,
+  },
+  {
     id: 'nexray-sologo',
     name: 'Sologo AI · Nexray',
+    shortName: 'Sologo Logo',
     provider: 'Nexray AI',
+    category: 'desain',
+    badge: 'Spesialis Logo',
+    description: 'Mesin khusus pembuatan logo modern, ikon brand, maskot, dan lambang vektor.',
     delivery: 'gateway',
     buildUrl: (prompt) =>
       `https://api.nexray.eu.cc/ai/sologo?prompt=${encodeURIComponent(prompt)}`,
@@ -442,6 +497,32 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   },
 ];
 
+export const IMAGE_MODELS: ImageModelOption[] = [
+  {
+    id: 'auto',
+    name: 'Otomatis Pintar (Image Router)',
+    shortName: 'Auto Gambar',
+    provider: 'NodataGPT Image Router',
+    category: 'auto',
+    badge: '8 Mesin Siaga',
+    description:
+      'Memilih mesin gambar paling tepat sesuai isi prompt (Ideogram untuk poster/teks, WriteCream untuk rasio 16:9/9:16, Sologo untuk logo, MagicStudio HD untuk kecepatan) dengan Auto-Fallback otomatis.',
+  },
+  ...IMAGE_ENGINES.map((e) => ({
+    id: e.id,
+    name: e.name,
+    shortName: e.shortName,
+    provider: e.provider,
+    category: e.category,
+    badge: e.badge,
+    description: e.description,
+  })),
+];
+
 export function getModelById(id: string): AIModelDefinition {
   return AI_MODELS.find((m) => m.id === id) || AI_MODELS[0];
+}
+
+export function getImageModelById(id: string): ImageModelOption {
+  return IMAGE_MODELS.find((m) => m.id === id) || IMAGE_MODELS[0];
 }

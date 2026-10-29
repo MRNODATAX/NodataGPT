@@ -31,6 +31,8 @@ export interface Conversation {
 export interface AppSettings {
   selectedModelId: string;
   autoFallback: boolean;
+  selectedImageModelId: string;
+  imageAutoFallback: boolean;
   starfieldEnabled: boolean;
   streamEffect: boolean;
   memoryContextEnabled: boolean;
@@ -39,6 +41,8 @@ export interface AppSettings {
   geminiApiKey: string;
   deepseekApiKey: string;
 }
+
+export type ImageModelCategory = 'auto' | 'cepat' | 'artistik' | 'desain' | 'direct';
 
 export type ModelCategory =
   | 'auto'

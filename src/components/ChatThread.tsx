@@ -11,6 +11,7 @@ import {
   Download,
   FastForward,
   FileText,
+  ImageIcon,
   RefreshCw,
   Shuffle,
   Volume2,
@@ -27,6 +28,7 @@ interface ChatThreadProps {
   routerStatus: RouterStatusUpdate | null;
   onRegenerate: (assistantMessageId: string) => void;
   onFlushStream: () => void;
+  onOpenImageModelPicker: () => void;
 }
 
 function ThinkingAccordion({ content }: { content: string }) {
@@ -67,6 +69,7 @@ export function ChatThread({
   routerStatus,
   onRegenerate,
   onFlushStream,
+  onOpenImageModelPicker,
 }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
@@ -347,15 +350,28 @@ export function ChatThread({
                       )}
                     </div>
                     <p className="m-0 leading-relaxed text-[#F8FAFC]">{msg.content}</p>
-                    <button
-                      type="button"
-                      disabled={isLoading}
-                      onClick={() => onRegenerate(msg.id)}
-                      className="mt-3 inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#FB923C]/50 bg-black/50 px-3 py-1.5 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#FB923C]/15 disabled:opacity-45 cursor-pointer"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      <span>Coba Lagi dengan Auto-Fallback</span>
-                    </button>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => onRegenerate(msg.id)}
+                        className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#FB923C]/50 bg-black/50 px-3 py-1.5 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#FB923C]/15 disabled:opacity-45 cursor-pointer"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Coba Lagi dengan Auto-Fallback</span>
+                      </button>
+
+                      {msg.isImageRequest && (
+                        <button
+                          type="button"
+                          onClick={onOpenImageModelPicker}
+                          className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#22D3EE]/40 bg-[#22D3EE]/10 px-3 py-1.5 text-xs font-semibold text-[#67E8F9] transition-colors hover:bg-[#22D3EE]/20 cursor-pointer"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          <span>Pilih Model Gambar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   /* Phase 2 (Typing Stream) & Phase 3 (Completed Message) */
@@ -469,6 +485,18 @@ export function ChatThread({
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
                               <span>Ulangi</span>
+                            </button>
+                          )}
+
+                          {msg.imageUrl && (
+                            <button
+                              type="button"
+                              onClick={onOpenImageModelPicker}
+                              aria-label="Ganti model pembuat gambar"
+                              className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-[#FDBA74] transition-colors hover:bg-[#FB923C]/15 hover:text-white cursor-pointer"
+                            >
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              <span>Ganti Model</span>
                             </button>
                           )}
                         </div>

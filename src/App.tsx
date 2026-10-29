@@ -16,7 +16,7 @@ import {
   sendMultiModelChat,
   type RouterStatusUpdate,
 } from './services/aiRouter';
-import { getModelById } from './services/modelCatalog';
+import { getImageModelById, getModelById } from './services/modelCatalog';
 import { usePwaInstall } from './hooks/usePwaInstall';
 import {
   deriveChatTitle,
@@ -61,6 +61,7 @@ export function App() {
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelPickerTab, setModelPickerTab] = useState<'chat' | 'image'>('chat');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
 
@@ -260,6 +261,16 @@ export function App() {
     [settings.selectedModelId]
   );
 
+  const activeImageModel = useMemo(
+    () => getImageModelById(settings.selectedImageModelId),
+    [settings.selectedImageModelId]
+  );
+
+  const openModelPicker = useCallback((tab: 'chat' | 'image' = 'chat') => {
+    setModelPickerTab(tab);
+    setModelPickerOpen(true);
+  }, []);
+
   const healthyCount = useMemo(
     () => getHealthyModelCount(),
     [isLoading, modelPickerOpen]
@@ -326,6 +337,8 @@ export function App() {
         const result = asImage
           ? await generateMultiEngineImage({
               prompt: fullPrompt,
+              selectedImageModelId: settings.selectedImageModelId,
+              autoFallback: settings.imageAutoFallback,
               signal: controller.signal,
               onStatus: (st) => setRouterStatus(st),
             })
@@ -717,7 +730,7 @@ export function App() {
 
             <button
               type="button"
-              onClick={() => setModelPickerOpen(true)}
+              onClick={() => openModelPicker(imageMode ? 'image' : 'chat')}
               aria-label="Pilih model AI NodataGPT"
               className="inline-flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.06] cursor-pointer"
             >
@@ -733,10 +746,20 @@ export function App() {
                   <span className="text-[#22D3EE]">Nodata</span>
                   <span className="text-[#FB923C]">GPT</span>
                 </span>
-                <span className="max-w-[96px] truncate rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-0.5 font-mono-code text-[11px] font-medium text-[#F8FAFC] sm:max-w-[160px]">
-                  {deepThink ? 'DeepThink' : activeModel.shortName}
+                <span
+                  className={`max-w-[108px] truncate rounded-md border px-1.5 py-0.5 font-mono-code text-[11px] font-medium sm:max-w-[172px] ${
+                    imageMode
+                      ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA]'
+                      : 'border-white/10 bg-white/[0.06] text-[#F8FAFC]'
+                  }`}
+                >
+                  {imageMode
+                    ? activeImageModel.shortName
+                    : deepThink
+                      ? 'DeepThink'
+                      : activeModel.shortName}
                 </span>
-                {settings.autoFallback && (
+                {(imageMode ? settings.imageAutoFallback : settings.autoFallback) && (
                   <Shuffle
                     aria-label="Auto-Fallback Aktif"
                     className="hidden h-3.5 w-3.5 shrink-0 text-[#FB923C] sm:inline"
@@ -806,7 +829,7 @@ export function App() {
                   setImageMode(false);
                 }}
                 onSelectStarter={handleSelectStarter}
-                onOpenModelPicker={() => setModelPickerOpen(true)}
+                onOpenModelPicker={() => openModelPicker(imageMode ? 'image' : 'chat')}
               />
             </div>
           ) : (
@@ -817,6 +840,7 @@ export function App() {
               routerStatus={routerStatus}
               onRegenerate={handleRegenerate}
               onFlushStream={handleFlushStream}
+              onOpenImageModelPicker={() => openModelPicker('image')}
             />
           )}
 
@@ -828,6 +852,8 @@ export function App() {
             isLoading={isLoading}
             enterToSend={settings.enterToSend}
             activeModel={activeModel}
+            activeImageModel={activeImageModel}
+            imageAutoFallback={settings.imageAutoFallback}
             deepThink={deepThink}
             onToggleDeepThink={() => {
               setDeepThink((d) => !d);
@@ -838,13 +864,15 @@ export function App() {
               setImageMode((i) => !i);
               if (deepThink) setDeepThink(false);
             }}
-            onOpenModelPicker={() => setModelPickerOpen(true)}
+            onOpenModelPicker={() => openModelPicker('chat')}
+            onOpenImageModelPicker={() => openModelPicker('image')}
           />
         </main>
       </div>
 
       <ModelPickerModal
         isOpen={modelPickerOpen}
+        initialTab={modelPickerTab}
         onClose={() => setModelPickerOpen(false)}
         settings={settings}
         onSelectModel={(modelId) => {
@@ -853,6 +881,14 @@ export function App() {
         }}
         onToggleAutoFallback={(enabled) =>
           setSettings((prev) => ({ ...prev, autoFallback: enabled }))
+        }
+        onSelectImageModel={(imageModelId) => {
+          setSettings((prev) => ({ ...prev, selectedImageModelId: imageModelId }));
+          setImageMode(true);
+          setDeepThink(false);
+        }}
+        onToggleImageAutoFallback={(enabled) =>
+          setSettings((prev) => ({ ...prev, imageAutoFallback: enabled }))
         }
         onOpenSettings={() => setSettingsOpen(true)}
       />

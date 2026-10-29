@@ -11,6 +11,8 @@ const LEGACY_PERSONA_DEFAULT =
 export const DEFAULT_SETTINGS: AppSettings = {
   selectedModelId: 'auto',
   autoFallback: true,
+  selectedImageModelId: 'auto',
+  imageAutoFallback: true,
   starfieldEnabled: true,
   streamEffect: true,
   memoryContextEnabled: true,
@@ -115,6 +117,14 @@ export function loadSettings(): AppSettings {
         typeof parsed?.autoFallback === 'boolean'
           ? parsed.autoFallback
           : DEFAULT_SETTINGS.autoFallback,
+      selectedImageModelId:
+        typeof parsed?.selectedImageModelId === 'string'
+          ? parsed.selectedImageModelId
+          : DEFAULT_SETTINGS.selectedImageModelId,
+      imageAutoFallback:
+        typeof parsed?.imageAutoFallback === 'boolean'
+          ? parsed.imageAutoFallback
+          : DEFAULT_SETTINGS.imageAutoFallback,
       starfieldEnabled:
         typeof parsed?.starfieldEnabled === 'boolean'
           ? parsed.starfieldEnabled

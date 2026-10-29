@@ -11,6 +11,10 @@ const CIRCUIT_STORAGE_KEY = 'nodatagpt.circuit.v1';
 const STRIKE_THRESHOLD = 3;
 const COOLDOWN_MS = 10 * 60 * 1000;
 
+const IMAGE_CIRCUIT_STORAGE_KEY = 'nodatagpt.imageCircuit.v1';
+const IMAGE_STRIKE_THRESHOLD = 2;
+const IMAGE_COOLDOWN_MS = 5 * 60 * 1000;
+
 const LEGACY_DEFAULT_PERSONA =
   'Kamu adalah asisten AI NodataGPT yang cerdas, lugas, dan membantu.';
 
@@ -107,6 +111,64 @@ function recordModelFailure(modelId: string, reason: string): void {
     lastError: reason,
   };
   saveCircuitMap(map);
+}
+
+function loadImageCircuitMap(): CircuitMap {
+  try {
+    const raw = sessionStorage.getItem(IMAGE_CIRCUIT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveImageCircuitMap(map: CircuitMap): void {
+  try {
+    sessionStorage.setItem(IMAGE_CIRCUIT_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function isImageEngineCoolingDown(engineId: string): boolean {
+  if (!engineId || engineId === 'auto') return false;
+  const entry = loadImageCircuitMap()[engineId];
+  if (!entry) return false;
+  return entry.cooldownUntil > Date.now();
+}
+
+export function getImageEngineCooldownRemainingSec(engineId: string): number {
+  if (!engineId || engineId === 'auto') return 0;
+  const entry = loadImageCircuitMap()[engineId];
+  if (!entry || entry.cooldownUntil <= Date.now()) return 0;
+  return Math.ceil((entry.cooldownUntil - Date.now()) / 1000);
+}
+
+export function resetAllImageEngineCooldowns(): void {
+  saveImageCircuitMap({});
+}
+
+function recordImageEngineSuccess(engineId: string): void {
+  const map = loadImageCircuitMap();
+  if (map[engineId]) {
+    delete map[engineId];
+    saveImageCircuitMap(map);
+  }
+}
+
+function recordImageEngineFailure(engineId: string, reason: string): void {
+  const map = loadImageCircuitMap();
+  const prev = map[engineId] ?? { strikes: 0, cooldownUntil: 0 };
+  const nextStrikes = prev.strikes + 1;
+  map[engineId] = {
+    strikes: nextStrikes,
+    cooldownUntil:
+      nextStrikes >= IMAGE_STRIKE_THRESHOLD ? Date.now() + IMAGE_COOLDOWN_MS : 0,
+    lastError: reason,
+  };
+  saveImageCircuitMap(map);
 }
 
 function extractCustomPersonaAddendum(settings: AppSettings, maxAddendumChars: number): string {
@@ -1280,7 +1342,10 @@ export function extractImageUrlFromJson(rawBody: string): string {
   return '';
 }
 
-function orderImageEnginesForPrompt(prompt: string): ImageEngineDefinition[] {
+function orderImageEnginesForPrompt(
+  prompt: string,
+  ratio?: string
+): ImageEngineDefinition[] {
   const byId = new Map(IMAGE_ENGINES.map((e) => [e.id, e]));
   const pick = (ids: string[]): ImageEngineDefinition[] => {
     const chosen: ImageEngineDefinition[] = [];
@@ -1301,7 +1366,17 @@ function orderImageEnginesForPrompt(prompt: string): ImageEngineDefinition[] {
     return chosen;
   };
 
-  if (/\blogo\b/i.test(prompt)) {
+  if (ratio && ratio !== '1:1') {
+    return pick([
+      'nexray-writecream',
+      'nexray-magicstudio',
+      'nexray-flux-v1',
+      'nexray-ideogram',
+      'varhad-img',
+    ]);
+  }
+
+  if (/\b(?:logo|ikon|icon|lambang|maskot|emblem)\b/i.test(prompt)) {
     return pick([
       'nexray-ideogram',
       'nexray-sologo',
@@ -1323,6 +1398,7 @@ function orderImageEnginesForPrompt(prompt: string): ImageEngineDefinition[] {
   if (/\bflux\b/i.test(prompt)) {
     return pick([
       'nexray-flux-v1',
+      'rin-flux',
       'nexray-magicstudio',
       'nexray-writecream',
       'nexray-ideogram',
@@ -1330,6 +1406,44 @@ function orderImageEnginesForPrompt(prompt: string): ImageEngineDefinition[] {
   }
 
   return IMAGE_ENGINES;
+}
+
+export function buildImageEngineChain({
+  prompt,
+  ratio,
+  selectedImageModelId = 'auto',
+  autoFallback = true,
+}: {
+  prompt: string;
+  ratio?: string;
+  selectedImageModelId?: string;
+  autoFallback?: boolean;
+}): ImageEngineDefinition[] {
+  const smartOrder = orderImageEnginesForPrompt(prompt, ratio);
+
+  const prioritizeHealthy = (list: ImageEngineDefinition[]): ImageEngineDefinition[] => {
+    const healthy = list.filter((e) => !isImageEngineCoolingDown(e.id));
+    const cooling = list.filter((e) => isImageEngineCoolingDown(e.id));
+    return [...healthy, ...cooling];
+  };
+
+  if (!selectedImageModelId || selectedImageModelId === 'auto') {
+    const ordered = prioritizeHealthy(smartOrder);
+    return autoFallback ? ordered : ordered.slice(0, 1);
+  }
+
+  const chosen = IMAGE_ENGINES.find((e) => e.id === selectedImageModelId);
+  if (!chosen) {
+    const ordered = prioritizeHealthy(smartOrder);
+    return autoFallback ? ordered : ordered.slice(0, 1);
+  }
+
+  if (!autoFallback) {
+    return [chosen];
+  }
+
+  const remaining = smartOrder.filter((e) => e.id !== chosen.id);
+  return [chosen, ...prioritizeHealthy(remaining)];
 }
 
 function preloadBrowserDirectImage(
@@ -1374,21 +1488,28 @@ function preloadBrowserDirectImage(
 
 export async function generateMultiEngineImage({
   prompt,
+  selectedImageModelId = 'auto',
+  autoFallback = true,
   signal,
   onStatus,
 }: {
   prompt: string;
+  selectedImageModelId?: string;
+  autoFallback?: boolean;
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
   const specialized = detectSpecializedImageTool(prompt);
   if (specialized) {
+    const toolCandidates = autoFallback
+      ? specialized.candidates
+      : specialized.candidates.slice(0, 1);
     let prevFailed: string | undefined;
-    for (let idx = 0; idx < specialized.candidates.length; idx++) {
+    for (let idx = 0; idx < toolCandidates.length; idx++) {
       if (signal?.aborted) {
         throw new DOMException('Pembuatan gambar dibatalkan.', 'AbortError');
       }
-      const cand = specialized.candidates[idx];
+      const cand = toolCandidates[idx];
       onStatus?.({
         modelName: cand.name,
         attempt: idx + 1,
@@ -1455,8 +1576,21 @@ export async function generateMultiEngineImage({
   const parsedIntent = parseImagePromptIntent(prompt);
   const cleanPrompt = (parsedIntent.cleanPrompt || prompt).trim();
   const ratio = parsedIntent.ratio;
-  const engines = orderImageEnginesForPrompt(cleanPrompt);
+  const engines = buildImageEngineChain({
+    prompt: cleanPrompt,
+    ratio,
+    selectedImageModelId,
+    autoFallback,
+  });
+  const firstEngine = engines[0];
   let lastFailedName: string | undefined;
+
+  const formatSuccessCaption = (engine: ImageEngineDefinition, idx: number): string => {
+    if (idx > 0 && firstEngine && firstEngine.id !== engine.id) {
+      return `Gambar berhasil dibuat oleh **${engine.name}** *(auto-fallback dari ${firstEngine.shortName})* untuk deskripsi: *"${cleanPrompt}"*`;
+    }
+    return `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`;
+  };
 
   for (let idx = 0; idx < engines.length; idx++) {
     if (signal?.aborted) {
@@ -1482,8 +1616,9 @@ export async function generateMultiEngineImage({
           signal
         );
         if (loaded) {
+          recordImageEngineSuccess(engine.id);
           return {
-            content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+            content: formatSuccessCaption(engine, idx),
             answeredById: engine.id,
             answeredByName: engine.name,
             usedFallback: idx > 0,
@@ -1491,23 +1626,30 @@ export async function generateMultiEngineImage({
             imageUrl: targetUrl,
           };
         }
+        recordImageEngineFailure(engine.id, 'browser-img-load-failed');
         lastFailedName = engine.name;
         continue;
       }
 
       if (engine.delivery === 'hybrid-json' && typeof window !== 'undefined') {
+        const directAbort = new AbortController();
+        const directTimer = window.setTimeout(() => directAbort.abort(), 18000);
+        const onParentAbort = () => directAbort.abort();
+        signal?.addEventListener('abort', onParentAbort, { once: true });
+
         try {
           const directRes = await fetch(targetUrl, {
             method: 'GET',
             headers: { Accept: 'application/json' },
-            signal,
+            signal: directAbort.signal,
           });
           if (directRes.ok) {
             const rawJson = await directRes.text();
             const directImgUrl = extractImageUrlFromJson(rawJson);
             if (directImgUrl) {
+              recordImageEngineSuccess(engine.id);
               return {
-                content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+                content: formatSuccessCaption(engine, idx),
                 answeredById: engine.id,
                 answeredByName: engine.name,
                 usedFallback: idx > 0,
@@ -1516,11 +1658,14 @@ export async function generateMultiEngineImage({
               };
             }
           }
-        } catch (directErr) {
-          if (directErr instanceof DOMException && directErr.name === 'AbortError') {
-            throw directErr;
+        } catch {
+          if (signal?.aborted) {
+            throw new DOMException('Pembuatan gambar dibatalkan.', 'AbortError');
           }
           // Fall through to serverless gateway attempt
+        } finally {
+          window.clearTimeout(directTimer);
+          signal?.removeEventListener('abort', onParentAbort);
         }
       }
 
@@ -1534,8 +1679,9 @@ export async function generateMultiEngineImage({
       );
 
       if (res.ok && res.kind === 'image' && res.imageUrl) {
+        recordImageEngineSuccess(engine.id);
         return {
-          content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+          content: formatSuccessCaption(engine, idx),
           answeredById: engine.id,
           answeredByName: engine.name,
           usedFallback: idx > 0,
@@ -1547,8 +1693,9 @@ export async function generateMultiEngineImage({
       if (res.ok && typeof res.body === 'string') {
         const candidateUrl = extractImageUrlFromJson(res.body);
         if (candidateUrl) {
+          recordImageEngineSuccess(engine.id);
           return {
-            content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+            content: formatSuccessCaption(engine, idx),
             answeredById: engine.id,
             answeredByName: engine.name,
             usedFallback: idx > 0,
@@ -1563,7 +1710,14 @@ export async function generateMultiEngineImage({
       }
     }
 
+    recordImageEngineFailure(engine.id, 'gateway-image-failed');
     lastFailedName = engine.name;
+  }
+
+  if (!autoFallback && firstEngine) {
+    throw new Error(
+      `Server model gambar "${firstEngine.name}" sedang padat atau gagal merespons. Aktifkan Auto-Fallback Gambar atau pilih model gambar lain.`
+    );
   }
 
   throw new Error(
@@ -1574,4 +1728,8 @@ export async function generateMultiEngineImage({
 export function getHealthyModelCount(): number {
   return AI_MODELS.filter((m) => m.id !== 'auto' && !m.requiresKey && !isModelCoolingDown(m.id))
     .length;
+}
+
+export function getHealthyImageEngineCount(): number {
+  return IMAGE_ENGINES.filter((e) => !isImageEngineCoolingDown(e.id)).length;
 }

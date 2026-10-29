@@ -164,10 +164,10 @@ export function SettingsModal({
           <div className="flex items-start justify-between gap-4 border-t border-white/10 pt-4">
             <div>
               <p className="text-sm font-medium text-white">
-                Auto-Fallback Multi-Server
+                Auto-Fallback Chat Multi-Server
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-[#94A3B8]">
-                Otomatis beralih ke model sehat berikutnya bila server yang dipilih sibuk.
+                Otomatis beralih ke model chat sehat berikutnya bila server yang dipilih sibuk.
               </p>
             </div>
             <button
@@ -187,6 +187,38 @@ export function SettingsModal({
               <span
                 className={`block h-5 w-5 rounded-full bg-white transition-transform ${
                   settings.autoFallback ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Image Auto Fallback */}
+          <div className="flex items-start justify-between gap-4 border-t border-white/10 pt-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Auto-Fallback Model Gambar AI
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#94A3B8]">
+                Otomatis beralih ke mesin pembuat gambar sehat lain jika model gambar pilihan gagal atau padat.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.imageAutoFallback}
+              onClick={() =>
+                onUpdateSettings({
+                  ...settings,
+                  imageAutoFallback: !settings.imageAutoFallback,
+                })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                settings.imageAutoFallback ? 'bg-[#EA580C]' : 'bg-white/20'
+              }`}
+            >
+              <span
+                className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                  settings.imageAutoFallback ? 'translate-x-5.5' : 'translate-x-0.5'
                 }`}
               />
             </button>

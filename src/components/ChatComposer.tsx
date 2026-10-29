@@ -8,11 +8,16 @@ import {
   Mic,
   MicOff,
   Paperclip,
+  Shuffle,
   Square,
   X,
 } from 'lucide-react';
 import type { AIModelDefinition } from '../types/chat';
-import { AI_MODELS } from '../services/modelCatalog';
+import {
+  AI_MODELS,
+  IMAGE_ENGINES,
+  type ImageModelOption,
+} from '../services/modelCatalog';
 
 interface ChatComposerProps {
   value: string;
@@ -22,11 +27,14 @@ interface ChatComposerProps {
   isLoading: boolean;
   enterToSend: boolean;
   activeModel: AIModelDefinition;
+  activeImageModel: ImageModelOption;
+  imageAutoFallback: boolean;
   deepThink: boolean;
   onToggleDeepThink: () => void;
   imageMode: boolean;
   onToggleImageMode: () => void;
   onOpenModelPicker: () => void;
+  onOpenImageModelPicker: () => void;
 }
 
 interface SpeechRecognitionInstance {
@@ -48,11 +56,14 @@ export function ChatComposer({
   isLoading,
   enterToSend,
   activeModel,
+  activeImageModel,
+  imageAutoFallback,
   deepThink,
   onToggleDeepThink,
   imageMode,
   onToggleImageMode,
   onOpenModelPicker,
+  onOpenImageModelPicker,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,6 +192,32 @@ export function ChatComposer({
             imageMode ? 'nd-glass-composer-orange' : ''
           }`}
         >
+          {/* Image Engine Selector Bar (Mobile 320px+ & Desktop — Zero Horizontal Crowding) */}
+          {imageMode && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-[#FB923C]/30 bg-[#FB923C]/[0.08] px-2.5 py-1.5 text-xs">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+                <span className="truncate font-semibold text-[#FED7AA]">
+                  {activeImageModel.name}
+                </span>
+                {imageAutoFallback && (
+                  <span className="hidden shrink-0 items-center gap-1 rounded border border-[#22D3EE]/30 bg-[#22D3EE]/12 px-1.5 py-0.5 font-mono-code text-[10px] text-[#67E8F9] xs:inline-flex sm:inline-flex">
+                    <Shuffle className="h-2.5 w-2.5" />
+                    Auto-Fallback
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={onOpenImageModelPicker}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#FB923C]/40 bg-black/45 px-2 py-0.5 text-[11px] font-semibold text-[#FDBA74] transition-colors hover:bg-[#FB923C]/20 hover:text-white cursor-pointer"
+              >
+                <span>Pilih Model</span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           {/* Attachment Chip */}
           {attachment && (
             <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-white/12 bg-black/50 px-2.5 py-1 text-xs text-[#F8FAFC]">
@@ -270,18 +307,22 @@ export function ChatComposer({
 
               <button
                 type="button"
-                onClick={onOpenModelPicker}
-                title="Pilih model AI"
-                className="hidden h-9 min-w-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-[#22D3EE] transition-colors hover:border-white/20 sm:inline-flex cursor-pointer"
+                onClick={imageMode ? onOpenImageModelPicker : onOpenModelPicker}
+                title={imageMode ? 'Pilih model gambar AI' : 'Pilih model chat AI'}
+                className={`hidden h-9 min-w-0 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors sm:inline-flex cursor-pointer ${
+                  imageMode
+                    ? 'border-[#FB923C]/45 bg-[#FB923C]/12 text-[#FDBA74] hover:border-[#FB923C]/70'
+                    : 'border-white/10 bg-white/[0.04] text-[#22D3EE] hover:border-white/20'
+                }`}
               >
                 <span className="max-w-[140px] truncate">
                   {imageMode
-                    ? '4 Engine Gambar'
+                    ? activeImageModel.shortName
                     : deepThink
                       ? 'Rantai DeepThink'
                       : activeModel.shortName}
                 </span>
-                {!imageMode && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />}
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
               </button>
             </div>
 
@@ -331,7 +372,7 @@ export function ChatComposer({
         </div>
 
         <p className="mt-1.5 hidden text-center text-[11px] text-[#94A3B8] sm:block">
-          NodataGPT memadukan {AI_MODELS.length - 1} jalur model AI dengan Auto-Fallback otomatis di bawah langit kosmik live.
+          NodataGPT memadukan {AI_MODELS.length - 1} jalur chat & {IMAGE_ENGINES.length} model gambar AI dengan Auto-Fallback otomatis.
         </p>
       </div>
     </div>

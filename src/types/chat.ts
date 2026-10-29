@@ -1,7 +1,5 @@
 export type MessageRole = 'user' | 'assistant';
 
-export type PromptMode = 'default' | 'code' | 'analysis';
-
 export interface ChatAttachment {
   name: string;
   content: string;
@@ -34,5 +32,4 @@ export interface WormGptSettings {
   userName: string;
   contextMemory: boolean;
   streamEffect: boolean;
-  promptMode: PromptMode;
 }

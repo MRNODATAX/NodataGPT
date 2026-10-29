@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Check,
   ChevronDown,
   Menu,
   Plus,
+  Radio,
   SlidersHorizontal,
   Smartphone,
 } from 'lucide-react';
@@ -24,19 +24,17 @@ import type {
   ChatAttachment,
   ChatMessage,
   ChatSession,
-  PromptMode,
   WormGptSettings,
 } from './types/chat';
 
 const SESSIONS_STORAGE_KEY = 'wormgpt_sessions_v1';
-const SETTINGS_STORAGE_KEY = 'wormgpt_settings_v1';
+const SETTINGS_STORAGE_KEY = 'wormgpt_settings_v2';
 
 const DEFAULT_SETTINGS: WormGptSettings = {
   apiUrl: DEFAULT_WORMGPT_API,
   userName: 'Sobat',
   contextMemory: false,
   streamEffect: true,
-  promptMode: 'default',
 };
 
 function loadInitialSessions(): ChatSession[] {
@@ -56,8 +54,9 @@ function loadInitialSettings(): WormGptSettings {
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
     return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
+      userName: typeof parsed?.userName === 'string' ? parsed.userName : DEFAULT_SETTINGS.userName,
+      contextMemory: Boolean(parsed?.contextMemory),
+      streamEffect: parsed?.streamEffect !== false,
       apiUrl:
         typeof parsed?.apiUrl === 'string' && parsed.apiUrl.trim()
           ? parsed.apiUrl.trim()
@@ -81,12 +80,6 @@ function summarizeTitle(text: string): string {
   return oneLine.length > 44 ? `${oneLine.slice(0, 44)}...` : oneLine;
 }
 
-const MODE_LABELS: Record<PromptMode, string> = {
-  default: '2.5 Standar',
-  code: '2.5 Kode',
-  analysis: '2.5 Analisis',
-};
-
 export function App() {
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadInitialSessions());
@@ -97,7 +90,7 @@ export function App() {
   const [attachment, setAttachment] = useState<ChatAttachment | null>(null);
   const [isDesktopExpanded, setIsDesktopExpanded] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [isEndpointInfoOpen, setIsEndpointInfoOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
@@ -112,7 +105,7 @@ export function App() {
     content: string;
     durationMs: number;
   } | null>(null);
-  const modelDropdownRef = useRef<HTMLDivElement | null>(null);
+  const endpointMenuRef = useRef<HTMLDivElement | null>(null);
 
   const { canPromptNatively, isStandalone, platform, triggerNativeInstall } = usePwaInstall();
 
@@ -141,14 +134,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!isModelMenuOpen) return;
+    if (!isEndpointInfoOpen) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setIsModelMenuOpen(false);
+      if (endpointMenuRef.current && !endpointMenuRef.current.contains(e.target as Node)) {
+        setIsEndpointInfoOpen(false);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsModelMenuOpen(false);
+      if (e.key === 'Escape') setIsEndpointInfoOpen(false);
     };
     window.addEventListener('mousedown', onPointerDown);
     window.addEventListener('keydown', onKeyDown);
@@ -156,7 +149,7 @@ export function App() {
       window.removeEventListener('mousedown', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [isModelMenuOpen]);
+  }, [isEndpointInfoOpen]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -227,18 +220,17 @@ export function App() {
 
     if (activeSessionId) {
       updateSessionMessages(activeSessionId, (msgs) =>
-        msgs
-          .map((m) => {
-            if (m.status !== 'streaming') return m;
-            if (m.content.trim().length > 0) {
-              return { ...m, status: 'done' as const };
-            }
-            return {
-              ...m,
-              status: 'error' as const,
-              errorDetail: 'Permintaan dihentikan oleh pengguna.',
-            };
-          })
+        msgs.map((m) => {
+          if (m.status !== 'streaming') return m;
+          if (m.content.trim().length > 0) {
+            return { ...m, status: 'done' as const };
+          }
+          return {
+            ...m,
+            status: 'error' as const,
+            errorDetail: 'Permintaan dihentikan oleh pengguna.',
+          };
+        })
       );
     }
     setIsGenerating(false);
@@ -250,10 +242,9 @@ export function App() {
       assistantMsgId: string;
       userPrompt: string;
       priorHistory: ChatMessage[];
-      mode: PromptMode;
       attachedFile: ChatAttachment | null;
     }) => {
-      const { sessionId, assistantMsgId, userPrompt, priorHistory, mode, attachedFile } = params;
+      const { sessionId, assistantMsgId, userPrompt, priorHistory, attachedFile } = params;
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -262,7 +253,6 @@ export function App() {
 
       const fullQuery = composePromptQuery({
         userInput: userPrompt,
-        mode,
         contextMemory: settings.contextMemory,
         history: priorHistory,
         attachment: attachedFile,
@@ -363,20 +353,14 @@ export function App() {
   );
 
   const handleSendMessage = useCallback(
-    (overrideText?: string, overrideMode?: PromptMode) => {
+    (overrideText?: string) => {
       if (isGenerating) return;
 
       const rawPrompt = (overrideText ?? inputText).trim();
       const currentAttachment = overrideText ? null : attachment;
       if (!rawPrompt && !currentAttachment) return;
 
-      const effectivePrompt =
-        rawPrompt || `Analisis isi file ${currentAttachment?.name || 'lampiran'} berikut.`;
-      const effectiveMode = overrideMode ?? settings.promptMode;
-
-      if (overrideMode && overrideMode !== settings.promptMode) {
-        setSettings((prev) => ({ ...prev, promptMode: overrideMode }));
-      }
+      const effectivePrompt = rawPrompt || currentAttachment?.name || '';
 
       const now = Date.now();
       const userMessage: ChatMessage = {
@@ -431,7 +415,6 @@ export function App() {
         assistantMsgId: assistantPlaceholder.id,
         userPrompt: effectivePrompt,
         priorHistory,
-        mode: effectiveMode,
         attachedFile: currentAttachment,
       });
     },
@@ -442,7 +425,6 @@ export function App() {
       inputText,
       isGenerating,
       sessions,
-      settings.promptMode,
       updateSessionMessages,
     ]
   );
@@ -477,11 +459,10 @@ export function App() {
         assistantMsgId: assistantMessageId,
         userPrompt: userTurn.content,
         priorHistory,
-        mode: settings.promptMode,
         attachedFile: null,
       });
     },
-    [activeSession, executeAssistantTurn, isGenerating, settings.promptMode, updateSessionMessages]
+    [activeSession, executeAssistantTurn, isGenerating, updateSessionMessages]
   );
 
   const handleEditUserMessage = useCallback(
@@ -523,11 +504,10 @@ export function App() {
         assistantMsgId: freshAssistant.id,
         userPrompt: updatedText,
         priorHistory,
-        mode: settings.promptMode,
         attachedFile: null,
       });
     },
-    [activeSession, executeAssistantTurn, isGenerating, settings.promptMode]
+    [activeSession, executeAssistantTurn, isGenerating]
   );
 
   const handleFeedback = useCallback(
@@ -629,7 +609,6 @@ export function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col bg-[#09090B]">
-        {/* Gemini minimal top bar */}
         <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5 pt-safe sm:px-5">
           <div className="flex items-center gap-1.5">
             <button
@@ -641,12 +620,12 @@ export function App() {
               <Menu className="h-5 w-5" aria-hidden="true" />
             </button>
 
-            <div ref={modelDropdownRef} className="relative">
+            <div ref={endpointMenuRef} className="relative">
               <button
                 type="button"
-                onClick={() => setIsModelMenuOpen((prev) => !prev)}
-                aria-expanded={isModelMenuOpen}
-                aria-haspopup="menu"
+                onClick={() => setIsEndpointInfoOpen((prev) => !prev)}
+                aria-expanded={isEndpointInfoOpen}
+                aria-haspopup="dialog"
                 className="inline-flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-1.5 text-left transition-colors hover:bg-[#14141A]"
               >
                 <img
@@ -660,70 +639,35 @@ export function App() {
                   <span className="font-display text-base font-semibold tracking-tight text-[#FAFAFA] sm:text-lg">
                     Worm<span className="text-[#F97316]">GPT</span>
                   </span>
-                  <span className="font-mono text-xs font-medium text-[#B4B4BE]">
-                    {MODE_LABELS[settings.promptMode]}
+                  <span className="font-mono text-xs font-medium text-[#FB923C]">
+                    Direct API
                   </span>
                 </div>
                 <ChevronDown className="h-4 w-4 text-[#9E9EA8]" aria-hidden="true" />
               </button>
 
-              {isModelMenuOpen && (
-                <div
-                  role="menu"
-                  aria-label="Pilih mode kerja WormGPT"
-                  className="absolute top-full left-0 z-30 mt-1.5 w-64 rounded-[14px] border border-[#282832] bg-[#131318] p-1.5 shadow-xl"
-                >
-                  {(
-                    [
-                      {
-                        id: 'default',
-                        title: 'WormGPT 2.5 Standar',
-                        desc: 'Percakapan langsung untuk tugas harian',
-                      },
-                      {
-                        id: 'code',
-                        title: 'WormGPT 2.5 Kode',
-                        desc: 'Prioritas sintaks lengkap dan arsitektur teknis',
-                      },
-                      {
-                        id: 'analysis',
-                        title: 'WormGPT 2.5 Analisis',
-                        desc: 'Penjabaran sistematis dan terstruktur',
-                      },
-                    ] as const
-                  ).map((item) => {
-                    const selected = settings.promptMode === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={selected}
-                        onClick={() => {
-                          setSettings((prev) => ({ ...prev, promptMode: item.id }));
-                          setIsModelMenuOpen(false);
-                        }}
-                        className={`flex min-h-11 w-full items-start justify-between gap-2 rounded-[10px] px-3 py-2.5 text-left transition-colors ${
-                          selected ? 'bg-[#1F1412]' : 'hover:bg-[#1B1B22]'
-                        }`}
-                      >
-                        <div>
-                          <span className="block text-xs font-semibold text-[#FAFAFA]">
-                            {item.title}
-                          </span>
-                          <span className="mt-0.5 block text-[11px] leading-snug text-[#9E9EA8]">
-                            {item.desc}
-                          </span>
-                        </div>
-                        {selected && (
-                          <Check
-                            className="mt-0.5 h-4 w-4 shrink-0 text-[#FB923C]"
-                            aria-hidden="true"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
+              {isEndpointInfoOpen && (
+                <div className="absolute top-full left-0 z-30 mt-1.5 w-72 rounded-[14px] border border-[#282832] bg-[#131318] p-3.5 shadow-xl">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#FAFAFA]">
+                    <Radio className="h-3.5 w-3.5 text-[#FB923C]" aria-hidden="true" />
+                    <span>Koneksi WormGPT Murni</span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[#B4B4BE]">
+                    Setiap pesan dikirim 1:1 langsung ke endpoint tanpa tambahan prompt sistem, menjaga karakter asli AI dari API.
+                  </p>
+                  <div className="mt-2.5 truncate rounded-lg bg-[#0B0B0F] px-2.5 py-1.5 font-mono text-[11px] text-[#FB923C]">
+                    {settings.apiUrl}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEndpointInfoOpen(false);
+                      setIsSettingsModalOpen(true);
+                    }}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center rounded-xl border border-[#3B1B15] bg-[#1A1210] text-xs font-medium text-[#FAFAFA] hover:bg-[#241714]"
+                  >
+                    Ubah Pengaturan API
+                  </button>
                 </div>
               )}
             </div>
@@ -764,12 +708,11 @@ export function App() {
           </div>
         </header>
 
-        {/* Scrollable main canvas */}
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {activeMessages.length === 0 ? (
             <WelcomeScreen
               userName={settings.userName}
-              onSelectStarter={(prompt, mode) => handleSendMessage(prompt, mode)}
+              onSelectStarter={(prompt) => handleSendMessage(prompt)}
             />
           ) : (
             <>
@@ -792,13 +735,11 @@ export function App() {
         <ChatComposer
           value={inputText}
           isGenerating={isGenerating}
-          promptMode={settings.promptMode}
           contextMemory={settings.contextMemory}
           attachment={attachment}
           onChange={setInputText}
           onSend={() => handleSendMessage()}
           onStop={stopGeneration}
-          onChangeMode={(mode) => setSettings((prev) => ({ ...prev, promptMode: mode }))}
           onToggleMemory={() =>
             setSettings((prev) => ({ ...prev, contextMemory: !prev.contextMemory }))
           }

@@ -7,7 +7,12 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const rawQuery = typeof req.query?.q === 'string' ? req.query.q : '';
+  let rawQuery = typeof req.query?.q === 'string' ? req.query.q : '';
+  if (!rawQuery && typeof req.url === 'string') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    rawQuery = parsedUrl.searchParams.get('q') || '';
+  }
+
   if (!rawQuery.trim()) {
     return res.status(400).json({
       status: false,
@@ -16,13 +21,16 @@ export default async function handler(req, res) {
   }
 
   const upstreamUrl = `https://bintangapi.my.id/api/aichat/wormgpt?q=${encodeURIComponent(rawQuery)}`;
+  const clientUa =
+    req.headers?.['user-agent'] ||
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
   try {
     const upstream = await fetch(upstreamUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json, text/plain, */*',
-        'User-Agent': 'WormGPT-Vercel/2.5',
+        'User-Agent': clientUa,
       },
     });
 

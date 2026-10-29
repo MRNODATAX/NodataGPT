@@ -1,4 +1,4 @@
-import type { ChatAttachment, ChatMessage, PromptMode } from '../types/chat';
+import type { ChatAttachment, ChatMessage } from '../types/chat';
 
 export const DEFAULT_WORMGPT_API = 'https://bintangapi.my.id/api/aichat/wormgpt?q=';
 
@@ -9,6 +9,7 @@ const METADATA_KEYS = new Set([
   'powered_by',
   'poweredby',
   'status',
+  'success',
   'code',
   'http_code',
   'timestamp',
@@ -17,6 +18,11 @@ const METADATA_KEYS = new Set([
   'model',
   'version',
   'id',
+  'prompt',
+  'question',
+  'query',
+  'q',
+  'input',
 ]);
 
 const PRIORITY_CONTENT_KEYS = [
@@ -24,16 +30,24 @@ const PRIORITY_CONTENT_KEYS = [
   'response',
   'answer',
   'reply',
+  'ai',
+  'wormgpt',
+  'assistant',
+  'bot',
+  'completion',
   'content',
   'text',
   'output',
-  'wormgpt',
+  'hasil',
   'jawaban',
   'pesan',
+  'msg',
   'chat',
   'data',
   'message',
 ];
+
+const GENERIC_STATUS_TEXTS = new Set(['success', 'ok', 'berhasil', 'true']);
 
 export function buildApiUrl(baseUrl: string, query: string): string {
   const cleanBase = (baseUrl || DEFAULT_WORMGPT_API).trim();
@@ -50,42 +64,41 @@ export function buildApiUrl(baseUrl: string, query: string): string {
 
 export function composePromptQuery(options: {
   userInput: string;
-  mode: PromptMode;
   contextMemory: boolean;
   history: ChatMessage[];
   attachment: ChatAttachment | null;
 }): string {
-  const { userInput, mode, contextMemory, history, attachment } = options;
-  const parts: string[] = [];
+  const { userInput, contextMemory, history, attachment } = options;
+  const trimmedInput = userInput.trim();
 
-  if (mode === 'code') {
-    parts.push('[Fokus: berikan solusi kode yang bersih, lengkap, dan langsung siap dijalankan]');
-  } else if (mode === 'analysis') {
-    parts.push('[Fokus: uraikan analisis secara terstruktur, jelas, dan mendalam]');
+  // Send 100% raw user input by default so WormGPT's native API persona is untouched.
+  if (!contextMemory && !attachment) {
+    return trimmedInput;
   }
 
-  // Keep GET query under ~1.8KB so reverse proxies do not reject with HTTP 414.
+  const parts: string[] = [];
+
   if (contextMemory && history.length > 0) {
     const recentValid = history
       .filter((m) => m.status !== 'error' && m.content.trim().length > 0)
       .slice(-4);
     if (recentValid.length > 0) {
       let snippet = recentValid
-        .map((m) => `${m.role === 'user' ? 'User' : 'WormGPT'}: ${m.content.slice(0, 320)}`)
+        .map((m) => `${m.role === 'user' ? 'User' : 'WormGPT'}: ${m.content.slice(0, 300)}`)
         .join('\n');
-      if (snippet.length > 1200) {
-        snippet = snippet.slice(-1200);
+      if (snippet.length > 1100) {
+        snippet = snippet.slice(-1100);
       }
-      parts.push(`Konteks sebelumnya:\n${snippet}`);
+      parts.push(`${snippet}`);
     }
   }
 
   if (attachment) {
     const clippedFile = attachment.content.slice(0, 2400);
-    parts.push(`Lampiran (${attachment.name}):\n\`\`\`\n${clippedFile}\n\`\`\``);
+    parts.push(`[${attachment.name}]\n${clippedFile}`);
   }
 
-  parts.push(userInput.trim());
+  parts.push(trimmedInput);
   return parts.join('\n\n');
 }
 
@@ -133,16 +146,23 @@ function extractFromParsedValue(value: unknown, depth = 0): string | null {
     }
 
     for (const key of PRIORITY_CONTENT_KEYS) {
-      if (key in record) {
-        const candidate = extractFromParsedValue(record[key], depth + 1);
-        if (candidate) return candidate;
+      if (!(key in record)) continue;
+      if (
+        key === 'message' &&
+        typeof record.message === 'string' &&
+        GENERIC_STATUS_TEXTS.has(record.message.trim().toLowerCase())
+      ) {
+        continue;
       }
+      const candidate = extractFromParsedValue(record[key], depth + 1);
+      if (candidate) return candidate;
     }
 
     let longestFallback: string | null = null;
     for (const [key, val] of Object.entries(record)) {
       if (METADATA_KEYS.has(key.toLowerCase())) continue;
       if (typeof val === 'string' && val.trim().length > 0) {
+        if (GENERIC_STATUS_TEXTS.has(val.trim().toLowerCase())) continue;
         if (!longestFallback || val.trim().length > longestFallback.length) {
           longestFallback = val.trim();
         }
@@ -176,12 +196,7 @@ export function extractAiReply(rawBody: string): string {
     }
     throw new Error('Format JSON dari API tidak memiliki teks balasan yang dikenali.');
   } catch (err) {
-    if (
-      err instanceof Error &&
-      (err.message.includes('Permintaan ditolak') ||
-        err.message.includes('Format JSON') ||
-        ! (err instanceof SyntaxError))
-    ) {
+    if (err instanceof Error && !(err instanceof SyntaxError)) {
       throw err;
     }
     return trimmed;

@@ -8,18 +8,16 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import type { ChatAttachment, PromptMode } from '../types/chat';
+import type { ChatAttachment } from '../types/chat';
 
 interface ChatComposerProps {
   value: string;
   isGenerating: boolean;
-  promptMode: PromptMode;
   contextMemory: boolean;
   attachment: ChatAttachment | null;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
-  onChangeMode: (mode: PromptMode) => void;
   onToggleMemory: () => void;
   onAttachFile: (attachment: ChatAttachment | null) => void;
 }
@@ -47,18 +45,15 @@ function getSpeechConstructor(): (new () => SpeechRecognitionInstance) | null {
 export function ChatComposer({
   value,
   isGenerating,
-  promptMode,
   contextMemory,
   attachment,
   onChange,
   onSend,
   onStop,
-  onChangeMode,
   onToggleMemory,
   onAttachFile,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -203,14 +198,13 @@ export function ChatComposer({
                 }
               }
             }}
-            placeholder="Ketik pertanyaan, potongan kode, atau instruksi..."
+            placeholder="Ketik pesan langsung ke WormGPT..."
             className="composer-input max-h-[180px] min-h-[36px] w-full resize-none bg-transparent py-1 text-[15px] leading-relaxed text-[#FAFAFA] placeholder:text-[#9E9EA8]"
           />
 
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 border-t border-[#1E1E26] pt-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <input
-                ref={fileInputRef}
                 id="wormgpt-file-upload"
                 type="file"
                 accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.php,.html,.css,.sql,.csv,.yml,.yaml,.sh,.xml,.log"
@@ -222,33 +216,8 @@ export function ChatComposer({
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium text-[#B4B4BE] transition-colors hover:bg-[#1B1B22] hover:text-[#FAFAFA]"
               >
                 <Paperclip className="h-4 w-4 text-[#FB923C]" aria-hidden="true" />
-                <span className="hidden sm:inline">Lampirkan</span>
+                <span>Lampirkan</span>
               </label>
-
-              <div className="flex items-center gap-1.5 rounded-xl bg-[#18181F] px-2.5">
-                <label
-                  htmlFor="wormgpt-mode-select"
-                  className="text-xs font-medium text-[#9E9EA8]"
-                >
-                  Mode:
-                </label>
-                <select
-                  id="wormgpt-mode-select"
-                  value={promptMode}
-                  onChange={(e) => onChangeMode(e.target.value as PromptMode)}
-                  className="min-h-11 bg-transparent py-1 text-xs font-medium text-[#FAFAFA] focus:outline-none"
-                >
-                  <option value="default" className="bg-[#141419] text-[#FAFAFA]">
-                    Standar
-                  </option>
-                  <option value="code" className="bg-[#141419] text-[#FAFAFA]">
-                    Fokus Kode
-                  </option>
-                  <option value="analysis" className="bg-[#141419] text-[#FAFAFA]">
-                    Analisis
-                  </option>
-                </select>
-              </div>
 
               <button
                 type="button"
@@ -261,7 +230,7 @@ export function ChatComposer({
                 }`}
               >
                 <Brain className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Memori</span>
+                <span>{contextMemory ? 'Memori: Aktif' : 'Memori: Nonaktif'}</span>
               </button>
             </div>
 
@@ -310,7 +279,7 @@ export function ChatComposer({
         </form>
 
         <p className="mt-2 text-center text-xs text-[#9E9EA8]">
-          WormGPT dapat membuat kesalahan. Periksa kembali kode atau informasi penting.
+          Terhubung langsung ke API WormGPT tanpa filter instruksi tambahan.
         </p>
       </div>
     </footer>

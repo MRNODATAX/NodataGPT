@@ -1,9 +1,8 @@
-import { Code2, Compass, FileText } from 'lucide-react';
-import type { PromptMode } from '../types/chat';
+import { Code2, Compass, Terminal } from 'lucide-react';
 
 interface WelcomeScreenProps {
   userName: string;
-  onSelectStarter: (prompt: string, suggestedMode?: PromptMode) => void;
+  onSelectStarter: (prompt: string) => void;
 }
 
 export function WelcomeScreen({ userName, onSelectStarter }: WelcomeScreenProps) {
@@ -34,38 +33,33 @@ export function WelcomeScreen({ userName, onSelectStarter }: WelcomeScreenProps)
             className="mt-1 block text-[#B4B4BE]"
             style={{ fontSize: 'clamp(1.2rem, 2.8vw, 1.85rem)' }}
           >
-            Ada yang bisa dibantu hari ini?
+            Ada yang bisa WormGPT bantu?
           </span>
         </h1>
       </div>
 
-      {/* 3-state responsive reflow: 1 col phone -> 2 col tablet (wide top + 2 bottom) -> 4-track asymmetric desktop */}
+      {/* 3-state responsive reflow: 1 col phone -> 2 col tablet -> 4-track asymmetric desktop */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <button
           type="button"
-          onClick={() =>
-            onSelectStarter(
-              'Buatkan REST API autentikasi JWT menggunakan Node.js, Express, dan TypeScript lengkap dengan validasi input serta penanganan error.',
-              'code'
-            )
-          }
+          onClick={() => onSelectStarter('Kenalkan dirimu! Siapa kamu sebenarnya?')}
           className="group flex flex-col justify-between rounded-[16px] border border-[#3B1B15] bg-[#141010] p-4 text-left transition-colors hover:border-[#F97316]/60 hover:bg-[#1B1413] sm:col-span-2 lg:col-span-2"
         >
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="font-mono text-xs font-medium text-[#FB923C]">
-                Rekayasa Kode
+                Sapaan Langsung
               </span>
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#241411] text-[#FB923C]">
-                <Code2 className="h-4 w-4" aria-hidden="true" />
+                <Terminal className="h-4 w-4" aria-hidden="true" />
               </span>
             </div>
             <p className="text-sm leading-relaxed font-medium text-[#FAFAFA]">
-              Bangun REST API autentikasi JWT dengan Node.js dan TypeScript beserta validasi input
+              Kenalkan dirimu! Siapa kamu sebenarnya?
             </p>
           </div>
           <span className="mt-4 text-xs text-[#9E9EA8] group-hover:text-[#B4B4BE]">
-            Klik untuk kirim langsung dalam mode Fokus Kode
+            Kirim kueri murni langsung ke WormGPT API
           </span>
         </button>
 
@@ -73,8 +67,7 @@ export function WelcomeScreen({ userName, onSelectStarter }: WelcomeScreenProps)
           type="button"
           onClick={() =>
             onSelectStarter(
-              'Bandingkan arsitektur monolitik modular dengan microservices untuk aplikasi skala menengah beserta risiko operasionalnya.',
-              'analysis'
+              'Buatkan script Python scanner port sederhana yang cepat menggunakan socket dan threading.'
             )
           }
           className="group flex flex-col justify-between rounded-[16px] border border-[#23232B] bg-[#121216] p-4 text-left transition-colors hover:border-[#F97316]/50 hover:bg-[#18181E]"
@@ -82,25 +75,24 @@ export function WelcomeScreen({ userName, onSelectStarter }: WelcomeScreenProps)
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="font-mono text-xs font-medium text-[#B4B4BE]">
-                Arsitektur
+                Scripting
               </span>
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#1B1B22] text-[#F87171]">
-                <Compass className="h-4 w-4" aria-hidden="true" />
+                <Code2 className="h-4 w-4" aria-hidden="true" />
               </span>
             </div>
             <p className="text-sm leading-relaxed text-[#FAFAFA]">
-              Evaluasi monolitik modular vs microservices untuk tim skala menengah
+              Buat script Python port scanner cepat dengan threading
             </p>
           </div>
-          <span className="mt-4 text-xs text-[#9E9EA8]">Mode Analisis</span>
+          <span className="mt-4 text-xs text-[#9E9EA8]">Kirim langsung</span>
         </button>
 
         <button
           type="button"
           onClick={() =>
             onSelectStarter(
-              'Susun struktur dokumentasi README teknis yang rapi untuk proyek open-source agar mudah dipahami kontributor baru.',
-              'default'
+              'Jelaskan cara kerja SQL Injection dan cara menutup celahnya di query backend.'
             )
           }
           className="group flex flex-col justify-between rounded-[16px] border border-[#23232B] bg-[#121216] p-4 text-left transition-colors hover:border-[#F97316]/50 hover:bg-[#18181E]"
@@ -108,17 +100,17 @@ export function WelcomeScreen({ userName, onSelectStarter }: WelcomeScreenProps)
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="font-mono text-xs font-medium text-[#B4B4BE]">
-                Dokumentasi
+                Keamanan
               </span>
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#1B1B22] text-[#FB923C]">
-                <FileText className="h-4 w-4" aria-hidden="true" />
+                <Compass className="h-4 w-4" aria-hidden="true" />
               </span>
             </div>
             <p className="text-sm leading-relaxed text-[#FAFAFA]">
-              Rancang kerangka README teknis yang jelas bagi kontributor proyek
+              Cara kerja celah SQL Injection beserta teknik mitigasinya
             </p>
           </div>
-          <span className="mt-4 text-xs text-[#9E9EA8]">Mode Standar</span>
+          <span className="mt-4 text-xs text-[#9E9EA8]">Kirim langsung</span>
         </button>
       </div>
     </div>

@@ -32,6 +32,16 @@ import {
 } from './utils/storage';
 import type { AppSettings, ChatMessage, Conversation } from './types/chat';
 
+interface PendingStreamState {
+  chatId: string;
+  assistantMsgId: string;
+  fullContent: string;
+  thinkingContent?: string;
+  answeredById: string;
+  answeredByName: string;
+  usedFallback: boolean;
+}
+
 export function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>(() =>
@@ -57,8 +67,13 @@ export function App() {
   const [deepThink, setDeepThink] = useState(false);
   const [imageMode, setImageMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [routerStatus, setRouterStatus] = useState<RouterStatusUpdate | null>(null);
+
   const abortControllerRef = useRef<AbortController | null>(null);
+  const streamTimerRef = useRef<number | null>(null);
+  const pendingStreamRef = useRef<PendingStreamState | null>(null);
+  const turnStartRef = useRef<number>(0);
 
   const {
     canPromptNativeInstall,
@@ -84,6 +99,156 @@ export function App() {
     saveSidebarCollapsed(sidebarCollapsed);
   }, [sidebarCollapsed]);
 
+  // Live seconds ticker (updates every 80ms throughout both waiting and AI typing phases)
+  useEffect(() => {
+    if (!isLoading) {
+      setElapsedMs(0);
+      return;
+    }
+    if (!turnStartRef.current) {
+      turnStartRef.current = performance.now();
+    }
+    const timerId = window.setInterval(() => {
+      setElapsedMs(Math.max(0, Math.round(performance.now() - turnStartRef.current)));
+    }, 80);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [isLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (streamTimerRef.current !== null) {
+        window.clearInterval(streamTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  const updateChatMessages = useCallback(
+    (chatId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                updatedAt: Date.now(),
+                messages: updater(c.messages),
+              }
+            : c
+        )
+      );
+    },
+    []
+  );
+
+  // Instant reveal ("Tampilkan seluruh jawaban sekarang")
+  const handleFlushStream = useCallback(() => {
+    if (streamTimerRef.current !== null) {
+      window.clearInterval(streamTimerRef.current);
+      streamTimerRef.current = null;
+    }
+    const pending = pendingStreamRef.current;
+    if (pending) {
+      const finalDuration = Math.max(
+        100,
+        Math.round(performance.now() - (turnStartRef.current || performance.now()))
+      );
+      updateChatMessages(pending.chatId, (msgs) =>
+        msgs.map((m) =>
+          m.id === pending.assistantMsgId
+            ? {
+                ...m,
+                content: pending.fullContent,
+                thinkingContent: pending.thinkingContent,
+                answeredById: pending.answeredById,
+                answeredByName: pending.answeredByName,
+                usedFallback: pending.usedFallback,
+                status: 'done',
+                durationMs: finalDuration,
+              }
+            : m
+        )
+      );
+      pendingStreamRef.current = null;
+    }
+    turnStartRef.current = 0;
+    setIsLoading(false);
+    setRouterStatus(null);
+  }, [updateChatMessages]);
+
+  const handleStop = useCallback(() => {
+    const stopDuration = Math.max(
+      100,
+      Math.round(performance.now() - (turnStartRef.current || performance.now()))
+    );
+
+    // Case 1: Stop while typewriter animation is actively writing characters
+    if (streamTimerRef.current !== null || pendingStreamRef.current) {
+      if (streamTimerRef.current !== null) {
+        window.clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
+      }
+      const pending = pendingStreamRef.current;
+      pendingStreamRef.current = null;
+
+      if (pending) {
+        updateChatMessages(pending.chatId, (msgs) =>
+          msgs.map((m) => {
+            if (m.id !== pending.assistantMsgId) return m;
+            if (m.content.trim().length > 0) {
+              return {
+                ...m,
+                status: 'done',
+                durationMs: stopDuration,
+              };
+            }
+            return {
+              ...m,
+              content: 'Permintaan dihentikan oleh pengguna.',
+              status: 'error',
+              isError: true,
+              durationMs: stopDuration,
+            };
+          })
+        );
+      }
+      turnStartRef.current = 0;
+      setIsLoading(false);
+      setRouterStatus(null);
+      return;
+    }
+
+    // Case 2: Stop while still waiting on network response
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    if (activeChatId) {
+      updateChatMessages(activeChatId, (msgs) =>
+        msgs.map((m) =>
+          m.status === 'waiting'
+            ? {
+                ...m,
+                content: 'Permintaan dihentikan oleh pengguna.',
+                status: 'error',
+                isError: true,
+                durationMs: stopDuration,
+              }
+            : m
+        )
+      );
+    }
+
+    turnStartRef.current = 0;
+    setIsLoading(false);
+    setRouterStatus(null);
+  }, [activeChatId, updateChatMessages]);
+
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeChatId) ?? null,
     [conversations, activeChatId]
@@ -100,16 +265,19 @@ export function App() {
   );
 
   const handleNewChat = useCallback(() => {
-    if (abortControllerRef.current) {
+    if (pendingStreamRef.current) {
+      handleFlushStream();
+    } else if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+      turnStartRef.current = 0;
       setIsLoading(false);
       setRouterStatus(null);
     }
     setActiveChatId(null);
     setDraft('');
     setImageMode(false);
-  }, []);
+  }, [handleFlushStream]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -126,6 +294,7 @@ export function App() {
     async ({
       promptText,
       targetChatId,
+      assistantMsgId,
       priorMessages,
       attachmentText,
       attachmentName,
@@ -134,6 +303,7 @@ export function App() {
     }: {
       promptText: string;
       targetChatId: string;
+      assistantMsgId: string;
       priorMessages: ChatMessage[];
       attachmentText?: string;
       attachmentName?: string;
@@ -142,6 +312,8 @@ export function App() {
     }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      turnStartRef.current = performance.now();
+      setElapsedMs(0);
       setIsLoading(true);
       setRouterStatus(null);
 
@@ -165,66 +337,130 @@ export function App() {
               onStatus: (st) => setRouterStatus(st),
             });
 
-        const assistantMsg: ChatMessage = {
-          id: generateId(),
-          role: 'assistant',
-          content: result.content,
+        abortControllerRef.current = null;
+        setRouterStatus(null);
+
+        const reducedMotion =
+          typeof window !== 'undefined' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        const shouldStreamTypewriter =
+          settings.streamEffect &&
+          !reducedMotion &&
+          !result.imageUrl &&
+          result.content.length > 20;
+
+        if (!shouldStreamTypewriter) {
+          const doneDuration = Math.max(
+            100,
+            Math.round(performance.now() - turnStartRef.current)
+          );
+          updateChatMessages(targetChatId, (msgs) =>
+            msgs.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: result.content,
+                    thinkingContent: result.thinkingContent,
+                    answeredById: result.answeredById,
+                    answeredByName: result.answeredByName,
+                    usedFallback: result.usedFallback,
+                    imageUrl: result.imageUrl,
+                    status: 'done',
+                    isError: false,
+                    durationMs: doneDuration,
+                  }
+                : m
+            )
+          );
+          turnStartRef.current = 0;
+          setIsLoading(false);
+          return;
+        }
+
+        // Start WormGPT-style progressive typewriter animation while keeping live seconds ticking
+        pendingStreamRef.current = {
+          chatId: targetChatId,
+          assistantMsgId,
+          fullContent: result.content,
           thinkingContent: result.thinkingContent,
-          createdAt: Date.now(),
           answeredById: result.answeredById,
           answeredByName: result.answeredByName,
           usedFallback: result.usedFallback,
-          imageUrl: result.imageUrl,
         };
 
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === targetChatId
-              ? {
-                  ...c,
-                  updatedAt: Date.now(),
-                  messages: [...c.messages, assistantMsg],
-                }
-              : c
-          )
-        );
+        let cursor = 0;
+        const stepSize = Math.max(4, Math.min(28, Math.ceil(result.content.length / 85)));
+
+        streamTimerRef.current = window.setInterval(() => {
+          cursor = Math.min(result.content.length, cursor + stepSize);
+          const slice = result.content.slice(0, cursor);
+          const finished = cursor >= result.content.length;
+          const finishDuration = finished
+            ? Math.max(100, Math.round(performance.now() - turnStartRef.current))
+            : undefined;
+
+          updateChatMessages(targetChatId, (msgs) =>
+            msgs.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: slice,
+                    thinkingContent: result.thinkingContent,
+                    answeredById: result.answeredById,
+                    answeredByName: result.answeredByName,
+                    usedFallback: result.usedFallback,
+                    status: finished ? 'done' : 'typing',
+                    isError: false,
+                    durationMs: finishDuration,
+                  }
+                : m
+            )
+          );
+
+          if (finished) {
+            if (streamTimerRef.current !== null) {
+              window.clearInterval(streamTimerRef.current);
+              streamTimerRef.current = null;
+            }
+            pendingStreamRef.current = null;
+            turnStartRef.current = 0;
+            setIsLoading(false);
+          }
+        }, 26);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
+        abortControllerRef.current = null;
+        const failDuration = Math.max(
+          100,
+          Math.round(performance.now() - turnStartRef.current)
+        );
         const messageText =
           err instanceof Error
             ? err.message
             : 'Terjadi gangguan jaringan saat menghubungi model AI.';
 
-        const errorMsg: ChatMessage = {
-          id: generateId(),
-          role: 'assistant',
-          content: messageText,
-          createdAt: Date.now(),
-          isError: true,
-        };
-
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === targetChatId
+        updateChatMessages(targetChatId, (msgs) =>
+          msgs.map((m) =>
+            m.id === assistantMsgId
               ? {
-                  ...c,
-                  updatedAt: Date.now(),
-                  messages: [...c.messages, errorMsg],
+                  ...m,
+                  content: messageText,
+                  status: 'error',
+                  isError: true,
+                  durationMs: failDuration,
                 }
-              : c
+              : m
           )
         );
-      } finally {
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-          setIsLoading(false);
-          setRouterStatus(null);
-        }
+        turnStartRef.current = 0;
+        setIsLoading(false);
+        setRouterStatus(null);
       }
     },
-    [settings]
+    [settings, updateChatMessages]
   );
 
   const handleSend = useCallback(
@@ -236,12 +472,21 @@ export function App() {
       const useThinking = deepThink && !useImage;
       const displayContent =
         trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
+
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
         content: displayContent,
         createdAt: Date.now(),
         attachmentName,
+      };
+
+      const assistantPlaceholder: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        status: 'waiting',
+        createdAt: Date.now() + 1,
       };
 
       setDraft('');
@@ -256,7 +501,7 @@ export function App() {
           title: deriveChatTitle(displayContent),
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          messages: [userMsg],
+          messages: [userMsg, assistantPlaceholder],
         };
         chatId = newChat.id;
         setConversations((prev) => [newChat, ...prev]);
@@ -269,7 +514,7 @@ export function App() {
               ? {
                   ...c,
                   updatedAt: Date.now(),
-                  messages: [...c.messages, userMsg],
+                  messages: [...c.messages, userMsg, assistantPlaceholder],
                 }
               : c
           )
@@ -279,6 +524,7 @@ export function App() {
       await executePrompt({
         promptText: trimmed,
         targetChatId: chatId,
+        assistantMsgId: assistantPlaceholder.id,
         priorMessages: existingMessages,
         attachmentText,
         attachmentName,
@@ -301,12 +547,19 @@ export function App() {
         content: starterPrompt,
         createdAt: Date.now(),
       };
+      const assistantPlaceholder: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        status: 'waiting',
+        createdAt: Date.now() + 1,
+      };
       const newChat: Conversation = {
         id: generateId(),
         title: deriveChatTitle(starterPrompt),
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        messages: [userMsg],
+        messages: [userMsg, assistantPlaceholder],
       };
       setConversations((prev) => [newChat, ...prev]);
       setActiveChatId(newChat.id);
@@ -314,6 +567,7 @@ export function App() {
       await executePrompt({
         promptText: starterPrompt,
         targetChatId: newChat.id,
+        assistantMsgId: assistantPlaceholder.id,
         priorMessages: [],
         asImage: Boolean(options?.imageMode),
         useDeepThink: Boolean(options?.deepThink),
@@ -338,10 +592,22 @@ export function App() {
       const trimmedMessages = activeConversation.messages.slice(0, idx);
       const historyBeforeUser = trimmedMessages.slice(0, -1);
 
+      const assistantPlaceholder: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        status: 'waiting',
+        createdAt: Date.now(),
+      };
+
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeConversation.id
-            ? { ...c, updatedAt: Date.now(), messages: trimmedMessages }
+            ? {
+                ...c,
+                updatedAt: Date.now(),
+                messages: [...trimmedMessages, assistantPlaceholder],
+              }
             : c
         )
       );
@@ -349,6 +615,7 @@ export function App() {
       await executePrompt({
         promptText: precedingUserMsg.content,
         targetChatId: activeConversation.id,
+        assistantMsgId: assistantPlaceholder.id,
         priorMessages: historyBeforeUser,
         useDeepThink: deepThink,
       });
@@ -356,23 +623,17 @@ export function App() {
     [activeConversation, isLoading, deepThink, executePrompt]
   );
 
-  const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsLoading(false);
-      setRouterStatus(null);
-    }
-  }, []);
-
   const handleDeleteChat = useCallback(
     (id: string) => {
+      if (pendingStreamRef.current?.chatId === id) {
+        handleFlushStream();
+      }
       setConversations((prev) => prev.filter((c) => c.id !== id));
       if (activeChatId === id) {
         setActiveChatId(null);
       }
     },
-    [activeChatId]
+    [activeChatId, handleFlushStream]
   );
 
   const handleTogglePinChat = useCallback((id: string) => {
@@ -401,7 +662,12 @@ export function App() {
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onNewChat={handleNewChat}
-        onSelectChat={(id) => setActiveChatId(id)}
+        onSelectChat={(id) => {
+          if (pendingStreamRef.current && pendingStreamRef.current.chatId !== id) {
+            handleFlushStream();
+          }
+          setActiveChatId(id);
+        }}
         onDeleteChat={handleDeleteChat}
         onTogglePinChat={handleTogglePinChat}
         onExportActiveChat={() => {
@@ -523,8 +789,10 @@ export function App() {
             <ChatThread
               messages={activeConversation.messages}
               isLoading={isLoading}
+              elapsedMs={elapsedMs}
               routerStatus={routerStatus}
               onRegenerate={handleRegenerate}
+              onFlushStream={handleFlushStream}
             />
           )}
 
@@ -571,7 +839,11 @@ export function App() {
         conversationCount={conversations.length}
         onClose={() => setSettingsOpen(false)}
         onUpdateSettings={setSettings}
+        onReplaySplash={() => setShowSplash(true)}
         onClearAllChats={() => {
+          if (pendingStreamRef.current) {
+            handleFlushStream();
+          }
           setConversations([]);
           setActiveChatId(null);
         }}

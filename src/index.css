@@ -437,6 +437,76 @@ body,
   }
 }
 
+@keyframes shimmerSweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes caretBlink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  52%,
+  100% {
+    opacity: 0.14;
+  }
+}
+
+@keyframes pulseRingOut {
+  0% {
+    transform: scale(0.86);
+    opacity: 0.78;
+  }
+  100% {
+    transform: scale(1.68);
+    opacity: 0;
+  }
+}
+
+.nd-shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(34, 211, 238, 0.2) 38%,
+    rgba(251, 146, 60, 0.18) 62%,
+    rgba(255, 255, 255, 0.045) 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmerSweep 1.65s ease-in-out infinite;
+}
+
+.nodata-prose-streaming > p:last-child::after,
+.nodata-prose-streaming > ul:last-child > li:last-child::after,
+.nodata-prose-streaming > ol:last-child > li:last-child::after,
+.nodata-prose-streaming > h1:last-child::after,
+.nodata-prose-streaming > h2:last-child::after,
+.nodata-prose-streaming > h3:last-child::after,
+.nodata-prose-streaming > blockquote:last-child > p:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 5px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #22d3ee 0%, #fb923c 100%);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
+  animation: caretBlink 0.78s steps(1) infinite;
+}
+
+.nd-typing-dot {
+  animation: caretBlink 0.9s ease-in-out infinite;
+}
+
+.animate-pulse-ring {
+  animation: pulseRingOut 0.68s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-orbit-fast {
   animation: orbitSpin 2.4s linear infinite;
 }

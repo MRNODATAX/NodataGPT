@@ -1,4 +1,4 @@
-import type { AppSettings, Conversation } from '../types/chat';
+import type { AppSettings, ChatMessage, Conversation } from '../types/chat';
 
 const CONVERSATIONS_KEY = 'nodatagpt.conversations.v3';
 const ACTIVE_CHAT_KEY = 'nodatagpt.activeChatId.v3';
@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   selectedModelId: 'auto',
   autoFallback: true,
   starfieldEnabled: true,
+  streamEffect: true,
   memoryContextEnabled: true,
   enterToSend: true,
   customPersona: '',
@@ -19,13 +20,36 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: '',
 };
 
+function sanitizeStoredMessages(messages: unknown): ChatMessage[] {
+  if (!Array.isArray(messages)) return [];
+  const cleaned: ChatMessage[] = [];
+
+  for (const raw of messages) {
+    if (!raw || typeof raw !== 'object') continue;
+    const msg = raw as ChatMessage;
+    if (msg.role === 'assistant' && (msg.status === 'waiting' || msg.status === 'typing')) {
+      if ((msg.content || '').trim().length === 0 && !msg.imageUrl) {
+        continue;
+      }
+      cleaned.push({ ...msg, status: 'done' });
+      continue;
+    }
+    cleaned.push(msg);
+  }
+
+  return cleaned;
+}
+
 export function loadConversations(): Conversation[] {
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed;
+    return parsed.map((conv: Conversation) => ({
+      ...conv,
+      messages: sanitizeStoredMessages(conv?.messages),
+    }));
   } catch {
     return [];
   }
@@ -77,6 +101,10 @@ export function loadSettings(): AppSettings {
         typeof parsed?.starfieldEnabled === 'boolean'
           ? parsed.starfieldEnabled
           : DEFAULT_SETTINGS.starfieldEnabled,
+      streamEffect:
+        typeof parsed?.streamEffect === 'boolean'
+          ? parsed.streamEffect
+          : DEFAULT_SETTINGS.streamEffect,
       memoryContextEnabled:
         typeof parsed?.memoryContextEnabled === 'boolean'
           ? parsed.memoryContextEnabled
@@ -146,10 +174,14 @@ export function exportConversationMarkdown(conversation: Conversation): void {
   ];
 
   for (const msg of conversation.messages) {
+    const durationNote =
+      typeof msg.durationMs === 'number' && msg.durationMs > 0
+        ? ` · ${(msg.durationMs / 1000).toFixed(1)} dtk`
+        : '';
     const label =
       msg.role === 'user'
         ? 'Anda'
-        : `NodataGPT${msg.answeredByName ? ` (${msg.answeredByName})` : ''}`;
+        : `NodataGPT${msg.answeredByName ? ` (${msg.answeredByName}${durationNote})` : durationNote}`;
     lines.push(`### ${label}`);
     lines.push('');
     lines.push(msg.content);

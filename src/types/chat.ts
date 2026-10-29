@@ -1,11 +1,15 @@
 export type MessageRole = 'user' | 'assistant';
 
+export type AssistantMessageStatus = 'waiting' | 'typing' | 'done' | 'error';
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   thinkingContent?: string;
   createdAt: number;
+  status?: AssistantMessageStatus;
+  durationMs?: number;
   isError?: boolean;
   answeredById?: string;
   answeredByName?: string;
@@ -27,6 +31,7 @@ export interface AppSettings {
   selectedModelId: string;
   autoFallback: boolean;
   starfieldEnabled: boolean;
+  streamEffect: boolean;
   memoryContextEnabled: boolean;
   enterToSend: boolean;
   customPersona: string;

@@ -6,8 +6,10 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   Download,
+  FastForward,
   FileText,
   RefreshCw,
   Shuffle,
@@ -21,8 +23,10 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 interface ChatThreadProps {
   messages: ChatMessage[];
   isLoading: boolean;
+  elapsedMs: number;
   routerStatus: RouterStatusUpdate | null;
   onRegenerate: (assistantMessageId: string) => void;
+  onFlushStream: () => void;
 }
 
 function ThinkingAccordion({ content }: { content: string }) {
@@ -59,8 +63,10 @@ function ThinkingAccordion({ content }: { content: string }) {
 export function ChatThread({
   messages,
   isLoading,
+  elapsedMs,
   routerStatus,
   onRegenerate,
+  onFlushStream,
 }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
@@ -68,9 +74,19 @@ export function ChatThread({
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
+  const lastMessage = messages[messages.length - 1];
+  const lastContentLen = lastMessage?.content?.length ?? 0;
+
   useEffect(() => {
     bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, isLoading, routerStatus?.attempt]);
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (!isLoading || showScrollBottom) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [lastContentLen, isLoading, showScrollBottom]);
 
   useEffect(() => {
     return () => {
@@ -97,7 +113,14 @@ export function ChatThread({
       setCopiedId(msg.id);
       window.setTimeout(() => setCopiedId(null), 1800);
     } catch {
-      // Ignore clipboard failures
+      const area = document.createElement('textarea');
+      area.value = msg.content;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+      setCopiedId(msg.id);
+      window.setTimeout(() => setCopiedId(null), 1800);
     }
   };
 
@@ -111,7 +134,11 @@ export function ChatThread({
     }
 
     window.speechSynthesis.cancel();
-    const plainText = msg.content.replace(/[#*`_~[\]()>-]/g, ' ');
+    const plainText = msg.content
+      .replace(/```[\s\S]*?```/g, ' blok kode. ')
+      .replace(/[#*`_~[\]()>-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = 'id-ID';
     utterance.onend = () => setSpeakingId(null);
@@ -121,6 +148,7 @@ export function ChatThread({
   };
 
   const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const formattedLiveSeconds = `${(elapsedMs / 1000).toFixed(1)} dtk`;
 
   return (
     <div
@@ -149,6 +177,10 @@ export function ChatThread({
           }
 
           const isLastAssistant = idx === messages.length - 1;
+          const isWaitingContent = msg.status === 'waiting';
+          const isTypingContent = msg.status === 'typing';
+          const isActiveTurn = isWaitingContent || isTypingContent;
+          const isErrorState = Boolean(msg.isError || msg.status === 'error');
 
           return (
             <article
@@ -156,18 +188,26 @@ export function ChatThread({
               aria-label="Respons NodataGPT"
               className="flex items-start gap-2.5 sm:gap-3.5"
             >
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/12 bg-black/80 p-1 shadow-md sm:h-8 sm:w-8">
+              <div
+                className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-black/85 p-1 shadow-md transition-colors sm:h-8 sm:w-8 ${
+                  isActiveTurn
+                    ? 'border-[#22D3EE]/65 shadow-[0_0_14px_rgba(34,211,238,0.28)]'
+                    : 'border-white/12'
+                }`}
+              >
                 <img
                   src="/logo-transparent.png"
                   alt="NodataGPT"
                   width={24}
                   height={24}
-                  className="h-full w-full object-contain"
+                  className={`h-full w-full object-contain ${
+                    isActiveTurn ? 'animate-orbit-fast' : ''
+                  }`}
                 />
               </div>
 
               <div className="min-w-0 flex-1">
-                {/* Sender + Model Pill */}
+                {/* Sender + Model Pill + Live Writing Seconds Badge */}
                 <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                   <span className="font-display text-xs font-bold tracking-tight">
                     <span className="text-[#22D3EE]">Nodata</span>
@@ -186,25 +226,87 @@ export function ChatThread({
                       Auto-fallback
                     </span>
                   )}
+
+                  {isTypingContent && (
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-[#22D3EE]/40 bg-[#22D3EE]/14 px-2 py-0.5 font-mono-code text-[10px] font-semibold tabular-nums text-[#67E8F9]">
+                      <span className="nd-typing-dot h-1.5 w-1.5 rounded-full bg-[#FB923C]" />
+                      <span>Menulis · {formattedLiveSeconds}</span>
+                    </span>
+                  )}
                 </div>
 
-                {msg.isError ? (
-                  <div className="rounded-2xl border border-[#FB923C]/40 bg-[#1A110E]/88 p-3.5 text-sm text-[#FED7AA] backdrop-blur-md">
-                    <div className="mb-1.5 flex items-center gap-2 font-semibold text-[#FB923C]">
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>Permintaan belum berhasil</span>
+                {/* Phase 1: Waiting for AI Response (WormGPT Shimmer + Live Seconds Timer) */}
+                {isWaitingContent ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="nd-assistant-surface space-y-2.5 rounded-2xl px-4 py-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate text-[#CBD5E1]">
+                        {routerStatus?.isFallback ? (
+                          <span className="text-[#FB923C]">
+                            {routerStatus.previousFailedModel
+                              ? `${routerStatus.previousFailedModel} padat, beralih ke ${routerStatus.modelName}...`
+                              : `Beralih otomatis ke ${routerStatus.modelName}...`}
+                          </span>
+                        ) : routerStatus?.deepThink ? (
+                          <>
+                            Penalaran DeepThink pada{' '}
+                            <strong className="text-[#22D3EE]">
+                              {routerStatus.modelName || 'NodataGPT'}
+                            </strong>
+                            ...
+                          </>
+                        ) : (
+                          <>
+                            NodataGPT sedang menyusun jawaban
+                            {routerStatus?.modelName
+                              ? ` (${routerStatus.modelName})`
+                              : ''}
+                            ...
+                          </>
+                        )}
+                      </span>
+
+                      <span className="shrink-0 rounded-md border border-[#FB923C]/35 bg-[#FB923C]/12 px-2 py-0.5 font-mono-code text-[11px] font-semibold tabular-nums text-[#FB923C]">
+                        {formattedLiveSeconds}
+                      </span>
+                    </div>
+
+                    <div className="nd-shimmer-bar h-3.5 w-full rounded-md" />
+                    <div className="nd-shimmer-bar h-3.5 w-5/6 rounded-md" />
+                    <div className="nd-shimmer-bar h-3.5 w-3/5 rounded-md" />
+                  </div>
+                ) : isErrorState ? (
+                  <div
+                    role="alert"
+                    className="rounded-2xl border border-[#FB923C]/40 bg-[#1A110E]/88 p-3.5 text-sm text-[#FED7AA] backdrop-blur-md"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 font-semibold text-[#FB923C]">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        <span>Permintaan belum berhasil</span>
+                      </span>
+                      {typeof msg.durationMs === 'number' && msg.durationMs > 0 && (
+                        <span className="font-mono-code text-[11px] tabular-nums text-[#94A3B8]">
+                          {(msg.durationMs / 1000).toFixed(1)} dtk
+                        </span>
+                      )}
                     </div>
                     <p className="m-0 leading-relaxed text-[#F8FAFC]">{msg.content}</p>
                     <button
                       type="button"
+                      disabled={isLoading}
                       onClick={() => onRegenerate(msg.id)}
-                      className="mt-3 inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#FB923C]/50 bg-black/50 px-3 py-1.5 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#FB923C]/15 cursor-pointer"
+                      className="mt-3 inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-[#FB923C]/50 bg-black/50 px-3 py-1.5 text-xs font-semibold text-[#FB923C] transition-colors hover:bg-[#FB923C]/15 disabled:opacity-45 cursor-pointer"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       <span>Coba Lagi dengan Auto-Fallback</span>
                     </button>
                   </div>
                 ) : (
+                  /* Phase 2 (Typing Stream) & Phase 3 (Completed Message) */
                   <div className="nd-assistant-surface rounded-2xl px-3.5 py-3 sm:px-4.5 sm:py-3.5">
                     {msg.thinkingContent && (
                       <ThinkingAccordion content={msg.thinkingContent} />
@@ -238,111 +340,106 @@ export function ChatThread({
                       </div>
                     )}
 
-                    <MarkdownRenderer content={msg.content} />
+                    <MarkdownRenderer
+                      content={msg.content}
+                      isStreaming={isTypingContent}
+                    />
 
-                    {/* Message Action Bar */}
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1 border-t border-white/[0.06] pt-2 text-[#94A3B8]">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyMessage(msg)}
-                        aria-label="Salin jawaban"
-                        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
-                      >
-                        {copiedId === msg.id ? (
-                          <>
-                            <Check className="h-3.5 w-3.5 text-[#22D3EE]" />
-                            <span className="text-[#22D3EE]">Tersalin</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-3.5 w-3.5" />
-                            <span>Salin</span>
-                          </>
-                        )}
-                      </button>
+                    {/* Live Typing Footer (Seconds Ticking + Instant Reveal Button from WormGPT) */}
+                    {isTypingContent && isLastAssistant ? (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-2.5">
+                        <span className="inline-flex items-center gap-1.5 font-mono-code text-xs font-medium tabular-nums text-[#FB923C]">
+                          <Clock className="h-3.5 w-3.5 text-[#22D3EE]" />
+                          <span>Waktu menulis: {formattedLiveSeconds}</span>
+                        </span>
 
-                      {canSpeak && !msg.imageUrl && (
                         <button
                           type="button"
-                          onClick={() => handleSpeakMessage(msg)}
-                          aria-label={
-                            speakingId === msg.id ? 'Hentikan suara' : 'Bacakan jawaban'
-                          }
-                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                          onClick={onFlushStream}
+                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border border-[#FB923C]/35 bg-[#FB923C]/12 px-2.5 py-1 text-xs font-medium text-[#FDBA74] transition-colors hover:bg-[#FB923C]/22 hover:text-white cursor-pointer"
                         >
-                          {speakingId === msg.id ? (
-                            <>
-                              <VolumeX className="h-3.5 w-3.5 text-[#FB923C]" />
-                              <span className="text-[#FB923C]">Berhenti</span>
-                            </>
-                          ) : (
-                            <>
-                              <Volume2 className="h-3.5 w-3.5" />
-                              <span>Suara</span>
-                            </>
+                          <FastForward className="h-3.5 w-3.5" />
+                          <span>Tampilkan seluruh jawaban sekarang</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Completed Message Action Bar + Recorded Duration Badge */
+                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-2 text-[#94A3B8]">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(msg)}
+                            aria-label="Salin jawaban"
+                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                          >
+                            {copiedId === msg.id ? (
+                              <>
+                                <Check className="h-3.5 w-3.5 text-[#22D3EE]" />
+                                <span className="text-[#22D3EE]">Tersalin</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3.5 w-3.5" />
+                                <span>Salin</span>
+                              </>
+                            )}
+                          </button>
+
+                          {canSpeak && !msg.imageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => handleSpeakMessage(msg)}
+                              aria-label={
+                                speakingId === msg.id
+                                  ? 'Hentikan suara'
+                                  : 'Bacakan jawaban'
+                              }
+                              className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                            >
+                              {speakingId === msg.id ? (
+                                <>
+                                  <VolumeX className="h-3.5 w-3.5 text-[#FB923C]" />
+                                  <span className="text-[#FB923C]">Berhenti</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Volume2 className="h-3.5 w-3.5" />
+                                  <span>Suara</span>
+                                </>
+                              )}
+                            </button>
                           )}
-                        </button>
-                      )}
 
-                      {isLastAssistant && !isLoading && (
-                        <button
-                          type="button"
-                          onClick={() => onRegenerate(msg.id)}
-                          aria-label="Muat ulang jawaban"
-                          className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          <span>Ulangi</span>
-                        </button>
-                      )}
-                    </div>
+                          {isLastAssistant && !isLoading && (
+                            <button
+                              type="button"
+                              onClick={() => onRegenerate(msg.id)}
+                              aria-label="Muat ulang jawaban"
+                              className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              <span>Ulangi</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {typeof msg.durationMs === 'number' && msg.durationMs > 0 && (
+                          <span
+                            title="Total durasi respons dan penulisan"
+                            className="inline-flex items-center gap-1 rounded-md border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono-code text-[11px] tabular-nums text-[#CBD5E1]"
+                          >
+                            <Clock className="h-3 w-3 text-[#FB923C]" />
+                            <span>{(msg.durationMs / 1000).toFixed(1)} dtk</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </article>
           );
         })}
-
-        {/* Live Multi-Model Loading & Fallback Indicator */}
-        {isLoading && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex items-start gap-2.5 sm:gap-3.5"
-          >
-            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#22D3EE]/50 bg-black/80 p-1 sm:h-8 sm:w-8">
-              <img
-                src="/logo-transparent.png"
-                alt="Memproses"
-                width={24}
-                height={24}
-                className="h-full w-full animate-pulse object-contain"
-              />
-            </div>
-            <div className="nd-assistant-surface flex flex-1 flex-col gap-2 rounded-2xl px-4 py-3">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-                {routerStatus?.isFallback ? (
-                  <span className="text-[#FB923C]">
-                    {routerStatus.previousFailedModel
-                      ? `${routerStatus.previousFailedModel} sibuk, beralih ke ${routerStatus.modelName}...`
-                      : `Beralih otomatis ke ${routerStatus.modelName}...`}
-                  </span>
-                ) : (
-                  <span className="text-[#CBD5E1]">
-                    {routerStatus?.deepThink ? 'Penalaran DeepThink pada ' : 'Menghubungi '}
-                    <strong className="text-[#22D3EE]">
-                      {routerStatus?.modelName || 'NodataGPT'}
-                    </strong>
-                    ...
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 w-48 max-w-full overflow-hidden rounded-full bg-white/10">
-                <div className="animate-shimmer h-full w-24 rounded-full bg-gradient-to-r from-[#22D3EE] to-[#FB923C]" />
-              </div>
-            </div>
-          </div>
-        )}
 
         <div ref={bottomAnchorRef} className="h-2" />
       </div>

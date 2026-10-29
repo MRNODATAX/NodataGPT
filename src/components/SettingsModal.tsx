@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Sparkles, Trash2, X } from 'lucide-react';
+import { KeyRound, Play, Sparkles, Trash2, X } from 'lucide-react';
 import type { AppSettings } from '../types/chat';
 
 interface SettingsModalProps {
@@ -8,6 +8,7 @@ interface SettingsModalProps {
   conversationCount: number;
   onClose: () => void;
   onUpdateSettings: (next: AppSettings) => void;
+  onReplaySplash: () => void;
   onClearAllChats: () => void;
 }
 
@@ -17,6 +18,7 @@ export function SettingsModal({
   conversationCount,
   onClose,
   onUpdateSettings,
+  onReplaySplash,
   onClearAllChats,
 }: SettingsModalProps) {
   const [confirmClear, setConfirmClear] = useState(false);
@@ -99,6 +101,61 @@ export function SettingsModal({
                   settings.starfieldEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
                 }`}
               />
+            </button>
+          </div>
+
+          {/* Typewriter Stream Effect + Live Seconds Timer */}
+          <div className="flex items-start justify-between gap-4 border-t border-white/10 pt-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Animasi Ketik AI & Timer Detik Live
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#94A3B8]">
+                Tampilkan efek mengetik bertahap ala mesin ketik beserta hitungan detik real-time saat menulis.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings.streamEffect}
+              onClick={() =>
+                onUpdateSettings({
+                  ...settings,
+                  streamEffect: !settings.streamEffect,
+                })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                settings.streamEffect ? 'bg-[#0E7490]' : 'bg-white/20'
+              }`}
+            >
+              <span
+                className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                  settings.streamEffect ? 'translate-x-5.5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Replay Interactive Opening Animation */}
+          <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-4">
+            <div>
+              <p className="text-sm font-medium text-white">
+                Animasi Pembuka Interaktif
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[#94A3B8]">
+                Putar ulang animasi loading kosmik NodataGPT kapan saja.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onReplaySplash();
+              }}
+              className="inline-flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-3 py-1.5 text-xs font-semibold text-[#67E8F9] transition-colors hover:bg-[#22D3EE]/22 cursor-pointer"
+            >
+              <Play className="h-3.5 w-3.5" />
+              <span>Putar Ulang</span>
             </button>
           </div>
 

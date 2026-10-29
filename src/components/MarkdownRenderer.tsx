@@ -155,9 +155,15 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   );
 }
 
-export function MarkdownRenderer({ content }: { content: string }) {
+export function MarkdownRenderer({
+  content,
+  isStreaming,
+}: {
+  content: string;
+  isStreaming?: boolean;
+}) {
   return (
-    <div className="nodata-prose">
+    <div className={isStreaming ? 'nodata-prose nodata-prose-streaming' : 'nodata-prose'}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

@@ -4,21 +4,18 @@ import crypto from 'node:crypto';
 // Force IPv4-first DNS resolution on Vercel Node 24 to prevent 10s IPv6 connect blackholes
 dns.setDefaultResultOrder('ipv4first');
 
-const GOOGLE_PREFLIGHT_URL = 'https://www.google.com/?hl=en';
-const GEMINI_INIT_URL = 'https://gemini.google.com/app?hl=en';
+const GEMINI_BASE = 'https://gemini.google.com';
+const GEMINI_INIT_URL = 'https://gemini.google.com/app';
 const GEMINI_STREAM_GENERATE_URL =
   'https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate';
 
-const CHROME_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const CONSENT_SOCS_COOKIE =
   'CAISHAgBEhJnd3NfMjAyNDA4MTQtMF9SQzIaAmVuIAEaBgiAo_CmBg';
 
-const FLASH_LITE_MODEL_ID = 'cf41b0e0dd7d53e5';
-const FLASH_MODEL_ID = 'fbb127bbb056c959';
-
-const SESSION_TTL_MS = 8 * 60 * 1000;
+const BL_TTL_MS = 15 * 60 * 1000;
 
 const GOOGLE_WEB_ERROR_PHRASES = [
   'Sorry, something went wrong. Please try your request again.',
@@ -40,49 +37,20 @@ const RPC_ERROR_LABELS = {
   1060: 'IP_TEMPORARILY_BLOCKED (IP server sementara dibatasi oleh Google)',
 };
 
-/** @type {{ jar: Map<string, string>, bl: string, fsid: string, at: string, hl: string, sessionId: string, reqid: number, mode: 'guest' | 'cookie', initUrl: string, mintedAt: number } | null} */
-let cachedSession = null;
-
-function extractSetCookies(headers) {
-  if (typeof headers.getSetCookie === 'function') {
-    const list = headers.getSetCookie();
-    if (Array.isArray(list) && list.length > 0) return list;
-  }
-  const single = headers.get('set-cookie');
-  if (!single) return [];
-  return single.split(/,(?=\s*[!#$%&'*+\-.^_`|~0-9A-Za-z]+=)/g);
-}
-
-function updateCookieJar(jar, response) {
-  const rawCookies = extractSetCookies(response.headers);
-  for (const raw of rawCookies) {
-    if (!raw || typeof raw !== 'string') continue;
-    const segments = raw.split(';');
-    const first = segments[0]?.trim() || '';
-    const eqIdx = first.indexOf('=');
-    if (eqIdx <= 0) continue;
-    const name = first.slice(0, eqIdx).trim();
-    const value = first.slice(eqIdx + 1).trim();
-    const attrs = segments.slice(1).join(';').toLowerCase();
-    if (!value || /max-age\s*=\s*0\b/.test(attrs)) {
-      jar.delete(name);
-    } else {
-      jar.set(name, value);
-    }
-  }
-}
-
-function serializeCookieJar(jar) {
-  const parts = [];
-  for (const [k, v] of jar.entries()) {
-    if (k && v) parts.push(`${k}=${v}`);
-  }
-  return parts.join('; ');
-}
+/** @type {{ bl: string, fsid: string, mintedAt: number, initUrl: string } | null} */
+let cachedBuildState = null;
 
 function extractMatch(html, regex) {
   const m = regex.exec(html);
   return m && m[1] ? m[1] : '';
+}
+
+export function extractBuildLabel(html) {
+  if (!html || typeof html !== 'string') return '';
+  const cfb2h = extractMatch(html, /"cfb2h"\s*:\s*"([^"]+)"/);
+  if (cfb2h) return cfb2h;
+  const rawBoq = /boq_[A-Za-z0-9-]+_\d{8}\.\d+_p\d+/.exec(html);
+  return rawBoq ? rawBoq[0] : '';
 }
 
 export function isGoogleWebErrorReply(text) {
@@ -99,8 +67,9 @@ export function isGoogleWebErrorReply(text) {
 export function stripGeminiInternalArtifacts(text) {
   if (!text || typeof text !== 'string') return '';
   return text
+    .replace(/```([A-Za-z0-9_+#-]*)\?code_[a-z_]+&code_event_index=\d+/gi, '```$1')
     .replace(
-      /https?:\/\/googleusercontent\.com\/(?:image_generation_content|image_retrieval|image_collection|card_content)[/\w]*\d*\n*/gi,
+      /https?:\/\/googleusercontent\.com\/(?:image_generation_content|image_retrieval|image_collection|card_content)[/\w]*\d*\/?\S*/gi,
       ''
     )
     .replace(/```[a-zA-Z0-9_-]*\?code_stdout(?:&code_event_index=\d+)?\s*[\r\n][\s\S]*?```/gi, '')
@@ -168,20 +137,92 @@ export function scanTopLevelJsonArrays(rawBody) {
   return arrays;
 }
 
+function extractCandidateText(candidate) {
+  if (!Array.isArray(candidate) || candidate.length < 2) return '';
+  const payload = candidate[1];
+  if (typeof payload === 'string') return payload;
+  if (!Array.isArray(payload)) return '';
+
+  const chunks = [];
+  for (const part of payload) {
+    if (typeof part === 'string') {
+      chunks.push(part);
+    } else if (Array.isArray(part) && part.length > 1) {
+      const inner = part[1];
+      if (typeof inner === 'string') {
+        chunks.push(inner);
+      } else if (Array.isArray(inner)) {
+        for (const s of inner) {
+          if (typeof s === 'string') chunks.push(s);
+        }
+      }
+    }
+  }
+  const joined = chunks.join('');
+  if (
+    joined &&
+    /^https?:\/\/googleusercontent\.com\/card_content\/\d+/i.test(joined) &&
+    Array.isArray(candidate[22]) &&
+    typeof candidate[22][0] === 'string'
+  ) {
+    return candidate[22][0];
+  }
+  return joined;
+}
+
+function extractCandidateThoughts(candidate) {
+  if (!Array.isArray(candidate) || candidate.length <= 37) return '';
+  const root = candidate[37];
+  if (!Array.isArray(root) || !Array.isArray(root[0])) return '';
+
+  let best = '';
+  const stack = [root[0]];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (typeof node === 'string') {
+      if (!node.includes('://') && node.length > best.length) {
+        best = node;
+      }
+    } else if (Array.isArray(node)) {
+      for (const child of node) stack.push(child);
+    }
+  }
+  return best.trim();
+}
+
+function collectTaggedFrames(node, out) {
+  if (!Array.isArray(node) || node.length === 0) return;
+  if (typeof node[0] === 'string') {
+    out.push(node);
+    return;
+  }
+  for (const item of node) {
+    collectTaggedFrames(item, out);
+  }
+}
+
 export function parseGeminiWrbStream(rawBody) {
-  const frames = scanTopLevelJsonArrays(rawBody);
-  let cumulativeText = '';
-  let cumulativeThoughts = '';
+  const outerArrays = scanTopLevelJsonArrays(rawBody);
+  const hasBardErrorInfo =
+    typeof rawBody === 'string' && rawBody.includes('BardErrorInfo');
+  let bestText = '';
+  let bestThoughts = '';
   let cid = '';
   let rid = '';
   let rcid = '';
   let rpcErrorCode = null;
+  let hasErFrame = false;
   let wrbFrameCount = 0;
 
-  for (const outer of frames) {
-    if (!Array.isArray(outer)) continue;
-    for (const part of outer) {
-      if (!Array.isArray(part)) continue;
+  for (const outer of outerArrays) {
+    const tagged = [];
+    collectTaggedFrames(outer, tagged);
+
+    for (const part of tagged) {
+      if (part[0] === 'er') {
+        hasErFrame = true;
+        continue;
+      }
 
       const maybeErr = part?.[5]?.[2]?.[0]?.[1]?.[0];
       if (typeof maybeErr === 'number' && rpcErrorCode === null) {
@@ -209,45 +250,74 @@ export function parseGeminiWrbStream(rawBody) {
       const candidates = payload[4];
       if (!Array.isArray(candidates) || candidates.length === 0) continue;
 
-      const c0 = candidates[0];
-      if (!Array.isArray(c0)) continue;
-
-      if (typeof c0[0] === 'string' && c0[0]) {
-        rcid = c0[0];
-      }
-
-      let frameText =
-        Array.isArray(c0[1]) && typeof c0[1][0] === 'string' ? c0[1][0] : null;
-      if (
-        frameText &&
-        /^https?:\/\/googleusercontent\.com\/card_content\/\d+/i.test(frameText) &&
-        Array.isArray(c0[22]) &&
-        typeof c0[22][0] === 'string'
-      ) {
-        frameText = c0[22][0];
-      }
-
-      if (typeof frameText === 'string') {
-        cumulativeText = frameText;
-      }
-
-      const frameThoughts = c0?.[37]?.[0]?.[0];
-      if (typeof frameThoughts === 'string' && frameThoughts) {
-        cumulativeThoughts = frameThoughts;
+      for (const cand of candidates) {
+        if (!Array.isArray(cand)) continue;
+        if (typeof cand[0] === 'string' && cand[0]) {
+          rcid = cand[0];
+        }
+        const candText = extractCandidateText(cand);
+        if (candText.length >= bestText.length && candText) {
+          bestText = candText;
+        }
+        const candThoughts = extractCandidateThoughts(cand);
+        if (candThoughts.length >= bestThoughts.length && candThoughts) {
+          bestThoughts = candThoughts;
+        }
       }
     }
   }
 
   return {
-    text: stripGeminiInternalArtifacts(cumulativeText),
-    thoughts: cumulativeThoughts.trim(),
+    text: stripGeminiInternalArtifacts(bestText),
+    thoughts: bestThoughts,
     cid,
     rid,
     rcid,
     rpcErrorCode,
+    hasErFrame,
+    hasBardErrorInfo,
     wrbFrameCount,
-    totalFrames: frames.length,
+    totalFrames: outerArrays.length,
   };
+}
+
+/**
+ * Live-verified Oct 2026 anonymous StreamGenerate 102-slot payload (`boq_gemini-web-uiserver_*`):
+ * - inner[6] = [0] (anonymous/free tier)
+ * - inner[17] = [[think]] (4 = fast off, 0 = deep thinking)
+ * - inner[41] = [2] (non-persistent guest history)
+ * - inner[59] = lowercase UUIDv4
+ * - inner[79] = mode (1 = Flash 3.6/3.7, 2 = Flash Thinking, 4 = Auto, 6 = Flash-Lite)
+ */
+export function buildAnonymous102Payload({
+  prompt,
+  language = 'en',
+  mode = 1,
+  think = 4,
+}) {
+  const requestUuid = crypto.randomUUID().toLowerCase();
+  const inner = new Array(102).fill(null);
+
+  inner[0] = [prompt, 0, null, null, null, null, 0];
+  inner[1] = [language];
+  inner[2] = ['', '', '', null, null, null, null, null, null, ''];
+  inner[6] = [0];
+  inner[7] = 1;
+  inner[10] = 1;
+  inner[11] = 0;
+  inner[17] = [[think]];
+  inner[18] = 0;
+  inner[27] = 1;
+  inner[30] = [4];
+  inner[41] = [2];
+  inner[53] = 0;
+  inner[59] = requestUuid;
+  inner[61] = [];
+  inner[68] = 1;
+  inner[79] = mode;
+
+  const outerJson = JSON.stringify([null, JSON.stringify(inner)]);
+  return { outerJson, requestUuid };
 }
 
 export function build81SlotPayload({
@@ -262,15 +332,15 @@ export function build81SlotPayload({
   inner[0] = [prompt, 0, null, null, null, null, 0];
   inner[1] = [language];
   inner[2] = ['', '', '', null, null, null, null, null, null, ''];
-  inner[6] = [1];
-  inner[7] = 1; // STREAMING_FLAG_INDEX
+  inner[6] = [0];
+  inner[7] = 1;
   inner[10] = 1;
   inner[11] = 0;
-  inner[17] = [[0]];
+  inner[17] = [[thinkingLevel === 2 ? 0 : 4]];
   inner[18] = 0;
   inner[27] = 1;
   inner[30] = [4];
-  inner[41] = [1];
+  inner[41] = [2];
   inner[53] = 0;
   inner[59] = requestUuid;
   inner[61] = [];
@@ -280,27 +350,6 @@ export function build81SlotPayload({
 
   const outerJson = JSON.stringify([null, JSON.stringify(inner)]);
   return { outerJson, requestUuid };
-}
-
-export function buildZibri104Payload(prompt, language = 'en') {
-  const inner = new Array(104).fill(null);
-  inner[0] = [prompt, 0, null, null, null, null, null];
-  inner[1] = [language];
-  inner[2] = ['', '', '', null, null, null, null, null, null, ''];
-  inner[3] = '';
-  inner[4] = '';
-  inner[5] = null;
-  inner[6] = [0];
-  inner[7] = 1;
-  inner[10] = 1;
-  inner[11] = 1;
-  inner[17] = [[0]];
-  inner[18] = 1;
-  inner[27] = 1;
-  inner[30] = [4];
-  inner[41] = [2];
-  inner[103] = [];
-  return JSON.stringify([null, JSON.stringify(inner)]);
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -313,277 +362,124 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-async function mintGeminiSession(forceRefresh = false) {
+async function ensureBuildState(forceRefresh = false) {
   if (
     !forceRefresh &&
-    cachedSession &&
-    Date.now() - cachedSession.mintedAt < SESSION_TTL_MS &&
-    cachedSession.bl
+    cachedBuildState &&
+    Date.now() - cachedBuildState.mintedAt < BL_TTL_MS &&
+    cachedBuildState.bl
   ) {
-    cachedSession.reqid += 100000;
-    return cachedSession;
+    return cachedBuildState;
   }
 
-  const jar = new Map();
-  let mode = 'guest';
-
-  const envPsid = (process.env.GEMINI_1PSID || '').trim();
-  const envPsidts = (process.env.GEMINI_1PSIDTS || '').trim();
-  if (envPsid) {
-    jar.set('__Secure-1PSID', envPsid);
-    if (envPsidts) jar.set('__Secure-1PSIDTS', envPsidts);
-    mode = 'cookie';
-  }
-
-  if (mode === 'guest') {
-    try {
-      const preflightRes = await fetchWithTimeout(
-        GOOGLE_PREFLIGHT_URL,
-        {
-          method: 'GET',
-          redirect: 'follow',
-          headers: {
-            'User-Agent': CHROME_UA,
-          },
-        },
-        7000
-      );
-      updateCookieJar(jar, preflightRes);
-    } catch {
-      // Proceed to /app even if google.com preflight fails
-    }
-  }
-
-  const fetchInitPage = async () => {
-    const cookieHeader = serializeCookieJar(jar);
+  const fetchAppHtml = async (extraCookie = '') => {
     const res = await fetchWithTimeout(
       GEMINI_INIT_URL,
       {
         method: 'GET',
         redirect: 'follow',
         headers: {
-          'User-Agent': CHROME_UA,
-          Origin: 'https://gemini.google.com',
-          Referer: 'https://gemini.google.com/',
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          'User-Agent': DEFAULT_USER_AGENT,
+          'Accept-Language': 'en-US,en;q=0.9',
+          ...(extraCookie ? { Cookie: extraCookie } : {}),
         },
       },
       9000
     );
-    updateCookieJar(jar, res);
     const html = await res.text();
     return { res, html };
   };
 
-  let { res: initRes, html } = await fetchInitPage();
-  const finalUrl = initRes.url || '';
-
+  let { res, html } = await fetchAppHtml('');
   if (
-    finalUrl.includes('consent.google.com') ||
-    (!html.includes('cfb2h') && html.includes('consent.google.com'))
+    (res.url || '').includes('consent.google.com') ||
+    (!extractBuildLabel(html) && html.includes('consent.google.com'))
   ) {
-    jar.set('SOCS', CONSENT_SOCS_COOKIE);
-    ({ res: initRes, html } = await fetchInitPage());
+    ({ res, html } = await fetchAppHtml(`SOCS=${CONSENT_SOCS_COOKIE}`));
   }
 
-  if (initRes.status === 429 || (initRes.url || '').includes('/sorry')) {
+  if (res.status === 429 || (res.url || '').includes('/sorry')) {
     throw new Error(
-      `Google membatasi IP server sementara (HTTP ${initRes.status} /sorry challenge).`
+      `Google membatasi IP server sementara (HTTP ${res.status} /sorry challenge).`
     );
   }
 
-  if (!initRes.ok) {
-    throw new Error(`Gagal membuka sesi Gemini Web (HTTP ${initRes.status}).`);
+  if (!res.ok) {
+    throw new Error(`Gagal mengambil build label Gemini Web (HTTP ${res.status}).`);
   }
 
-  const bl = extractMatch(html, /"cfb2h"\s*:\s*"([^"]+)"/);
+  const bl = extractBuildLabel(html);
   const fsid = extractMatch(html, /"FdrFJe"\s*:\s*"([^"]+)"/);
-  const at = extractMatch(html, /"SNlM0e"\s*:\s*"([^"]*)"/);
-  const hl = extractMatch(html, /"TuX5cc"\s*:\s*"([^"]+)"/) || 'en';
 
   if (!bl) {
     throw new Error(
-      `Token build label (cfb2h) tidak ditemukan dari halaman Gemini (URL akhir: ${initRes.url || GEMINI_INIT_URL}).`
+      `Build label (cfb2h / boq_*) tidak ditemukan dari gemini.google.com/app.`
     );
   }
 
-  cachedSession = {
-    jar,
+  cachedBuildState = {
     bl,
     fsid,
-    at,
-    hl,
-    sessionId: crypto.randomUUID().toUpperCase(),
-    reqid: 100000 + Math.floor(Math.random() * 800000),
-    mode: at ? 'cookie' : mode,
-    initUrl: initRes.url || GEMINI_INIT_URL,
+    initUrl: res.url || GEMINI_INIT_URL,
     mintedAt: Date.now(),
   };
 
-  return cachedSession;
+  return cachedBuildState;
 }
 
-async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81', thinking = false) {
+async function invokeAnonymousStreamGenerate(
+  buildState,
+  promptText,
+  variant = 'web2api-flash',
+  thinking = false
+) {
   const stepStart = Date.now();
-  let outerJson = '';
-  let requestUuid = crypto.randomUUID().toUpperCase();
+  const reqid = Date.now() % 1000000;
 
-  const headers = {
-    'User-Agent': CHROME_UA,
-    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-    Origin: 'https://gemini.google.com',
-    Referer: 'https://gemini.google.com/app',
-    'X-Same-Domain': '1',
-  };
+  let mode = thinking ? 2 : 1; // 1 = Flash (3.6/3.7), 2 = Thinking, 4 = Auto, 6 = Flash-Lite
+  let think = thinking ? 0 : 4; // 4 = fast off, 0 = deep thinking
 
-  const params = new URLSearchParams({
-    hl: session.hl || 'en',
-    _reqid: String(session.reqid),
-    rt: 'c',
-    'source-path': '/app',
+  if (variant === 'web2api-lite') {
+    mode = 6;
+    think = 4;
+  } else if (variant === 'web2api-auto') {
+    mode = 4;
+    think = 4;
+  } else if (variant === 'web2api-thinking') {
+    mode = 2;
+    think = 0;
+  }
+
+  const { outerJson } = buildAnonymous102Payload({
+    prompt: promptText,
+    language: 'en',
+    mode,
+    think,
   });
-  if (session.bl) params.set('bl', session.bl);
-  if (session.fsid) params.set('f.sid', session.fsid);
 
-  const formParams = new URLSearchParams();
+  const url = `${GEMINI_STREAM_GENERATE_URL}?bl=${encodeURIComponent(
+    buildState.bl
+  )}&hl=en&_reqid=${reqid}&rt=c`;
 
-  if (variant === 'zibri-104') {
-    outerJson = buildZibri104Payload(promptText, session.hl || 'en');
-    formParams.set('f.req', outerJson);
-  } else if (variant === 'argon-81') {
-    const built = build81SlotPayload({
-      prompt: promptText,
-      language: session.hl || 'en',
-      modelNumber: 6,
-      thinkingLevel: 2,
-    });
-    outerJson = built.outerJson;
-    requestUuid = built.requestUuid;
-    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
-    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
-      1,
-      null,
-      null,
-      null,
-      FLASH_LITE_MODEL_ID,
-      null,
-      null,
-      0,
-      [4, 5, 6, 8],
-      null,
-      null,
-      1,
-      null,
-      null,
-      1,
-    ]);
-    headers['x-goog-ext-73010989-jspb'] = '[0]';
-    headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
-    if (session.at) formParams.set('at', session.at);
-    formParams.set('f.req', outerJson);
-  } else if (variant === 'flash-lite-81') {
-    const thinkingLevel = thinking ? 2 : 1;
-    const built = build81SlotPayload({
-      prompt: promptText,
-      language: session.hl || 'en',
-      modelNumber: 6,
-      thinkingLevel,
-    });
-    outerJson = built.outerJson;
-    requestUuid = built.requestUuid;
-    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
-    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
-      1,
-      null,
-      null,
-      null,
-      FLASH_LITE_MODEL_ID,
-      null,
-      null,
-      0,
-      [4, 5, 6, 8],
-      null,
-      null,
-      1,
-      null,
-      null,
-      6,
-      thinkingLevel,
-      session.sessionId,
-    ]);
-    headers['x-goog-ext-73010989-jspb'] = '[0]';
-    headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
-    formParams.set('at', session.at || '');
-    formParams.set('f.req', outerJson);
-  } else {
-    // Default 'hanaoka-81': let Google pick guest-eligible model without forcing restricted model hash
-    const thinkingLevel = thinking ? 2 : 1;
-    const built = build81SlotPayload({
-      prompt: promptText,
-      language: session.hl || 'en',
-      modelNumber: 1,
-      thinkingLevel,
-    });
-    outerJson = built.outerJson;
-    requestUuid = built.requestUuid;
-    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
-    formParams.set('at', session.at || '');
-    formParams.set('f.req', outerJson);
-  }
+  const body = new URLSearchParams({ 'f.req': outerJson }).toString();
 
-  if (variant === 'flash-81') {
-    const built = build81SlotPayload({
-      prompt: promptText,
-      language: session.hl || 'en',
-      modelNumber: 1,
-      thinkingLevel: 1,
-    });
-    outerJson = built.outerJson;
-    requestUuid = built.requestUuid;
-    headers['x-goog-ext-525005358-jspb'] = `["${requestUuid}",1]`;
-    headers['x-goog-ext-525001261-jspb'] = JSON.stringify([
-      1,
-      null,
-      null,
-      null,
-      FLASH_MODEL_ID,
-      null,
-      null,
-      0,
-      [4, 5, 6, 8],
-      null,
-      null,
-      1,
-      null,
-      null,
-      1,
-      1,
-      session.sessionId,
-    ]);
-    headers['x-goog-ext-73010989-jspb'] = '[0]';
-    headers['x-goog-ext-73010990-jspb'] = '[0,0,0]';
-    formParams.set('at', session.at || '');
-    formParams.set('f.req', outerJson);
-  }
-
-  const cookieHeader = serializeCookieJar(session.jar);
-  if (cookieHeader && variant !== 'cookie-free-81') {
-    headers.Cookie = cookieHeader;
-  }
-
-  const url = `${GEMINI_STREAM_GENERATE_URL}?${params.toString()}`;
   const res = await fetchWithTimeout(
     url,
     {
       method: 'POST',
       redirect: 'manual',
-      headers,
-      body: formParams.toString(),
+      headers: {
+        'User-Agent': DEFAULT_USER_AGENT,
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: GEMINI_BASE,
+        Referer: `${GEMINI_BASE}/app`,
+        'X-Same-Domain': '1',
+      },
+      body,
     },
-    19000
+    22000
   );
-
-  updateCookieJar(session.jar, res);
 
   const location = res.headers.get('location') || '';
   if (res.status === 429 || location.includes('/sorry')) {
@@ -592,13 +488,27 @@ async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81',
       variant,
       stepMs: Date.now() - stepStart,
       httpStatus: res.status,
-      location,
       retryable: false,
+      refreshBl: false,
       error: 'IP server terkena pembatasan CAPTCHA Google (/sorry).',
     };
   }
 
   const rawBody = await res.text();
+
+  if (res.status === 405) {
+    return {
+      ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
+      httpStatus: 405,
+      retryable: true,
+      refreshBl: true,
+      error: 'Build label Gemini kedaluwarsa (HTTP 405).',
+      rawPreview: rawBody.slice(0, 260),
+    };
+  }
+
   if (!res.ok) {
     return {
       ok: false,
@@ -606,8 +516,9 @@ async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81',
       stepMs: Date.now() - stepStart,
       httpStatus: res.status,
       retryable: res.status >= 500 || res.status === 400,
+      refreshBl: res.status === 400,
       error: `StreamGenerate mengembalikan HTTP ${res.status}.`,
-      rawPreview: rawBody.slice(0, 320),
+      rawPreview: rawBody.slice(0, 300),
     };
   }
 
@@ -622,13 +533,25 @@ async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81',
       stepMs: Date.now() - stepStart,
       httpStatus: 200,
       rpcErrorCode: parsed.rpcErrorCode,
-      retryable:
-        parsed.rpcErrorCode === 1013 ||
-        parsed.rpcErrorCode === 1050 ||
-        parsed.rpcErrorCode === 1052,
+      retryable: parsed.rpcErrorCode === 1013,
+      refreshBl: false,
       error: `Google Gemini menolak request: ${label}`,
       wrbFrameCount: parsed.wrbFrameCount,
-      rawPreview: rawBody.slice(0, 320),
+      rawPreview: rawBody.slice(0, 300),
+    };
+  }
+
+  if ((parsed.hasBardErrorInfo || parsed.hasErFrame) && !parsed.text) {
+    return {
+      ok: false,
+      variant,
+      stepMs: Date.now() - stepStart,
+      httpStatus: 200,
+      retryable: true,
+      refreshBl: false,
+      error: 'Gemini menolak request (BardErrorInfo / er frame).',
+      wrbFrameCount: parsed.wrbFrameCount,
+      rawPreview: rawBody.slice(0, 300),
     };
   }
 
@@ -639,8 +562,9 @@ async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81',
       stepMs: Date.now() - stepStart,
       httpStatus: 200,
       retryable: true,
+      refreshBl: false,
       error: `Respons WRB kosong dari Gemini (${parsed.wrbFrameCount} frame).`,
-      rawPreview: rawBody.slice(0, 320),
+      rawPreview: rawBody.slice(0, 300),
     };
   }
 
@@ -652,6 +576,7 @@ async function invokeStreamGenerate(session, promptText, variant = 'hanaoka-81',
       httpStatus: 200,
       googleTemplateError: true,
       retryable: true,
+      refreshBl: false,
       error: `Template penolakan Google Web: "${parsed.text}"`,
       wrbFrameCount: parsed.wrbFrameCount,
     };
@@ -723,30 +648,22 @@ export default async function handler(req, res) {
   const attemptDiagnostics = [];
 
   try {
-    const session = await mintGeminiSession(false);
-    const sessionSummary = {
-      mode: session.mode,
-      bl: session.bl,
-      hasFsid: Boolean(session.fsid),
-      hasAt: Boolean(session.at),
-      hl: session.hl,
-      cookieNames: Array.from(session.jar.keys()),
-      initUrl: session.initUrl,
-    };
+    let buildState = await ensureBuildState(false);
 
     const variants = requestedVariant
       ? [requestedVariant]
-      : isProbe
-        ? ['hanaoka-81']
-        : ['hanaoka-81', 'flash-lite-81'];
+      : thinking
+        ? ['web2api-thinking', 'web2api-flash']
+        : ['web2api-flash', 'web2api-lite'];
 
     for (let idx = 0; idx < variants.length; idx++) {
       const variant = variants[idx];
-      if (idx > 0) {
-        session.reqid += 100000;
-      }
-
-      const outcome = await invokeStreamGenerate(session, finalPrompt, variant, thinking);
+      const outcome = await invokeAnonymousStreamGenerate(
+        buildState,
+        finalPrompt,
+        variant,
+        thinking
+      );
       attemptDiagnostics.push({
         variant: outcome.variant,
         ok: outcome.ok,
@@ -762,15 +679,24 @@ export default async function handler(req, res) {
         return res.status(200).json({
           status: true,
           ok: true,
-          provider: 'Google Gemini Direct (81-Slot Web RPC)',
-          mode: session.mode,
+          provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
+          mode: 'guest-keyless',
           variant: outcome.variant,
-          bl: session.bl,
+          bl: buildState.bl,
           latencyMs: Date.now() - startedAt,
           ...(outcome.thoughts ? { thinking: outcome.thoughts } : {}),
           result: outcome.text,
-          ...(isProbe ? { session: sessionSummary, diagnostics: attemptDiagnostics } : {}),
+          ...(isProbe
+            ? {
+                buildState: { bl: buildState.bl, initUrl: buildState.initUrl },
+                diagnostics: attemptDiagnostics,
+              }
+            : {}),
         });
+      }
+
+      if (outcome.refreshBl) {
+        buildState = await ensureBuildState(true);
       }
 
       if (!outcome.retryable) {
@@ -782,12 +708,14 @@ export default async function handler(req, res) {
     return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
-      provider: 'Google Gemini Direct (81-Slot Web RPC)',
+      provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
       latencyMs: Date.now() - startedAt,
       error:
         lastDiag?.error ||
         'Gagal memperoleh jawaban dari endpoint StreamGenerate Gemini.',
-      ...(isProbe ? { session: sessionSummary } : {}),
+      ...(isProbe
+        ? { buildState: { bl: buildState.bl, initUrl: buildState.initUrl } }
+        : {}),
       diagnostics: attemptDiagnostics,
     });
   } catch (err) {
@@ -796,7 +724,7 @@ export default async function handler(req, res) {
     return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
-      provider: 'Google Gemini Direct (81-Slot Web RPC)',
+      provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
       latencyMs: Date.now() - startedAt,
       error: message,
       diagnostics: attemptDiagnostics,

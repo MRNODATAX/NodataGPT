@@ -596,9 +596,9 @@ export function buildModelRequests(
 
   switch (model.id) {
     case 'gemini':
-      // 1st: Direct Google Gemini 81-Slot Guest Scraper (/api/gemini)
-      // 2nd: Neosoft Gemini scraper (if recovered)
-      // 3rd+: Fast Flash-class mirrors (LLM7 Nemotron-3 30B, Stenly AI Prompt, Nexray Overchat)
+      // 1st: Direct Google Gemini Web RPC Scraper (/api/gemini — 102-slot StreamGenerate, ~2s fail-fast on soft-block)
+      // 2nd+: Instant live Flash-class mirrors (LLM7 Nemotron-3 30B, Stenly AI Prompt, Nexray Overchat)
+      // Last: Neosoft Gemini scraper (if upstream recovers)
       return [
         {
           targetUrl: '/api/gemini',
@@ -608,12 +608,7 @@ export function buildModelRequests(
             text: buildContextualUserText(rawPrompt, history, settings, 4500),
             system: buildSystemPersona(settings, 'full'),
           }),
-          timeoutMs: 26000,
-        },
-        {
-          targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${compactQ}`,
-          timeoutMs: 8500,
-          clientFirst: true,
+          timeoutMs: 16000,
         },
         {
           targetUrl: 'https://api.llm7.io/v1/chat/completions',
@@ -634,6 +629,11 @@ export function buildModelRequests(
         {
           targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
           timeoutMs: 20000,
+        },
+        {
+          targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${compactQ}`,
+          timeoutMs: 8000,
+          clientFirst: true,
         },
       ];
 

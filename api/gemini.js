@@ -8,6 +8,7 @@ const GEMINI_BASE = 'https://gemini.google.com';
 const GEMINI_INIT_URL = 'https://gemini.google.com/app';
 const GEMINI_STREAM_GENERATE_URL =
   'https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate';
+const GOOGLE_ROTATE_COOKIES_URL = 'https://accounts.google.com/RotateCookies';
 
 const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -37,7 +38,7 @@ const RPC_ERROR_LABELS = {
   1060: 'IP_TEMPORARILY_BLOCKED (IP server sementara dibatasi oleh Google)',
 };
 
-/** @type {{ bl: string, fsid: string, mintedAt: number, initUrl: string } | null} */
+/** @type {{ bl: string, fsid: string, at: string, cookieHeader: string, sapisid: string, mode: 'guest-keyless' | 'cookie-auth', mintedAt: number, initUrl: string } | null} */
 let cachedBuildState = null;
 
 function extractMatch(html, regex) {
@@ -51,6 +52,44 @@ export function extractBuildLabel(html) {
   if (cfb2h) return cfb2h;
   const rawBoq = /boq_[A-Za-z0-9-]+_\d{8}\.\d+_p\d+/.exec(html);
   return rawBoq ? rawBoq[0] : '';
+}
+
+export function makeSapisidHash(sapisid) {
+  if (!sapisid) return '';
+  const ts = Math.floor(Date.now() / 1000);
+  const sha1 = crypto
+    .createHash('sha1')
+    .update(`${ts} ${sapisid} ${GEMINI_BASE}`)
+    .digest('hex');
+  return `SAPISIDHASH ${ts}_${sha1}`;
+}
+
+function buildConfiguredCookieAuth() {
+  const rawCookie = (process.env.GEMINI_COOKIE || '').trim();
+  const psid = (process.env.GEMINI_1PSID || '').trim();
+  const psidts = (process.env.GEMINI_1PSIDTS || '').trim();
+
+  if (rawCookie) {
+    let sapisid = '';
+    for (const part of rawCookie.split(';')) {
+      const eq = part.indexOf('=');
+      if (eq <= 0) continue;
+      const k = part.slice(0, eq).trim();
+      const v = part.slice(eq + 1).trim();
+      if (k === 'SAPISID' || k === '__Secure-3PAPISID') {
+        sapisid = sapisid || v;
+      }
+    }
+    return { cookieHeader: rawCookie, sapisid };
+  }
+
+  if (psid) {
+    const pairs = [`__Secure-1PSID=${psid}`];
+    if (psidts) pairs.push(`__Secure-1PSIDTS=${psidts}`);
+    return { cookieHeader: pairs.join('; '), sapisid: '' };
+  }
+
+  return { cookieHeader: '', sapisid: '' };
 }
 
 export function isGoogleWebErrorReply(text) {
@@ -282,12 +321,12 @@ export function parseGeminiWrbStream(rawBody) {
 }
 
 /**
- * Live-verified Oct 2026 anonymous StreamGenerate 102-slot payload (`boq_gemini-web-uiserver_*`):
- * - inner[6] = [0] (anonymous/free tier)
+ * Oct 2026 StreamGenerate 102-slot wire format (`boq_gemini-web-uiserver_*`):
+ * - inner[6]  = [0]
  * - inner[17] = [[think]] (4 = fast off, 0 = deep thinking)
  * - inner[41] = [2] (non-persistent guest history)
  * - inner[59] = lowercase UUIDv4
- * - inner[79] = mode (1 = Flash 3.6/3.7, 2 = Flash Thinking, 4 = Auto, 6 = Flash-Lite)
+ * - inner[79] = mode (1 = Flash, 2 = Flash Thinking, 4 = Auto, 6 = Flash-Lite)
  */
 export function buildAnonymous102Payload({
   prompt,
@@ -362,6 +401,43 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+async function tryRotatePsidtsCookie(cookieHeader) {
+  if (!cookieHeader || !cookieHeader.includes('__Secure-1PSID=')) {
+    return cookieHeader;
+  }
+  try {
+    const res = await fetchWithTimeout(
+      GOOGLE_ROTATE_COOKIES_URL,
+      {
+        method: 'POST',
+        headers: {
+          'User-Agent': DEFAULT_USER_AGENT,
+          'Content-Type': 'application/json',
+          Origin: 'https://accounts.google.com',
+          Cookie: cookieHeader,
+        },
+        body: '[000,"-0000000000000000000"]',
+      },
+      5000
+    );
+    if (!res.ok) return cookieHeader;
+    const setCookies =
+      typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+    for (const sc of setCookies) {
+      const m = /^__Secure-1PSIDTS=([^;]+)/.exec(sc.trim());
+      if (m && m[1]) {
+        if (cookieHeader.includes('__Secure-1PSIDTS=')) {
+          return cookieHeader.replace(/__Secure-1PSIDTS=[^;]+/, `__Secure-1PSIDTS=${m[1]}`);
+        }
+        return `${cookieHeader}; __Secure-1PSIDTS=${m[1]}`;
+      }
+    }
+  } catch {
+    // Keep original cookieHeader if rotation fails
+  }
+  return cookieHeader;
+}
+
 async function ensureBuildState(forceRefresh = false) {
   if (
     !forceRefresh &&
@@ -372,7 +448,14 @@ async function ensureBuildState(forceRefresh = false) {
     return cachedBuildState;
   }
 
+  let { cookieHeader, sapisid } = buildConfiguredCookieAuth();
+  if (forceRefresh && cookieHeader) {
+    cookieHeader = await tryRotatePsidtsCookie(cookieHeader);
+  }
+
   const fetchAppHtml = async (extraCookie = '') => {
+    const mergedCookie = [cookieHeader, extraCookie].filter(Boolean).join('; ');
+    const authHeader = makeSapisidHash(sapisid);
     const res = await fetchWithTimeout(
       GEMINI_INIT_URL,
       {
@@ -381,10 +464,11 @@ async function ensureBuildState(forceRefresh = false) {
         headers: {
           'User-Agent': DEFAULT_USER_AGENT,
           'Accept-Language': 'en-US,en;q=0.9',
-          ...(extraCookie ? { Cookie: extraCookie } : {}),
+          ...(mergedCookie ? { Cookie: mergedCookie } : {}),
+          ...(authHeader ? { Authorization: authHeader } : {}),
         },
       },
-      9000
+      7500
     );
     const html = await res.text();
     return { res, html };
@@ -410,16 +494,21 @@ async function ensureBuildState(forceRefresh = false) {
 
   const bl = extractBuildLabel(html);
   const fsid = extractMatch(html, /"FdrFJe"\s*:\s*"([^"]+)"/);
+  const at = cookieHeader ? extractMatch(html, /"SNlM0e"\s*:\s*"([^"]*)"/) : '';
 
   if (!bl) {
     throw new Error(
-      `Build label (cfb2h / boq_*) tidak ditemukan dari gemini.google.com/app.`
+      'Build label (cfb2h / boq_*) tidak ditemukan dari gemini.google.com/app.'
     );
   }
 
   cachedBuildState = {
     bl,
     fsid,
+    at,
+    cookieHeader,
+    sapisid,
+    mode: at ? 'cookie-auth' : 'guest-keyless',
     initUrl: res.url || GEMINI_INIT_URL,
     mintedAt: Date.now(),
   };
@@ -427,7 +516,7 @@ async function ensureBuildState(forceRefresh = false) {
   return cachedBuildState;
 }
 
-async function invokeAnonymousStreamGenerate(
+async function invokeStreamGenerate(
   buildState,
   promptText,
   variant = 'web2api-flash',
@@ -436,7 +525,7 @@ async function invokeAnonymousStreamGenerate(
   const stepStart = Date.now();
   const reqid = Date.now() % 1000000;
 
-  let mode = thinking ? 2 : 1; // 1 = Flash (3.6/3.7), 2 = Thinking, 4 = Auto, 6 = Flash-Lite
+  let mode = thinking ? 2 : 1; // 1 = Flash, 2 = Thinking, 4 = Auto, 6 = Flash-Lite
   let think = thinking ? 0 : 4; // 4 = fast off, 0 = deep thinking
 
   if (variant === 'web2api-lite') {
@@ -461,24 +550,32 @@ async function invokeAnonymousStreamGenerate(
     buildState.bl
   )}&hl=en&_reqid=${reqid}&rt=c`;
 
-  const body = new URLSearchParams({ 'f.req': outerJson }).toString();
+  const formParams = new URLSearchParams({ 'f.req': outerJson });
+  if (buildState.at) {
+    formParams.set('at', buildState.at);
+  }
+
+  const authHeader = makeSapisidHash(buildState.sapisid);
+  const headers = {
+    'User-Agent': DEFAULT_USER_AGENT,
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    Origin: GEMINI_BASE,
+    Referer: `${GEMINI_BASE}/app`,
+    'X-Same-Domain': '1',
+    ...(buildState.cookieHeader ? { Cookie: buildState.cookieHeader } : {}),
+    ...(authHeader ? { Authorization: authHeader } : {}),
+  };
 
   const res = await fetchWithTimeout(
     url,
     {
       method: 'POST',
       redirect: 'manual',
-      headers: {
-        'User-Agent': DEFAULT_USER_AGENT,
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Origin: GEMINI_BASE,
-        Referer: `${GEMINI_BASE}/app`,
-        'X-Same-Domain': '1',
-      },
-      body,
+      headers,
+      body: formParams.toString(),
     },
-    22000
+    14000
   );
 
   const location = res.headers.get('location') || '';
@@ -515,7 +612,7 @@ async function invokeAnonymousStreamGenerate(
       variant,
       stepMs: Date.now() - stepStart,
       httpStatus: res.status,
-      retryable: res.status >= 500 || res.status === 400,
+      retryable: res.status >= 500 || (res.status === 400 && Boolean(buildState.cookieHeader)),
       refreshBl: res.status === 400,
       error: `StreamGenerate mengembalikan HTTP ${res.status}.`,
       rawPreview: rawBody.slice(0, 300),
@@ -547,8 +644,8 @@ async function invokeAnonymousStreamGenerate(
       variant,
       stepMs: Date.now() - stepStart,
       httpStatus: 200,
-      retryable: true,
-      refreshBl: false,
+      retryable: Boolean(buildState.cookieHeader),
+      refreshBl: true,
       error: 'Gemini menolak request (BardErrorInfo / er frame).',
       wrbFrameCount: parsed.wrbFrameCount,
       rawPreview: rawBody.slice(0, 300),
@@ -561,7 +658,7 @@ async function invokeAnonymousStreamGenerate(
       variant,
       stepMs: Date.now() - stepStart,
       httpStatus: 200,
-      retryable: true,
+      retryable: false,
       refreshBl: false,
       error: `Respons WRB kosong dari Gemini (${parsed.wrbFrameCount} frame).`,
       rawPreview: rawBody.slice(0, 300),
@@ -569,15 +666,17 @@ async function invokeAnonymousStreamGenerate(
   }
 
   if (isGoogleWebErrorReply(parsed.text)) {
+    // In guest-keyless mode on datacenter IPs, Google soft-blocks all variants identically (~2s);
+    // fail fast so client router immediately fails over without wasting a duplicate roundtrip.
     return {
       ok: false,
       variant,
       stepMs: Date.now() - stepStart,
       httpStatus: 200,
       googleTemplateError: true,
-      retryable: true,
-      refreshBl: false,
-      error: `Template penolakan Google Web: "${parsed.text}"`,
+      retryable: buildState.mode === 'cookie-auth',
+      refreshBl: buildState.mode === 'cookie-auth',
+      error: `Soft-block Google Web (${buildState.bl}): "${parsed.text}"`,
       wrbFrameCount: parsed.wrbFrameCount,
     };
   }
@@ -593,6 +692,52 @@ async function invokeAnonymousStreamGenerate(
     rid: parsed.rid,
     rcid: parsed.rcid,
     wrbFrameCount: parsed.wrbFrameCount,
+  };
+}
+
+async function tryServerGeminiApiKey(cleanText, system, thinking, startedAt) {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return null;
+
+  const modelName = thinking ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(
+    apiKey
+  )}`;
+
+  const payload = {
+    ...(system.trim()
+      ? { systemInstruction: { parts: [{ text: system.trim() }] } }
+      : {}),
+    contents: [{ role: 'user', parts: [{ text: cleanText }] }],
+  };
+
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    18000
+  );
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return null;
+  const answer = parts
+    .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+    .join('')
+    .trim();
+  if (!answer) return null;
+
+  return {
+    status: true,
+    ok: true,
+    provider: `Google Gemini Resmi (${modelName})`,
+    mode: 'server-api-key',
+    latencyMs: Date.now() - startedAt,
+    result: answer,
   };
 }
 
@@ -641,6 +786,18 @@ export default async function handler(req, res) {
     });
   }
 
+  // Optional zero-maintenance upgrade if GEMINI_API_KEY is ever set in Vercel Env
+  if (!requestedVariant) {
+    try {
+      const official = await tryServerGeminiApiKey(cleanText, system, thinking, startedAt);
+      if (official) {
+        return res.status(200).json(official);
+      }
+    } catch {
+      // Fall through to Direct Web RPC Scraper
+    }
+  }
+
   const finalPrompt = system.trim()
     ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
     : cleanText;
@@ -658,7 +815,7 @@ export default async function handler(req, res) {
 
     for (let idx = 0; idx < variants.length; idx++) {
       const variant = variants[idx];
-      const outcome = await invokeAnonymousStreamGenerate(
+      const outcome = await invokeStreamGenerate(
         buildState,
         finalPrompt,
         variant,
@@ -679,8 +836,8 @@ export default async function handler(req, res) {
         return res.status(200).json({
           status: true,
           ok: true,
-          provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
-          mode: 'guest-keyless',
+          provider: 'Google Gemini Direct Scraper (Web RPC)',
+          mode: buildState.mode,
           variant: outcome.variant,
           bl: buildState.bl,
           latencyMs: Date.now() - startedAt,
@@ -688,7 +845,12 @@ export default async function handler(req, res) {
           result: outcome.text,
           ...(isProbe
             ? {
-                buildState: { bl: buildState.bl, initUrl: buildState.initUrl },
+                buildState: {
+                  mode: buildState.mode,
+                  bl: buildState.bl,
+                  hasAt: Boolean(buildState.at),
+                  initUrl: buildState.initUrl,
+                },
                 diagnostics: attemptDiagnostics,
               }
             : {}),
@@ -708,13 +870,21 @@ export default async function handler(req, res) {
     return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
-      provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
+      provider: 'Google Gemini Direct Scraper (Web RPC)',
+      mode: buildState.mode,
       latencyMs: Date.now() - startedAt,
       error:
         lastDiag?.error ||
         'Gagal memperoleh jawaban dari endpoint StreamGenerate Gemini.',
       ...(isProbe
-        ? { buildState: { bl: buildState.bl, initUrl: buildState.initUrl } }
+        ? {
+            buildState: {
+              mode: buildState.mode,
+              bl: buildState.bl,
+              hasAt: Boolean(buildState.at),
+              initUrl: buildState.initUrl,
+            },
+          }
         : {}),
       diagnostics: attemptDiagnostics,
     });
@@ -724,7 +894,7 @@ export default async function handler(req, res) {
     return res.status(isProbe ? 200 : 502).json({
       status: false,
       ok: false,
-      provider: 'Google Gemini Direct Scraper (Anonymous Web RPC)',
+      provider: 'Google Gemini Direct Scraper (Web RPC)',
       latencyMs: Date.now() - startedAt,
       error: message,
       diagnostics: attemptDiagnostics,

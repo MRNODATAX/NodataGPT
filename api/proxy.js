@@ -1,3 +1,11 @@
+import dns from 'node:dns';
+
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {
+  // Ignore if unsupported in runtime
+}
+
 const ALLOWED_HOSTS = new Set([
   'api.neosoft.best',
   'text.pollinations.ai',
@@ -25,6 +33,51 @@ const DEFAULT_UA =
 export const config = {
   maxDuration: 60,
 };
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options, timeoutMs) {
+  const start = Date.now();
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const elapsed = Date.now() - start;
+    const remaining = timeoutMs - elapsed;
+    if (remaining < 2500) {
+      throw new Error('Waktu tunggu habis pada server model ini.');
+    }
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(remaining),
+      });
+
+      if (response.status === 429 && attempt === 0 && timeoutMs - (Date.now() - start) > 4500) {
+        await sleep(1150);
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      const stillRemaining = timeoutMs - (Date.now() - start);
+      const isConnectGlitch =
+        attempt === 0 &&
+        stillRemaining > 5000 &&
+        err instanceof Error &&
+        !/TimeoutError|aborted/i.test(err.name);
+
+      if (isConnectGlitch) {
+        await sleep(350);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('Gagal menghubungi server model AI.');
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -98,12 +151,15 @@ export default async function handler(req, res) {
   const startedAt = Date.now();
 
   try {
-    const upstream = await fetch(parsedUrl.toString(), {
-      method,
-      headers: forwardHeaders,
-      body: method === 'POST' ? requestBody : undefined,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const upstream = await fetchWithRetry(
+      parsedUrl.toString(),
+      {
+        method,
+        headers: forwardHeaders,
+        body: method === 'POST' ? requestBody : undefined,
+      },
+      timeoutMs
+    );
 
     const latencyMs = Date.now() - startedAt;
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
@@ -174,7 +230,7 @@ export default async function handler(req, res) {
       err instanceof Error &&
       (err.name === 'TimeoutError' ||
         err.name === 'AbortError' ||
-        /timeout|aborted/i.test(err.message));
+        /timeout|aborted|Waktu tunggu/i.test(err.message));
 
     return res.status(probeOnly ? 200 : 504).json({
       ok: false,

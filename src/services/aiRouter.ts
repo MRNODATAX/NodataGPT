@@ -200,12 +200,6 @@ export function buildSystemPersona(settings: AppSettings, tier: PersonaTier = 'f
     : NODATAGPT_FULL_PERSONA;
 }
 
-function resolveInlineTierForBudget(maxChars: number): PersonaTier {
-  if (maxChars >= 3500) return 'full';
-  if (maxChars >= 1400) return 'medium';
-  return 'compact';
-}
-
 function buildRecentHistoryLines(
   history: ChatMessage[],
   settings: AppSettings,
@@ -260,16 +254,20 @@ export function buildInlinePersonalizedPrompt(
   maxChars: number,
   forcedTier?: PersonaTier
 ): string {
-  const tier = forcedTier ?? resolveInlineTierForBudget(maxChars);
+  // Keep GET query strings WAF-safe (no XML <tag> brackets) and compact enough
+  // to avoid Cloudflare/Nginx URL-length & XSS firewall false-positives.
+  const effectiveBudget = Math.min(maxChars, 1800);
+  const tier =
+    forcedTier ?? (effectiveBudget >= 1400 ? 'medium' : 'compact');
   const systemText = buildSystemPersona(settings, tier);
-  const header = `<system_instruction>\n${systemText}\n</system_instruction>\n\n`;
-  const remainingBudget = Math.max(140, maxChars - header.length - 24);
+  const header = `[Instruksi Sistem NodataGPT: ${systemText}]\n\n`;
+  const remainingBudget = Math.max(140, effectiveBudget - header.length - 24);
   const userPart = buildContextualUserText(prompt, history, settings, remainingBudget);
 
   if (userPart.startsWith('Riwayat singkat percakapan:')) {
     return `${header}${userPart}`;
   }
-  return `${header}Pesan pengguna:\n${userPart}`;
+  return `${header}Pertanyaan pengguna:\n${userPart}`;
 }
 
 export function buildChatMessagesPayload(
@@ -377,6 +375,7 @@ function sanitizeAnswerText(text: string): string {
 
   const cleaned = trimmed
     .replace(/^<system_instruction>[\s\S]*?<\/system_instruction>\s*/i, '')
+    .replace(/^\[Instruksi Sistem NodataGPT:[\s\S]*?\]\s*/i, '')
     .replace(/^NodataGPT\s*:\s*/i, '')
     .replace(/\n*---\n*\*?Support Pollinations\.AI[\s\S]*$/i, '')
     .replace(
@@ -389,7 +388,14 @@ function sanitizeAnswerText(text: string): string {
     /^I seem to be encountering an error\.?\s*(?:Can I try something else for you\??)?$/i.test(
       cleaned
     ) ||
-    /^(?:fetch failed|task failed|internal server error|service unavailable)$/i.test(cleaned)
+    /^I'm having a hard time fulfilling your request\.?\s*(?:Can I help you with something else instead\??)?$/i.test(
+      cleaned
+    ) ||
+    /^Empty response from Gemini backend\.?$/i.test(cleaned) ||
+    /^⚠️\s*App Update Required[\s\S]*$/i.test(cleaned) ||
+    /^(?:fetch failed|task failed|not exist|internal server error|service unavailable)$/i.test(
+      cleaned
+    )
   ) {
     return '';
   }
@@ -426,7 +432,13 @@ export function extractUniversalAnswer(rawBody: string): {
   try {
     const data = JSON.parse(trimmed) as Record<string, unknown>;
 
-    if (data.status === false || data.ok === false || data.success === false) {
+    if (
+      data.status === false ||
+      data.Status === false ||
+      data.Status === 'Error' ||
+      data.ok === false ||
+      data.success === false
+    ) {
       return { content: '' };
     }
 
@@ -434,9 +446,9 @@ export function extractUniversalAnswer(rawBody: string): {
       const first = data.choices[0] as Record<string, unknown>;
       const msg = first?.message as Record<string, unknown> | undefined;
       const reasoningField =
-        typeof msg?.reasoning_content === 'string'
-          ? msg.reasoning_content.trim()
-          : undefined;
+        (typeof msg?.reasoning_content === 'string' && msg.reasoning_content.trim()) ||
+        (typeof msg?.reasoning === 'string' && msg.reasoning.trim()) ||
+        undefined;
       if (typeof msg?.content === 'string' && msg.content.trim()) {
         const parsed = splitThinkingBlock(sanitizeAnswerText(msg.content));
         return {
@@ -573,42 +585,93 @@ export function buildModelRequests(
   );
   const q = encodeURIComponent(inlinePrompt);
 
+  const compactQ = encodeURIComponent(
+    buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1100, 'compact')
+  );
+  const mediumPersona = encodeURIComponent(buildSystemPersona(settings, 'medium'));
+  const contextualUser = encodeURIComponent(
+    buildContextualUserText(rawPrompt, history, settings, 2200)
+  );
+  const llm7Messages = buildChatMessagesPayload(rawPrompt, history, settings, 4500);
+
   switch (model.id) {
     case 'gemini':
-      return [{ targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${q}`, timeoutMs: t }];
-
-    case 'chatgpt': {
-      const fastGetPrompt = buildInlinePersonalizedPrompt(
-        rawPrompt,
-        history,
-        settings,
-        1450,
-        'medium'
-      );
-      const mediumSystem = encodeURIComponent(buildSystemPersona(settings, 'medium'));
+      // Neosoft / guest Gemini scrapers are intermittently blocked by Google web-UI anti-bot
+      // (boq_gemini-web-uiserver_20261028.12_p0); try Neosoft with a tight timeout first,
+      // then seamlessly fail over to fast Flash-class mirrors.
       return [
         {
-          targetUrl: `https://text.pollinations.ai/${encodeURIComponent(fastGetPrompt)}?model=openai-fast&system=${mediumSystem}`,
-          timeoutMs: t,
+          targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${compactQ}`,
+          timeoutMs: 9500,
+          clientFirst: true,
         },
         {
-          targetUrl: 'https://text.pollinations.ai/openai',
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'openai',
-            messages: buildChatMessagesPayload(rawPrompt, history, settings, 6000),
+            model: 'nemotron-3-nano:30b',
+            messages: llm7Messages,
           }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/aiprompt?prompt=${mediumPersona}&teks=${contextualUser}`,
           timeoutMs: 18000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
-    }
+
+    case 'chatgpt':
+      return [
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`,
+          timeoutMs: 18000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactQ}`,
+          timeoutMs: 20000,
+        },
+      ];
 
     case 'stenly':
       return [
         {
-          targetUrl: `https://stenly.org/api/ai/chatgpt?q=${q}`,
+          targetUrl: `https://www.stenly.org/api/ai/aiprompt?prompt=${mediumPersona}&teks=${contextualUser}`,
           timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/chatgpt?q=${q}`,
+          timeoutMs: 12000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
           clientFirst: true,
         },
       ];
@@ -630,16 +693,29 @@ export function buildModelRequests(
             messages,
           }),
           timeoutMs: t,
+          clientFirst: true,
         },
         {
           targetUrl: 'https://api.llm7.io/v1/chat/completions',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'DeepSeek-V4.1-Flash',
+            model: 'nemotron-3-nano:30b',
             messages,
           }),
           timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'mistral-Nemo-Instruct-2407',
+            messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
         },
       ];
     }
@@ -652,15 +728,12 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${q}`,
+          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
           timeoutMs: 22000,
         },
       ];
 
-    case 'varhad-deepai': {
-      const compactPrompt = encodeURIComponent(
-        buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1000, 'compact')
-      );
+    case 'varhad-deepai':
       return [
         {
           targetUrl: `https://v2.api-varhad.my.id/ai/deepai?prompt=${q}`,
@@ -668,37 +741,69 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactPrompt}`,
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactQ}`,
           timeoutMs: 20000,
         },
       ];
-    }
 
     case 'nexray-overchat':
-      return [{ targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${q}`, timeoutMs: t }];
+      return [
+        { targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`, timeoutMs: t },
+        {
+          targetUrl: `https://comiku.my.id/ai/overchat?q=${compactQ}&model=qwen-3`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
 
     case 'deepseek':
       return [
         {
-          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${q}`,
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${compactQ}`,
           timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nemotron-3-nano:30b',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
         },
       ];
 
     case 'honcho':
       return [
         {
-          targetUrl: `https://stenly.org/api/ai/honcho?text=${q}`,
+          targetUrl: `https://www.stenly.org/api/ai/honcho?text=${q}`,
           timeoutMs: t,
           clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
 
     case 'qwen3':
       return [
         {
-          targetUrl: `https://stenly.org/api/ai/qwen3?text=${q}`,
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
           timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'codestral-latest',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
           clientFirst: true,
         },
       ];
@@ -706,9 +811,13 @@ export function buildModelRequests(
     case 'llama4':
       return [
         {
-          targetUrl: `https://stenly.org/api/ai/llama4?text=${q}`,
+          targetUrl: `https://www.stenly.org/api/ai/llama4?text=${q}`,
           timeoutMs: t,
           clientFirst: true,
+        },
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
 
@@ -719,21 +828,33 @@ export function buildModelRequests(
           timeoutMs: t,
           clientFirst: true,
         },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
       ];
 
     case 'rin-claude':
       return [
         {
           targetUrl: `https://apiii-xrina.my.id/ai/claudehaiku?text=${q}`,
-          timeoutMs: t,
+          timeoutMs: 10000,
           clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
 
-    case 'varhad-claude': {
-      const mirrorPrompt = encodeURIComponent(
-        buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1200, 'compact')
-      );
+    case 'varhad-claude':
       return [
         {
           targetUrl: `https://v2.api-varhad.my.id/ai/claude?prompt=${q}`,
@@ -741,23 +862,66 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${mirrorPrompt}`,
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
           timeoutMs: 20000,
         },
       ];
-    }
 
     case 'comiku-deepai':
-      return [{ targetUrl: `https://comiku.my.id/ai/deepai?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://comiku.my.id/ai/deepai?text=${compactQ}`,
+          timeoutMs: 8500,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://v2.api-varhad.my.id/ai/deepai?prompt=${compactQ}`,
+          timeoutMs: 18000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
+      ];
 
     case 'comiku-overchat':
-      return [{ targetUrl: `https://comiku.my.id/ai/overchat?q=${q}&model=qwen-3`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://comiku.my.id/ai/overchat?q=${compactQ}&model=qwen-3`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
+      ];
 
     case 'bintang-llama4':
-      return [{ targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/llama4?text=${compactQ}`,
+          timeoutMs: 18000,
+          clientFirst: true,
+        },
+      ];
 
     case 'bintang-deepv3':
-      return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v3?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/deep-v3?text=${compactQ}`,
+          timeoutMs: 9000,
+        },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${compactQ}`,
+          timeoutMs: 22000,
+        },
+      ];
 
     case 'rin-qwen':
       return [
@@ -766,39 +930,83 @@ export function buildModelRequests(
           timeoutMs: t,
           clientFirst: true,
         },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${compactQ}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
       ];
 
     case 'bintang-deepv4':
-      return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v4?text=${q}`, timeoutMs: t }];
-
-    case 'wormgpt':
-      return [{ targetUrl: `https://bintangapi.my.id/api/aichat/wormgpt?q=${q}`, timeoutMs: t }];
-
-    case 'rin-aicostum': {
-      const fullPersona = encodeURIComponent(buildSystemPersona(settings, 'full'));
-      const contextualText = encodeURIComponent(
-        buildContextualUserText(rawPrompt, history, settings, model.maxPromptChars)
-      );
       return [
         {
-          targetUrl: `https://apiii-xrina.my.id/ai/aicostum?prompt=${fullPersona}&text=${contextualText}`,
+          targetUrl: `https://bintangapi.my.id/api/aichat/deep-v4?text=${compactQ}`,
+          timeoutMs: 9000,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nemotron-3-nano:30b',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${compactQ}`,
+          timeoutMs: 22000,
+        },
+      ];
+
+    case 'wormgpt':
+      return [
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/wormgpt?q=${compactQ}`,
+          timeoutMs: t,
+        },
+      ];
+
+    case 'rin-aicostum':
+      return [
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/aicostum?prompt=${mediumPersona}&text=${contextualUser}`,
           timeoutMs: t,
           clientFirst: true,
         },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/aiprompt?prompt=${mediumPersona}&teks=${contextualUser}`,
+          timeoutMs: 18000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
       ];
-    }
 
     case 'math':
       return [
-        { targetUrl: `https://api-xemoz-official.my.id/api/ai/mathgpt-ai.php?q=${q}`, timeoutMs: t },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/mathgpt-ai.php?q=${compactQ}`,
+          timeoutMs: t,
+        },
       ];
 
     case 'claude':
-      return [{ targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${q}`, timeoutMs: t }];
+      return [{ targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`, timeoutMs: t }];
 
     case 'gpt5':
       return [
-        { targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${q}`, timeoutMs: t },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactQ}`,
+          timeoutMs: t,
+        },
       ];
 
     case 'gemini-resmi': {

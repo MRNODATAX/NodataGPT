@@ -1,0 +1,20 @@
+{
+  "packageId": "app.wormgpt.ai",
+  "name": "WormGPT",
+  "launcherName": "WormGPT",
+  "display": "standalone",
+  "themeColor": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#18181B",
+  "navigationDividerColorDark": "#18181B",
+  "backgroundColor": "#000000",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "/pwa-512x512.png",
+  "maskableIconUrl": "/pwa-maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "orientation": "portrait",
+  "appVersionName": "2.5.0",
+  "appVersionCode": 1
+}

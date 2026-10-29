@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
+  thinkingContent?: string;
   createdAt: number;
   isError?: boolean;
   answeredById?: string;
@@ -25,6 +26,7 @@ export interface Conversation {
 export interface AppSettings {
   selectedModelId: string;
   autoFallback: boolean;
+  starfieldEnabled: boolean;
   memoryContextEnabled: boolean;
   enterToSend: boolean;
   customPersona: string;

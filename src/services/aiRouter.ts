@@ -8,7 +8,20 @@ import {
 
 const CIRCUIT_STORAGE_KEY = 'nodatagpt.circuit.v1';
 const STRIKE_THRESHOLD = 3;
-const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes per DAFTAR-API-AI-BOT-v1.15.0
+const COOLDOWN_MS = 10 * 60 * 1000;
+
+const DEEPTHINK_ORDER = [
+  'deepseek',
+  'bintang-deepv4',
+  'varhad-claude',
+  'honcho',
+  'rin-qwen',
+  'qwen3',
+  'bintang-deepv3',
+  'llm7',
+  'gemini',
+  'stenly',
+];
 
 interface CircuitEntry {
   strikes: number;
@@ -77,7 +90,6 @@ function sanitizeAnswerText(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
 
-  // Reject upstream HTML error pages (Cloudflare / Nginx 502 / PHP fatal)
   if (
     /^<!doctype html/i.test(trimmed) ||
     /^<html[\s>]/i.test(trimmed) ||
@@ -86,38 +98,63 @@ function sanitizeAnswerText(text: string): string {
     return '';
   }
 
-  // Strip Pollinations promotional footer if appended
-  const cleaned = trimmed
+  return trimmed
     .replace(/\n*---\n*\*?Support Pollinations\.AI[\s\S]*$/i, '')
     .trim();
-
-  return cleaned;
 }
 
-export function extractUniversalAnswer(rawBody: string): string {
+export function splitThinkingBlock(rawText: string): {
+  content: string;
+  thinkingContent?: string;
+} {
+  const match = /^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/i.exec(rawText.trim());
+  if (!match) {
+    return { content: rawText.trim() };
+  }
+  const thinking = match[1].trim();
+  const rest = match[2].trim();
+  if (!rest) {
+    return { content: thinking };
+  }
+  return {
+    content: rest,
+    thinkingContent: thinking || undefined,
+  };
+}
+
+export function extractUniversalAnswer(rawBody: string): {
+  content: string;
+  thinkingContent?: string;
+} {
   const trimmed = rawBody.trim();
-  if (!trimmed) return '';
+  if (!trimmed) return { content: '' };
 
   try {
     const data = JSON.parse(trimmed) as Record<string, unknown>;
 
     if (data.status === false || data.ok === false || data.success === false) {
-      return '';
+      return { content: '' };
     }
 
-    // OpenAI / DeepSeek / LLM7 / Pollinations POST format
     if (Array.isArray(data.choices) && data.choices.length > 0) {
       const first = data.choices[0] as Record<string, unknown>;
       const msg = first?.message as Record<string, unknown> | undefined;
+      const reasoningField =
+        typeof msg?.reasoning_content === 'string'
+          ? msg.reasoning_content.trim()
+          : undefined;
       if (typeof msg?.content === 'string' && msg.content.trim()) {
-        return sanitizeAnswerText(msg.content);
+        const parsed = splitThinkingBlock(sanitizeAnswerText(msg.content));
+        return {
+          content: parsed.content,
+          thinkingContent: reasoningField || parsed.thinkingContent,
+        };
       }
       if (typeof first?.text === 'string' && first.text.trim()) {
-        return sanitizeAnswerText(first.text);
+        return splitThinkingBlock(sanitizeAnswerText(first.text));
       }
     }
 
-    // Google Gemini Official format
     if (Array.isArray(data.candidates) && data.candidates.length > 0) {
       const first = data.candidates[0] as Record<string, unknown>;
       const content = first?.content as Record<string, unknown> | undefined;
@@ -127,11 +164,15 @@ export function extractUniversalAnswer(rawBody: string): string {
           .map((p) => (typeof p?.text === 'string' ? p.text : ''))
           .join('')
           .trim();
-        if (joined) return sanitizeAnswerText(joined);
+        if (joined) return splitThinkingBlock(sanitizeAnswerText(joined));
       }
     }
 
-    // Direct string fields used across Indonesian AI endpoints
+    const explicitReasoning =
+      (typeof data.thinking === 'string' && data.thinking.trim()) ||
+      (typeof data.reasoning === 'string' && data.reasoning.trim()) ||
+      undefined;
+
     const directKeys = [
       'result',
       'answer',
@@ -147,34 +188,44 @@ export function extractUniversalAnswer(rawBody: string): string {
     for (const key of directKeys) {
       const val = data[key];
       if (typeof val === 'string' && val.trim()) {
-        return sanitizeAnswerText(val);
+        const parsed = splitThinkingBlock(sanitizeAnswerText(val));
+        return {
+          content: parsed.content,
+          thinkingContent: explicitReasoning || parsed.thinkingContent,
+        };
       }
     }
 
-    // Nested object container (`data`, `result`, `response`)
     const containerKeys = ['data', 'result', 'response', 'output'];
     for (const cKey of containerKeys) {
       const nested = data[cKey];
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
         const obj = nested as Record<string, unknown>;
+        const nestedThink =
+          (typeof obj.thinking === 'string' && obj.thinking.trim()) ||
+          (typeof obj.reasoning === 'string' && obj.reasoning.trim()) ||
+          explicitReasoning;
         for (const key of directKeys) {
           const val = obj[key];
           if (typeof val === 'string' && val.trim()) {
-            return sanitizeAnswerText(val);
+            const parsed = splitThinkingBlock(sanitizeAnswerText(val));
+            return {
+              content: parsed.content,
+              thinkingContent: nestedThink || parsed.thinkingContent,
+            };
           }
         }
       }
     }
 
     if (typeof data.error === 'string' || (data.error && typeof data.error === 'object')) {
-      return '';
+      return { content: '' };
     }
   } catch {
-    // Plain text response (e.g., Pollinations GET)
-    return sanitizeAnswerText(trimmed);
+    return splitThinkingBlock(sanitizeAnswerText(trimmed));
   }
 
-  return '';
+  return { content: '' };
 }
 
 function buildEffectivePrompt(
@@ -228,13 +279,9 @@ function buildModelRequests(
   switch (model.id) {
     case 'gemini':
       return [{ targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${q}`, timeoutMs: t }];
-
     case 'chatgpt':
       return [
-        {
-          targetUrl: `https://text.pollinations.ai/${q}?model=openai-fast`,
-          timeoutMs: t,
-        },
+        { targetUrl: `https://text.pollinations.ai/${q}?model=openai-fast`, timeoutMs: t },
         {
           targetUrl: 'https://text.pollinations.ai/openai',
           method: 'POST',
@@ -246,10 +293,8 @@ function buildModelRequests(
           timeoutMs: 18000,
         },
       ];
-
     case 'stenly':
       return [{ targetUrl: `https://stenly.org/api/ai/chatgpt?q=${q}`, timeoutMs: t }];
-
     case 'llm7':
       return [
         {
@@ -263,7 +308,6 @@ function buildModelRequests(
           timeoutMs: t,
         },
       ];
-
     case 'deepseek':
       return [
         {
@@ -271,51 +315,32 @@ function buildModelRequests(
           timeoutMs: t,
         },
       ];
-
     case 'honcho':
       return [{ targetUrl: `https://stenly.org/api/ai/honcho?text=${q}`, timeoutMs: t }];
-
     case 'qwen3':
       return [{ targetUrl: `https://stenly.org/api/ai/qwen3?text=${q}`, timeoutMs: t }];
-
     case 'llama4':
       return [{ targetUrl: `https://stenly.org/api/ai/llama4?text=${q}`, timeoutMs: t }];
-
     case 'rin-chatgpt':
       return [{ targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`, timeoutMs: t }];
-
     case 'rin-claude':
       return [{ targetUrl: `https://apiii-xrina.my.id/ai/claudehaiku?text=${q}`, timeoutMs: t }];
-
     case 'varhad-claude':
       return [{ targetUrl: `https://v2.api-varhad.my.id/ai/claude?prompt=${q}`, timeoutMs: t }];
-
     case 'comiku-deepai':
       return [{ targetUrl: `https://comiku.my.id/ai/deepai?text=${q}`, timeoutMs: t }];
-
     case 'comiku-overchat':
-      return [
-        {
-          targetUrl: `https://comiku.my.id/ai/overchat?q=${q}&model=qwen-3`,
-          timeoutMs: t,
-        },
-      ];
-
+      return [{ targetUrl: `https://comiku.my.id/ai/overchat?q=${q}&model=qwen-3`, timeoutMs: t }];
     case 'bintang-llama4':
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${q}`, timeoutMs: t }];
-
     case 'bintang-deepv3':
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v3?text=${q}`, timeoutMs: t }];
-
     case 'rin-qwen':
       return [{ targetUrl: `https://apiii-xrina.my.id/ai/qwen?text=${q}`, timeoutMs: t }];
-
     case 'bintang-deepv4':
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v4?text=${q}`, timeoutMs: t }];
-
     case 'wormgpt':
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/wormgpt?q=${q}`, timeoutMs: t }];
-
     case 'rin-aicostum': {
       const persona = encodeURIComponent(
         settings.customPersona.trim() ||
@@ -328,26 +353,16 @@ function buildModelRequests(
         },
       ];
     }
-
     case 'math':
       return [
-        {
-          targetUrl: `https://api-xemoz-official.my.id/api/ai/mathgpt-ai.php?q=${q}`,
-          timeoutMs: t,
-        },
+        { targetUrl: `https://api-xemoz-official.my.id/api/ai/mathgpt-ai.php?q=${q}`, timeoutMs: t },
       ];
-
     case 'claude':
       return [{ targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${q}`, timeoutMs: t }];
-
     case 'gpt5':
       return [
-        {
-          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${q}`,
-          timeoutMs: t,
-        },
+        { targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${q}`, timeoutMs: t },
       ];
-
     case 'gemini-resmi': {
       const key = settings.geminiApiKey.trim();
       if (!key) return [];
@@ -363,7 +378,6 @@ function buildModelRequests(
         },
       ];
     }
-
     case 'deepseek-resmi': {
       const key = settings.deepseekApiKey.trim();
       if (!key) return [];
@@ -383,13 +397,15 @@ function buildModelRequests(
         },
       ];
     }
-
     default:
       return [{ targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${q}`, timeoutMs: 20000 }];
   }
 }
 
-async function callGateway(spec: ProxyRequestSpec, signal?: AbortSignal): Promise<{
+async function callGateway(
+  spec: ProxyRequestSpec,
+  signal?: AbortSignal
+): Promise<{
   ok: boolean;
   kind?: 'text' | 'image';
   body?: string;
@@ -426,13 +442,23 @@ async function callGateway(spec: ProxyRequestSpec, signal?: AbortSignal): Promis
   };
 }
 
-function buildCandidateChain(settings: AppSettings): AIModelDefinition[] {
+function buildCandidateChain(
+  settings: AppSettings,
+  deepThink?: boolean
+): AIModelDefinition[] {
   const unlockedOfficial: AIModelDefinition[] = [];
+  if (settings.deepseekApiKey.trim()) {
+    unlockedOfficial.push(getModelById('deepseek-resmi'));
+  }
   if (settings.geminiApiKey.trim()) {
     unlockedOfficial.push(getModelById('gemini-resmi'));
   }
-  if (settings.deepseekApiKey.trim()) {
-    unlockedOfficial.push(getModelById('deepseek-resmi'));
+
+  if (deepThink) {
+    const deepChain = DEEPTHINK_ORDER.map((id) => getModelById(id));
+    const merged = [...unlockedOfficial, ...deepChain];
+    const healthy = merged.filter((m) => !isModelCoolingDown(m.id));
+    return healthy.length > 0 ? healthy : merged;
   }
 
   const baseFallback = DEFAULT_FALLBACK_ORDER.map((id) => getModelById(id));
@@ -460,10 +486,12 @@ export interface RouterStatusUpdate {
   attempt: number;
   isFallback: boolean;
   previousFailedModel?: string;
+  deepThink?: boolean;
 }
 
 export interface RouterResult {
   content: string;
+  thinkingContent?: string;
   answeredById: string;
   answeredByName: string;
   usedFallback: boolean;
@@ -475,16 +503,18 @@ export async function sendMultiModelChat({
   prompt,
   history,
   settings,
+  deepThink,
   signal,
   onStatus,
 }: {
   prompt: string;
   history: ChatMessage[];
   settings: AppSettings;
+  deepThink?: boolean;
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
-  const candidates = buildCandidateChain(settings).slice(0, 8);
+  const candidates = buildCandidateChain(settings, deepThink).slice(0, 8);
   let lastFailedName: string | undefined;
   let lastReason = 'Tidak ada server model yang merespons saat ini.';
 
@@ -494,13 +524,15 @@ export async function sendMultiModelChat({
     }
 
     const model = candidates[idx];
-    const isFallback = idx > 0 && settings.selectedModelId !== 'auto';
+    const isFallback =
+      idx > 0 && (settings.selectedModelId !== 'auto' || Boolean(deepThink));
 
     onStatus?.({
       modelName: model.shortName,
       attempt: idx + 1,
       isFallback: idx > 0,
       previousFailedModel: lastFailedName,
+      deepThink,
     });
 
     const effectiveQuery = buildEffectivePrompt(
@@ -523,11 +555,12 @@ export async function sendMultiModelChat({
         const res = await callGateway(spec, signal);
         if (res.ok && typeof res.body === 'string') {
           const parsed = extractUniversalAnswer(res.body);
-          if (parsed.length >= 2) {
+          if (parsed.content.length >= 2) {
             recordModelSuccess(model.id);
             modelSucceeded = true;
             return {
-              content: parsed,
+              content: parsed.content,
+              thinkingContent: parsed.thinkingContent,
               answeredById: model.id,
               answeredByName: `${model.shortName} · ${model.provider}`,
               usedFallback: isFallback || (settings.selectedModelId === 'auto' && idx > 0),
@@ -593,7 +626,7 @@ export async function generateMultiEngineImage({
 
       if (res.ok && res.kind === 'image' && res.imageUrl) {
         return {
-          content: `Gambar berhasil dibuat dari deskripsi: "${cleanPrompt}"`,
+          content: `Gambar dibuat dari deskripsi: "${cleanPrompt}"`,
           answeredById: engine.id,
           answeredByName: engine.name,
           usedFallback: idx > 0,
@@ -617,7 +650,7 @@ export async function generateMultiEngineImage({
 
           if (candidateUrl && /^https?:\/\//i.test(candidateUrl)) {
             return {
-              content: `Gambar berhasil dibuat dari deskripsi: "${cleanPrompt}"`,
+              content: `Gambar dibuat dari deskripsi: "${cleanPrompt}"`,
               answeredById: engine.id,
               answeredByName: engine.name,
               usedFallback: idx > 0,
@@ -626,7 +659,7 @@ export async function generateMultiEngineImage({
             };
           }
         } catch {
-          // Not JSON, fall through to next engine
+          // Fall through to next engine
         }
       }
     } catch (err) {

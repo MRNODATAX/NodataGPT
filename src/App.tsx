@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Download, Menu, Plus, Settings, Shuffle } from 'lucide-react';
+import { StarfieldBackground } from './components/StarfieldBackground';
 import { SplashScreen } from './components/SplashScreen';
 import { Sidebar } from './components/Sidebar';
 import { WelcomeScreen } from './components/WelcomeScreen';
@@ -53,6 +54,7 @@ export function App() {
   const [installModalOpen, setInstallModalOpen] = useState(false);
 
   const [draft, setDraft] = useState('');
+  const [deepThink, setDeepThink] = useState(false);
   const [imageMode, setImageMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [routerStatus, setRouterStatus] = useState<RouterStatusUpdate | null>(null);
@@ -92,7 +94,10 @@ export function App() {
     [settings.selectedModelId]
   );
 
-  const healthyCount = useMemo(() => getHealthyModelCount(), [isLoading, modelPickerOpen]);
+  const healthyCount = useMemo(
+    () => getHealthyModelCount(),
+    [isLoading, modelPickerOpen]
+  );
 
   const handleNewChat = useCallback(() => {
     if (abortControllerRef.current) {
@@ -125,6 +130,7 @@ export function App() {
       attachmentText,
       attachmentName,
       asImage,
+      useDeepThink,
     }: {
       promptText: string;
       targetChatId: string;
@@ -132,6 +138,7 @@ export function App() {
       attachmentText?: string;
       attachmentName?: string;
       asImage?: boolean;
+      useDeepThink?: boolean;
     }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -153,6 +160,7 @@ export function App() {
               prompt: fullPrompt,
               history: priorMessages,
               settings,
+              deepThink: useDeepThink,
               signal: controller.signal,
               onStatus: (st) => setRouterStatus(st),
             });
@@ -161,6 +169,7 @@ export function App() {
           id: generateId(),
           role: 'assistant',
           content: result.content,
+          thinkingContent: result.thinkingContent,
           createdAt: Date.now(),
           answeredById: result.answeredById,
           answeredByName: result.answeredByName,
@@ -219,16 +228,14 @@ export function App() {
   );
 
   const handleSend = useCallback(
-    async (
-      attachmentText?: string,
-      attachmentName?: string,
-      forceImageMode?: boolean
-    ) => {
+    async (attachmentText?: string, attachmentName?: string) => {
       const trimmed = draft.trim();
       if ((!trimmed && !attachmentText) || isLoading) return;
 
-      const useImage = forceImageMode ?? imageMode;
-      const displayContent = trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
+      const useImage = imageMode;
+      const useThinking = deepThink && !useImage;
+      const displayContent =
+        trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
@@ -276,13 +283,17 @@ export function App() {
         attachmentText,
         attachmentName,
         asImage: useImage,
+        useDeepThink: useThinking,
       });
     },
-    [draft, isLoading, imageMode, activeConversation, executePrompt]
+    [draft, isLoading, imageMode, deepThink, activeConversation, executePrompt]
   );
 
   const handleSelectStarter = useCallback(
-    async (starterPrompt: string, starterImageMode?: boolean) => {
+    async (
+      starterPrompt: string,
+      options?: { imageMode?: boolean; deepThink?: boolean }
+    ) => {
       if (isLoading) return;
       const userMsg: ChatMessage = {
         id: generateId(),
@@ -304,7 +315,8 @@ export function App() {
         promptText: starterPrompt,
         targetChatId: newChat.id,
         priorMessages: [],
-        asImage: Boolean(starterImageMode),
+        asImage: Boolean(options?.imageMode),
+        useDeepThink: Boolean(options?.deepThink),
       });
     },
     [isLoading, executePrompt]
@@ -338,9 +350,10 @@ export function App() {
         promptText: precedingUserMsg.content,
         targetChatId: activeConversation.id,
         priorMessages: historyBeforeUser,
+        useDeepThink: deepThink,
       });
     },
-    [activeConversation, isLoading, executePrompt]
+    [activeConversation, isLoading, deepThink, executePrompt]
   );
 
   const handleStop = useCallback(() => {
@@ -369,7 +382,13 @@ export function App() {
   }, []);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-[#080A0F] text-[#FAFAFA]">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-transparent text-[#F8FAFC]">
+      {/* Live Starry Night & Shooting Stars Canvas (nodatanime.vercel.app GPU Atlas) */}
+      <StarfieldBackground
+        enabled={settings.starfieldEnabled}
+        splashDone={!showSplash}
+      />
+
       {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
 
       <Sidebar
@@ -392,16 +411,16 @@ export function App() {
         onOpenInstallModal={() => setInstallModalOpen(true)}
       />
 
-      {/* Main Gemini Stage */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Clean Uncluttered Responsive Header (Zero overflow on 320px+ phones) */}
-        <header className="pt-safe flex min-h-[56px] shrink-0 items-center justify-between border-b border-[#141B27] bg-[#080A0F]/95 px-2.5 sm:px-5">
+      {/* Main Cosmic Stage (z-10 above Starfield) */}
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-transparent">
+        {/* Frosted Glass Top Bar */}
+        <header className="nd-glass-topbar pt-safe flex min-h-[56px] shrink-0 items-center justify-between px-2.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
               aria-label="Buka menu navigasi"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white lg:hidden cursor-pointer"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white lg:hidden cursor-pointer"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -410,7 +429,7 @@ export function App() {
               type="button"
               onClick={() => setModelPickerOpen(true)}
               aria-label="Pilih model AI NodataGPT"
-              className="inline-flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-[#10141D] cursor-pointer"
+              className="inline-flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.06] cursor-pointer"
             >
               <img
                 src="/logo-transparent.png"
@@ -424,8 +443,8 @@ export function App() {
                   <span className="text-[#22D3EE]">Nodata</span>
                   <span className="text-[#FB923C]">GPT</span>
                 </span>
-                <span className="max-w-[96px] truncate rounded-md border border-[#1C2433] bg-[#10141D] px-1.5 py-0.5 font-mono-code text-[11px] font-medium text-[#FAFAFA] sm:max-w-[160px]">
-                  {activeModel.shortName}
+                <span className="max-w-[96px] truncate rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-0.5 font-mono-code text-[11px] font-medium text-[#F8FAFC] sm:max-w-[160px]">
+                  {deepThink ? 'DeepThink' : activeModel.shortName}
                 </span>
                 {settings.autoFallback && (
                   <Shuffle
@@ -433,19 +452,18 @@ export function App() {
                     className="hidden h-3.5 w-3.5 shrink-0 text-[#FB923C] sm:inline"
                   />
                 )}
-                <ChevronDown className="h-4 w-4 shrink-0 text-[#9BA6B8]" />
+                <ChevronDown className="h-4 w-4 shrink-0 text-[#94A3B8]" />
               </div>
             </button>
           </div>
 
-          {/* Right Header Controls: Minimal on Mobile, Full on Desktop */}
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={handleNewChat}
               aria-label="Mulai percakapan baru"
               title="Percakapan Baru (Ctrl+K)"
-              className="flex h-11 w-11 items-center justify-center rounded-xl text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white sm:w-auto sm:gap-1.5 sm:border sm:border-[#1C2433] sm:bg-[#10141D] sm:px-3 sm:text-xs sm:font-medium cursor-pointer"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white sm:w-auto sm:gap-1.5 sm:border sm:border-white/10 sm:bg-white/[0.04] sm:px-3 sm:text-xs sm:font-medium cursor-pointer"
             >
               <Plus className="h-5 w-5 text-[#22D3EE] sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Chat Baru</span>
@@ -456,7 +474,7 @@ export function App() {
                 type="button"
                 onClick={() => setInstallModalOpen(true)}
                 aria-label="Pasang aplikasi NodataGPT"
-                className="hidden h-10 items-center gap-1.5 rounded-xl bg-[#0E7490] px-3.5 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2] sm:inline-flex cursor-pointer"
+                className="hidden h-10 items-center gap-1.5 rounded-xl bg-[#0E7490] px-3.5 text-xs font-semibold text-white shadow-[0_0_16px_rgba(34,211,238,0.22)] transition-colors hover:bg-[#0891B2] sm:inline-flex cursor-pointer"
               >
                 <Download className="h-3.5 w-3.5" />
                 <span>Pasang APK</span>
@@ -467,7 +485,7 @@ export function App() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Buka pengaturan"
-              className="hidden h-10 w-10 items-center justify-center rounded-xl text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white sm:flex cursor-pointer"
+              className="hidden h-10 w-10 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white sm:flex cursor-pointer"
             >
               <Settings className="h-[18px] w-[18px]" />
             </button>
@@ -482,6 +500,21 @@ export function App() {
                 activeModel={activeModel}
                 autoFallback={settings.autoFallback}
                 healthyCount={healthyCount}
+                deepThink={deepThink}
+                imageMode={imageMode}
+                onToggleDeepThink={() => {
+                  setDeepThink((d) => !d);
+                  if (imageMode) setImageMode(false);
+                }}
+                onToggleImageMode={() => {
+                  setImageMode((i) => !i);
+                  if (deepThink) setDeepThink(false);
+                }}
+                onSelectModelDirect={(modelId) => {
+                  setSettings((prev) => ({ ...prev, selectedModelId: modelId }));
+                  setDeepThink(false);
+                  setImageMode(false);
+                }}
                 onSelectStarter={handleSelectStarter}
                 onOpenModelPicker={() => setModelPickerOpen(true)}
               />
@@ -503,8 +536,16 @@ export function App() {
             isLoading={isLoading}
             enterToSend={settings.enterToSend}
             activeModel={activeModel}
+            deepThink={deepThink}
+            onToggleDeepThink={() => {
+              setDeepThink((d) => !d);
+              if (imageMode) setImageMode(false);
+            }}
             imageMode={imageMode}
-            onToggleImageMode={() => setImageMode((prev) => !prev)}
+            onToggleImageMode={() => {
+              setImageMode((i) => !i);
+              if (deepThink) setDeepThink(false);
+            }}
             onOpenModelPicker={() => setModelPickerOpen(true)}
           />
         </main>
@@ -514,9 +555,10 @@ export function App() {
         isOpen={modelPickerOpen}
         onClose={() => setModelPickerOpen(false)}
         settings={settings}
-        onSelectModel={(modelId) =>
-          setSettings((prev) => ({ ...prev, selectedModelId: modelId }))
-        }
+        onSelectModel={(modelId) => {
+          setSettings((prev) => ({ ...prev, selectedModelId: modelId }));
+          setDeepThink(false);
+        }}
         onToggleAutoFallback={(enabled) =>
           setSettings((prev) => ({ ...prev, autoFallback: enabled }))
         }

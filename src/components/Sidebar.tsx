@@ -75,13 +75,13 @@ export function Sidebar({
         <div
           aria-hidden="true"
           onClick={onCloseMobile}
-          className="fixed inset-0 z-30 bg-black/75 transition-opacity lg:hidden"
+          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-xs transition-opacity lg:hidden"
         />
       )}
 
       <aside
         aria-label="Riwayat percakapan dan navigasi"
-        className={`pt-safe fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[#18202E] bg-[#05070B] transition-all duration-200 ease-out lg:static lg:z-auto ${
+        className={`nd-glass-sidebar pt-safe fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200 ease-out lg:static lg:z-20 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${showExpanded ? 'w-[284px] max-w-[85vw]' : 'lg:w-[72px]'}`}
       >
@@ -107,7 +107,7 @@ export function Sidebar({
             type="button"
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Perluas bilah sisi' : 'Ciutkan bilah sisi'}
-            className="hidden h-10 w-10 items-center justify-center rounded-xl text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white lg:flex cursor-pointer"
+            className="hidden h-10 w-10 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white lg:flex cursor-pointer"
           >
             {collapsed ? (
               <PanelLeftOpen className="h-5 w-5" />
@@ -121,7 +121,7 @@ export function Sidebar({
               type="button"
               onClick={onCloseMobile}
               aria-label="Tutup menu samping"
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#B6C0D0] hover:bg-[#10141D] hover:text-white lg:hidden cursor-pointer"
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#CBD5E1] hover:bg-white/8 hover:text-white lg:hidden cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
@@ -138,7 +138,7 @@ export function Sidebar({
             }}
             aria-label="Percakapan baru"
             title="Percakapan baru"
-            className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border border-[#1E2A3B] bg-[#10141D] font-medium text-white transition-colors hover:border-[#22D3EE]/50 hover:bg-[#161D2A] cursor-pointer ${
+            className={`nd-glass-card flex min-h-[44px] w-full items-center gap-2.5 rounded-xl font-medium text-white cursor-pointer ${
               showExpanded ? 'px-3.5 py-2.5 text-sm' : 'justify-center p-2.5'
             }`}
           >
@@ -151,14 +151,14 @@ export function Sidebar({
         {showExpanded && (
           <div className="px-3 pt-1 pb-2">
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#9BA6B8]" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari riwayat chat..."
                 aria-label="Cari riwayat percakapan"
-                className="h-9 w-full rounded-lg border border-[#1C2433] bg-[#0B0F17] pr-3 pl-9 text-xs text-white placeholder-[#9BA6B8] focus:border-[#22D3EE] focus:outline-none"
+                className="h-9 w-full rounded-lg border border-white/10 bg-black/40 pr-3 pl-9 text-xs text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
               />
             </div>
           </div>
@@ -168,12 +168,12 @@ export function Sidebar({
         <div className="flex-1 overflow-y-auto px-2.5 py-1.5">
           {showExpanded ? (
             <>
-              <div className="mb-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#9BA6B8]">
+              <div className="mb-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
                 Riwayat Percakapan
               </div>
 
               {filteredConversations.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[#1C2433] px-3 py-5 text-center text-xs text-[#9BA6B8]">
+                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-5 text-center text-xs text-[#94A3B8]">
                   {searchQuery
                     ? 'Tidak ada percakapan yang cocok.'
                     : 'Belum ada riwayat percakapan.'}
@@ -187,8 +187,8 @@ export function Sidebar({
                         <div
                           className={`group flex min-h-[42px] items-center justify-between gap-1 rounded-xl px-2.5 py-1.5 text-sm transition-colors ${
                             isActive
-                              ? 'bg-[#121D2A] text-white'
-                              : 'text-[#B6C0D0] hover:bg-[#0E131D] hover:text-white'
+                              ? 'border border-[#22D3EE]/30 bg-[#22D3EE]/12 text-white'
+                              : 'text-[#CBD5E1] hover:bg-white/[0.05] hover:text-white'
                           }`}
                         >
                           <button
@@ -201,7 +201,7 @@ export function Sidebar({
                           >
                             <MessageSquare
                               className={`h-4 w-4 shrink-0 ${
-                                isActive ? 'text-[#22D3EE]' : 'text-[#9BA6B8]'
+                                isActive ? 'text-[#22D3EE]' : 'text-[#94A3B8]'
                               }`}
                             />
                             <span className="truncate">{chat.title}</span>
@@ -214,8 +214,8 @@ export function Sidebar({
                               aria-label={
                                 chat.pinned ? 'Lepas sematan' : 'Sematkan chat'
                               }
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg hover:bg-[#1A2436] cursor-pointer ${
-                                chat.pinned ? 'text-[#FB923C]' : 'text-[#9BA6B8]'
+                              className={`flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer ${
+                                chat.pinned ? 'text-[#FB923C]' : 'text-[#94A3B8]'
                               }`}
                             >
                               <Pin className="h-3.5 w-3.5" />
@@ -224,7 +224,7 @@ export function Sidebar({
                               type="button"
                               onClick={() => onDeleteChat(chat.id)}
                               aria-label={`Hapus ${chat.title}`}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#9BA6B8] hover:bg-[#1A2436] hover:text-[#FB923C] cursor-pointer"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#94A3B8] hover:bg-white/10 hover:text-[#FB923C] cursor-pointer"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -239,8 +239,8 @@ export function Sidebar({
           ) : null}
         </div>
 
-        {/* Footer Actions (Mobile-Friendly Access to APK Install, Export & Settings) */}
-        <div className="pb-safe space-y-1 border-t border-[#18202E] p-2.5">
+        {/* Footer Actions */}
+        <div className="pb-safe space-y-1 border-t border-white/8 p-2.5">
           {!isPwaInstalled && (
             <button
               type="button"
@@ -250,7 +250,7 @@ export function Sidebar({
               }}
               aria-label="Pasang aplikasi NodataGPT"
               title="Pasang Aplikasi (APK)"
-              className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/10 text-sm font-medium text-[#FB923C] transition-colors hover:bg-[#FB923C]/18 cursor-pointer ${
+              className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/12 text-sm font-medium text-[#FB923C] transition-colors hover:bg-[#FB923C]/20 cursor-pointer ${
                 showExpanded ? 'px-3 py-2' : 'justify-center p-2'
               }`}
             >
@@ -266,7 +266,7 @@ export function Sidebar({
                 onExportActiveChat();
                 onCloseMobile();
               }}
-              className="flex min-h-[42px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white cursor-pointer"
+              className="flex min-h-[42px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
             >
               <FileDown className="h-4 w-4 shrink-0 text-[#22D3EE]" />
               <span>Ekspor Percakapan (.md)</span>
@@ -281,7 +281,7 @@ export function Sidebar({
             }}
             aria-label="Pengaturan dan Kunci API"
             title="Pengaturan"
-            className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl text-sm text-[#B6C0D0] transition-colors hover:bg-[#10141D] hover:text-white cursor-pointer ${
+            className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl text-sm text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white cursor-pointer ${
               showExpanded ? 'px-3 py-2' : 'justify-center p-2'
             }`}
           >

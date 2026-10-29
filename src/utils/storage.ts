@@ -8,6 +8,7 @@ const SIDEBAR_COLLAPSED_KEY = 'nodatagpt.sidebarCollapsed.v3';
 export const DEFAULT_SETTINGS: AppSettings = {
   selectedModelId: 'auto',
   autoFallback: true,
+  starfieldEnabled: true,
   memoryContextEnabled: true,
   enterToSend: true,
   customPersona: 'Kamu adalah asisten AI NodataGPT yang cerdas, lugas, dan membantu.',
@@ -69,6 +70,10 @@ export function loadSettings(): AppSettings {
         typeof parsed?.autoFallback === 'boolean'
           ? parsed.autoFallback
           : DEFAULT_SETTINGS.autoFallback,
+      starfieldEnabled:
+        typeof parsed?.starfieldEnabled === 'boolean'
+          ? parsed.starfieldEnabled
+          : DEFAULT_SETTINGS.starfieldEnabled,
       memoryContextEnabled:
         typeof parsed?.memoryContextEnabled === 'boolean'
           ? parsed.memoryContextEnabled

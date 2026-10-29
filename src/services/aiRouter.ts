@@ -35,14 +35,14 @@ export const NODATAGPT_COMPACT_PERSONA =
 
 const DEEPTHINK_ORDER = [
   'deepseek',
-  'bintang-deepv4',
   'varhad-claude',
-  'honcho',
-  'rin-qwen',
-  'qwen3',
-  'bintang-deepv3',
+  'claude',
   'llm7',
-  'gemini',
+  'honcho',
+  'qwen3',
+  'rin-qwen',
+  'bintang-llama4',
+  'nexray-overchat',
   'stenly',
 ];
 
@@ -313,11 +313,26 @@ function sanitizeAnswerText(text: string): string {
     return '';
   }
 
-  return trimmed
+  const cleaned = trimmed
     .replace(/^<system_instruction>[\s\S]*?<\/system_instruction>\s*/i, '')
     .replace(/^NodataGPT\s*:\s*/i, '')
     .replace(/\n*---\n*\*?Support Pollinations\.AI[\s\S]*$/i, '')
+    .replace(
+      /\n*(?:\*{3,}|-{3,})?\s*\n*(?:Sebagai informasi tambahan|For additional information)[\s\S]*?https?:\/\/(?:www\.)?rewind\.ai[\s\S]*$/i,
+      ''
+    )
     .trim();
+
+  if (
+    /^I seem to be encountering an error\.?\s*(?:Can I try something else for you\??)?$/i.test(
+      cleaned
+    ) ||
+    /^(?:fetch failed|task failed|internal server error|service unavailable)$/i.test(cleaned)
+  ) {
+    return '';
+  }
+
+  return cleaned;
 }
 
 export function splitThinkingBlock(rawText: string): {
@@ -418,6 +433,9 @@ export function extractUniversalAnswer(rawBody: string): {
       const nested = data[cKey];
       if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
         const obj = nested as Record<string, unknown>;
+        if (obj.status === false || obj.ok === false || obj.success === false) {
+          continue;
+        }
         const nestedThink =
           (typeof obj.thinking === 'string' && obj.thinking.trim()) ||
           (typeof obj.reasoning === 'string' && obj.reasoning.trim()) ||
@@ -426,10 +444,34 @@ export function extractUniversalAnswer(rawBody: string): {
           const val = obj[key];
           if (typeof val === 'string' && val.trim()) {
             const parsed = splitThinkingBlock(sanitizeAnswerText(val));
-            return {
-              content: parsed.content,
-              thinkingContent: nestedThink || parsed.thinkingContent,
-            };
+            if (parsed.content) {
+              return {
+                content: parsed.content,
+                thinkingContent: nestedThink || parsed.thinkingContent,
+              };
+            }
+          }
+        }
+        // Support 2-level nested objects (e.g. Varhad v2 DeepAI: { status: true, result: { status: true, result: "..." } })
+        for (const subCKey of containerKeys) {
+          const subNested = obj[subCKey];
+          if (subNested && typeof subNested === 'object' && !Array.isArray(subNested)) {
+            const subObj = subNested as Record<string, unknown>;
+            if (subObj.status === false || subObj.ok === false || subObj.success === false) {
+              continue;
+            }
+            for (const key of directKeys) {
+              const val = subObj[key];
+              if (typeof val === 'string' && val.trim()) {
+                const parsed = splitThinkingBlock(sanitizeAnswerText(val));
+                if (parsed.content) {
+                  return {
+                    content: parsed.content,
+                    thinkingContent: nestedThink || parsed.thinkingContent,
+                  };
+                }
+              }
+            }
           }
         }
       }
@@ -451,6 +493,7 @@ export interface ProxyRequestSpec {
   headers?: Record<string, string>;
   body?: string;
   timeoutMs: number;
+  clientFirst?: boolean;
 }
 
 export function buildModelRequests(
@@ -500,26 +543,77 @@ export function buildModelRequests(
     }
 
     case 'stenly':
-      return [{ targetUrl: `https://stenly.org/api/ai/chatgpt?q=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://stenly.org/api/ai/chatgpt?q=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
-    case 'llm7':
+    case 'llm7': {
+      const messages = buildChatMessagesPayload(
+        rawPrompt,
+        history,
+        settings,
+        model.maxPromptChars
+      );
       return [
         {
           targetUrl: 'https://api.llm7.io/v1/chat/completions',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: buildChatMessagesPayload(
-              rawPrompt,
-              history,
-              settings,
-              model.maxPromptChars
-            ),
+            model: 'default',
+            messages,
           }),
           timeoutMs: t,
         },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'DeepSeek-V4.1-Flash',
+            messages,
+          }),
+          timeoutMs: 22000,
+        },
       ];
+    }
+
+    case 'varhad-unlimited':
+      return [
+        {
+          targetUrl: `https://v2.api-varhad.my.id/ai/unlimitedai?prompt=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${q}`,
+          timeoutMs: 22000,
+        },
+      ];
+
+    case 'varhad-deepai': {
+      const compactPrompt = encodeURIComponent(
+        buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1000, 'compact')
+      );
+      return [
+        {
+          targetUrl: `https://v2.api-varhad.my.id/ai/deepai?prompt=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactPrompt}`,
+          timeoutMs: 20000,
+        },
+      ];
+    }
+
+    case 'nexray-overchat':
+      return [{ targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${q}`, timeoutMs: t }];
 
     case 'deepseek':
       return [
@@ -530,22 +624,66 @@ export function buildModelRequests(
       ];
 
     case 'honcho':
-      return [{ targetUrl: `https://stenly.org/api/ai/honcho?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://stenly.org/api/ai/honcho?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
     case 'qwen3':
-      return [{ targetUrl: `https://stenly.org/api/ai/qwen3?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://stenly.org/api/ai/qwen3?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
     case 'llama4':
-      return [{ targetUrl: `https://stenly.org/api/ai/llama4?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://stenly.org/api/ai/llama4?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
     case 'rin-chatgpt':
-      return [{ targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
     case 'rin-claude':
-      return [{ targetUrl: `https://apiii-xrina.my.id/ai/claudehaiku?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/claudehaiku?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
-    case 'varhad-claude':
-      return [{ targetUrl: `https://v2.api-varhad.my.id/ai/claude?prompt=${q}`, timeoutMs: t }];
+    case 'varhad-claude': {
+      const mirrorPrompt = encodeURIComponent(
+        buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1200, 'compact')
+      );
+      return [
+        {
+          targetUrl: `https://v2.api-varhad.my.id/ai/claude?prompt=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${mirrorPrompt}`,
+          timeoutMs: 20000,
+        },
+      ];
+    }
 
     case 'comiku-deepai':
       return [{ targetUrl: `https://comiku.my.id/ai/deepai?text=${q}`, timeoutMs: t }];
@@ -560,7 +698,13 @@ export function buildModelRequests(
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v3?text=${q}`, timeoutMs: t }];
 
     case 'rin-qwen':
-      return [{ targetUrl: `https://apiii-xrina.my.id/ai/qwen?text=${q}`, timeoutMs: t }];
+      return [
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/qwen?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+      ];
 
     case 'bintang-deepv4':
       return [{ targetUrl: `https://bintangapi.my.id/api/aichat/deep-v4?text=${q}`, timeoutMs: t }];
@@ -577,6 +721,7 @@ export function buildModelRequests(
         {
           targetUrl: `https://apiii-xrina.my.id/ai/aicostum?prompt=${fullPersona}&text=${contextualText}`,
           timeoutMs: t,
+          clientFirst: true,
         },
       ];
     }
@@ -636,7 +781,78 @@ export function buildModelRequests(
     }
 
     default:
-      return [{ targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${q}`, timeoutMs: 20000 }];
+      return [
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: buildChatMessagesPayload(rawPrompt, history, settings, 4000),
+          }),
+          timeoutMs: 22000,
+        },
+      ];
+  }
+}
+
+async function tryDirectBrowserCall(
+  spec: ProxyRequestSpec,
+  signal?: AbortSignal
+): Promise<{
+  ok: boolean;
+  kind?: 'text' | 'image';
+  body?: string;
+  imageUrl?: string;
+} | null> {
+  if (typeof window === 'undefined') return null;
+
+  const controller = new AbortController();
+  const directTimeoutMs = Math.min(spec.timeoutMs, 16000);
+  const timer = window.setTimeout(() => controller.abort(), directTimeoutMs);
+  const onParentAbort = () => controller.abort();
+  signal?.addEventListener('abort', onParentAbort, { once: true });
+
+  try {
+    const res = await fetch(spec.targetUrl, {
+      method: spec.method ?? 'GET',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        ...(spec.headers ?? {}),
+      },
+      body: spec.method === 'POST' ? spec.body : undefined,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) return null;
+
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.startsWith('image/')) {
+      const blob = await res.blob();
+      if (blob.size < 256) return null;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () =>
+          typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('empty'));
+        reader.onerror = () => reject(new Error('read-failed'));
+        reader.readAsDataURL(blob);
+      });
+      return { ok: true, kind: 'image', imageUrl: dataUrl };
+    }
+
+    const text = await res.text();
+    if (!text.trim() || /<title>\s*Just a moment/i.test(text)) {
+      return null;
+    }
+    return { ok: true, kind: 'text', body: text };
+  } catch {
+    if (signal?.aborted) {
+      throw new DOMException('Permintaan dibatalkan oleh pengguna.', 'AbortError');
+    }
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener('abort', onParentAbort);
   }
 }
 
@@ -650,6 +866,13 @@ async function callGateway(
   imageUrl?: string;
   error?: string;
 }> {
+  if (spec.clientFirst) {
+    const direct = await tryDirectBrowserCall(spec, signal);
+    if (direct && direct.ok) {
+      return direct;
+    }
+  }
+
   const response = await fetch('/api/proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -822,6 +1045,118 @@ export async function sendMultiModelChat({
   );
 }
 
+export interface SpecializedImageToolSpec {
+  kind: 'removebg' | 'dreamart' | 'hd' | 'brat';
+  label: string;
+  summary: string;
+  candidates: Array<{
+    id: string;
+    name: string;
+    url: string;
+  }>;
+}
+
+export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageToolSpec | null {
+  const trimmed = rawPrompt.trim();
+  if (!trimmed) return null;
+
+  const bratMatch = trimmed.match(/^\/brat\s+([\s\S]+)$/i);
+  if (bratMatch && bratMatch[1].trim()) {
+    const text = bratMatch[1].trim();
+    return {
+      kind: 'brat',
+      label: 'Varhad Brat Maker',
+      summary: `Gambar Brat berhasil dibuat untuk teks: *"${text}"*`,
+      candidates: [
+        {
+          id: 'varhad-brat-v2',
+          name: 'Varhad Brat Maker v2',
+          url: `https://v2.api-varhad.my.id/maker/brat?text=${encodeURIComponent(text)}`,
+        },
+        {
+          id: 'varhad-brat-v1',
+          name: 'Varhad Brat Maker v1',
+          url: `https://api-varhad.my.id/maker/brat?text=${encodeURIComponent(text)}`,
+        },
+      ],
+    };
+  }
+
+  const removeBgMatch =
+    trimmed.match(/^\/(?:removebg|nobg)\s+(https?:\/\/\S+)/i) ||
+    trimmed.match(
+      /^(?:tolong\s+|coba\s+)?(?:hapus|hilangkan|remove)\s+(?:background|latar(?:\s+belakang)?|bg)\s+(?:gambar\s+|foto\s+)?(https?:\/\/\S+)/i
+    );
+  if (removeBgMatch) {
+    const imgUrl = removeBgMatch[1].trim();
+    return {
+      kind: 'removebg',
+      label: 'Varhad RemoveBG AI',
+      summary: 'Latar belakang gambar berhasil dihapus secara transparan.',
+      candidates: [
+        {
+          id: 'varhad-removebg-v1',
+          name: 'Varhad RemoveBG · v2 Server',
+          url: `https://v2.api-varhad.my.id/tools/removebg?imageUrl=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'varhad-removebg-v2',
+          name: 'Varhad RemoveBG V2',
+          url: `https://v2.api-varhad.my.id/image/removebgv2?imgUrl=${encodeURIComponent(imgUrl)}`,
+        },
+      ],
+    };
+  }
+
+  const hdMatch =
+    trimmed.match(/^\/(?:hd|upscale|jernihkan)\s+(https?:\/\/\S+)/i) ||
+    trimmed.match(
+      /^(?:tolong\s+|coba\s+)?(?:jernihkan|pertajam|upscale|hd(?:-kan)?)\s+(?:gambar\s+|foto\s+)?(https?:\/\/\S+)/i
+    );
+  if (hdMatch) {
+    const imgUrl = hdMatch[1].trim();
+    return {
+      kind: 'hd',
+      label: 'Varhad HD Enhancer',
+      summary: 'Kualitas dan ketajaman gambar berhasil ditingkatkan (HD Upscale).',
+      candidates: [
+        {
+          id: 'varhad-hd-v1',
+          name: 'Varhad HD Enhancer',
+          url: `https://api-varhad.my.id/tools/hd?imageUrl=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'rin-hd',
+          name: 'Rin AI HD Enhancer',
+          url: `https://apiii-xrina.my.id/ai-image/hd?url=${encodeURIComponent(imgUrl)}`,
+        },
+      ],
+    };
+  }
+
+  const dreamArtMatch = trimmed.match(
+    /^\/dreamart\s+(https?:\/\/\S+)\s+([\s\S]+)$/i
+  );
+  if (dreamArtMatch && dreamArtMatch[2].trim()) {
+    const imgUrl = dreamArtMatch[1].trim();
+    const stylePrompt = dreamArtMatch[2].trim();
+    return {
+      kind: 'dreamart',
+      label: 'Varhad DreamArt AI',
+      summary: `Gambar berhasil diolah ulang oleh **DreamArt AI** dengan gaya: *"${stylePrompt}"*`,
+      candidates: [
+        {
+          id: 'varhad-dreamart',
+          name: 'DreamArt AI · Varhad v2',
+          url: `https://v2.api-varhad.my.id/ai/dreamart?imgUrl=${encodeURIComponent(imgUrl)}&prompt=${encodeURIComponent(stylePrompt)}`,
+        },
+      ],
+    };
+  }
+
+  return null;
+}
+
 export function parseImagePromptIntent(rawPrompt: string): {
   isImageIntent: boolean;
   cleanPrompt: string;
@@ -830,6 +1165,14 @@ export function parseImagePromptIntent(rawPrompt: string): {
   const trimmed = rawPrompt.trim();
   if (!trimmed) {
     return { isImageIntent: false, cleanPrompt: '', ratio: '1:1' };
+  }
+
+  if (detectSpecializedImageTool(trimmed)) {
+    return {
+      isImageIntent: true,
+      cleanPrompt: trimmed,
+      ratio: '1:1',
+    };
   }
 
   let ratio = '1:1';
@@ -1038,6 +1381,77 @@ export async function generateMultiEngineImage({
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
+  const specialized = detectSpecializedImageTool(prompt);
+  if (specialized) {
+    let prevFailed: string | undefined;
+    for (let idx = 0; idx < specialized.candidates.length; idx++) {
+      if (signal?.aborted) {
+        throw new DOMException('Pembuatan gambar dibatalkan.', 'AbortError');
+      }
+      const cand = specialized.candidates[idx];
+      onStatus?.({
+        modelName: cand.name,
+        attempt: idx + 1,
+        isFallback: idx > 0,
+        previousFailedModel: prevFailed,
+        imageMode: true,
+      });
+
+      const res = await callGateway(
+        {
+          targetUrl: cand.url,
+          method: 'GET',
+          timeoutMs: 32000,
+          clientFirst: true,
+        },
+        signal
+      );
+
+      if (res.ok && res.kind === 'image' && res.imageUrl) {
+        return {
+          content: specialized.summary,
+          answeredById: cand.id,
+          answeredByName: cand.name,
+          usedFallback: idx > 0,
+          attemptsCount: idx + 1,
+          imageUrl: res.imageUrl,
+        };
+      }
+
+      if (res.ok && typeof res.body === 'string') {
+        const extracted = extractImageUrlFromJson(res.body);
+        if (extracted) {
+          return {
+            content: specialized.summary,
+            answeredById: cand.id,
+            answeredByName: cand.name,
+            usedFallback: idx > 0,
+            attemptsCount: idx + 1,
+            imageUrl: extracted,
+          };
+        }
+      }
+
+      const preloaded = await preloadBrowserDirectImage(cand.url, 26000, signal);
+      if (preloaded) {
+        return {
+          content: specialized.summary,
+          answeredById: cand.id,
+          answeredByName: cand.name,
+          usedFallback: idx > 0,
+          attemptsCount: idx + 1,
+          imageUrl: cand.url,
+        };
+      }
+
+      prevFailed = cand.name;
+    }
+
+    throw new Error(
+      `Gagal memproses gambar dengan ${specialized.label}. Pastikan tautan gambar publik valid dan dapat diakses.`
+    );
+  }
+
   const parsedIntent = parseImagePromptIntent(prompt);
   const cleanPrompt = (parsedIntent.cleanPrompt || prompt).trim();
   const ratio = parsedIntent.ratio;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, Play, Sparkles, Trash2, X } from 'lucide-react';
 import type { AppSettings } from '../types/chat';
+import { AI_MODELS } from '../services/modelCatalog';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -265,7 +266,7 @@ export function SettingsModal({
                 Personalisasi Global NodataGPT
               </label>
               <span className="inline-flex items-center gap-1 rounded-full border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-0.5 font-mono-code text-[10px] font-semibold text-[#67E8F9]">
-                Aktif di 25 Model · Mr.NODATA
+                Aktif di {AI_MODELS.length - 1} Model · Mr.NODATA
               </span>
             </div>
             <p className="text-xs leading-relaxed text-[#94A3B8]">
@@ -290,7 +291,8 @@ export function SettingsModal({
               <span>Kunci API Pribadi (Opsional, Prioritas 0)</span>
             </div>
             <p className="text-[11px] leading-relaxed text-[#94A3B8]">
-              Disimpan lokal di perangkat Anda saja. Kosongkan bila ingin memakai 23 model tanpa kunci.
+              Disimpan lokal di perangkat Anda saja. Kosongkan bila ingin memakai{' '}
+              {AI_MODELS.filter((m) => m.id !== 'auto' && !m.requiresKey).length} model tanpa kunci.
             </p>
             <div>
               <label

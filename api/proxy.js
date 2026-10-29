@@ -11,6 +11,7 @@ const ALLOWED_HOSTS = new Set([
   'asyntai.com',
   'apiii-xrina.my.id',
   'v2.api-varhad.my.id',
+  'api-varhad.my.id',
   'comiku.my.id',
   'bintangapi.my.id',
   'api.nexray.eu.cc',

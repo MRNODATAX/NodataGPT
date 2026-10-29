@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import type { AIModelDefinition } from '../types/chat';
+import { AI_MODELS } from '../services/modelCatalog';
 
 interface ChatComposerProps {
   value: string;
@@ -330,7 +331,7 @@ export function ChatComposer({
         </div>
 
         <p className="mt-1.5 hidden text-center text-[11px] text-[#94A3B8] sm:block">
-          NodataGPT memadukan 25 jalur model dengan Auto-Fallback otomatis di bawah langit kosmik live.
+          NodataGPT memadukan {AI_MODELS.length - 1} jalur model AI dengan Auto-Fallback otomatis di bawah langit kosmik live.
         </p>
       </div>
     </div>

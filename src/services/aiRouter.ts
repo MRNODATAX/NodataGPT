@@ -596,13 +596,23 @@ export function buildModelRequests(
 
   switch (model.id) {
     case 'gemini':
-      // Neosoft / guest Gemini scrapers are intermittently blocked by Google web-UI anti-bot
-      // (boq_gemini-web-uiserver_20261028.12_p0); try Neosoft with a tight timeout first,
-      // then seamlessly fail over to fast Flash-class mirrors.
+      // 1st: Direct Google Gemini 81-Slot Guest Scraper (/api/gemini)
+      // 2nd: Neosoft Gemini scraper (if recovered)
+      // 3rd+: Fast Flash-class mirrors (LLM7 Nemotron-3 30B, Stenly AI Prompt, Nexray Overchat)
       return [
         {
+          targetUrl: '/api/gemini',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: buildContextualUserText(rawPrompt, history, settings, 4500),
+            system: buildSystemPersona(settings, 'full'),
+          }),
+          timeoutMs: 26000,
+        },
+        {
           targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${compactQ}`,
-          timeoutMs: 9500,
+          timeoutMs: 8500,
           clientFirst: true,
         },
         {
@@ -1136,6 +1146,53 @@ async function callGateway(
   imageUrl?: string;
   error?: string;
 }> {
+  // Same-origin internal serverless endpoints (e.g. /api/gemini) are called directly
+  if (spec.targetUrl.startsWith('/api/')) {
+    const controller = new AbortController();
+    const timer =
+      typeof window !== 'undefined'
+        ? window.setTimeout(() => controller.abort(), spec.timeoutMs)
+        : setTimeout(() => controller.abort(), spec.timeoutMs);
+    const onParentAbort = () => controller.abort();
+    signal?.addEventListener('abort', onParentAbort, { once: true });
+
+    try {
+      const res = await fetch(spec.targetUrl, {
+        method: spec.method ?? 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...(spec.headers ?? {}),
+        },
+        body: spec.method === 'POST' ? spec.body : undefined,
+        signal: controller.signal,
+      });
+
+      const rawText = await res.text();
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errJson = JSON.parse(rawText) as { error?: string };
+          if (errJson.error) errMessage = errJson.error;
+        } catch {
+          // ignore
+        }
+        return { ok: false, error: errMessage };
+      }
+      return { ok: true, kind: 'text', body: rawText };
+    } catch (err) {
+      if (signal?.aborted) {
+        throw new DOMException('Permintaan dibatalkan oleh pengguna.', 'AbortError');
+      }
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Koneksi ke endpoint internal gagal.',
+      };
+    } finally {
+      clearTimeout(timer as ReturnType<typeof setTimeout>);
+      signal?.removeEventListener('abort', onParentAbort);
+    }
+  }
+
   if (spec.clientFirst) {
     const direct = await tryDirectBrowserCall(spec, signal);
     if (direct && direct.ok) {

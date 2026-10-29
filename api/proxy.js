@@ -2,7 +2,9 @@ const ALLOWED_HOSTS = new Set([
   'api.neosoft.best',
   'text.pollinations.ai',
   'image.pollinations.ai',
+  'gen.pollinations.ai',
   'stenly.org',
+  'www.stenly.org',
   'api.llm7.io',
   'api-xemoz-official.my.id',
   'app.unlimitedai.chat',
@@ -19,21 +21,40 @@ const ALLOWED_HOSTS = new Set([
 const DEFAULT_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
+export const config = {
+  maxDuration: 60,
+};
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (req.method !== 'POST') {
+  const isProbeGet = req.method === 'GET' && String(req.query?.probe || '') === '1';
+
+  if (req.method !== 'POST' && !isProbeGet) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
   let payload = req.body;
-  if (typeof payload === 'string') {
+  if (isProbeGet) {
+    payload = {
+      targetUrl: typeof req.query?.targetUrl === 'string' ? req.query.targetUrl : '',
+      method: req.query?.method === 'POST' ? 'POST' : 'GET',
+      headers:
+        req.query?.method === 'POST'
+          ? { 'Content-Type': 'application/json' }
+          : {},
+      body: typeof req.query?.body === 'string' ? req.query.body : undefined,
+      timeoutMs: Number(req.query?.timeoutMs) || 28000,
+      probe: true,
+    };
+  } else if (typeof payload === 'string') {
     try {
       payload = JSON.parse(payload);
     } catch {
@@ -46,7 +67,8 @@ export default async function handler(req, res) {
   const extraHeaders =
     payload?.headers && typeof payload.headers === 'object' ? payload.headers : {};
   const requestBody = typeof payload?.body === 'string' ? payload.body : undefined;
-  const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs) || 22000, 4000), 38000);
+  const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs) || 24000, 4000), 52000);
+  const probeOnly = Boolean(payload?.probe);
 
   if (!targetUrl) {
     return res.status(400).json({ ok: false, error: 'targetUrl wajib diisi.' });
@@ -67,10 +89,12 @@ export default async function handler(req, res) {
   }
 
   const forwardHeaders = {
-    Accept: 'application/json, text/plain, image/*, */*',
+    Accept: 'image/*, application/json, text/plain, */*',
     'User-Agent': req.headers?.['user-agent'] || DEFAULT_UA,
     ...extraHeaders,
   };
+
+  const startedAt = Date.now();
 
   try {
     const upstream = await fetch(parsedUrl.toString(), {
@@ -80,39 +104,81 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(timeoutMs),
     });
 
+    const latencyMs = Date.now() - startedAt;
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
 
     if (upstream.ok && contentType.startsWith('image/')) {
       const arrayBuf = await upstream.arrayBuffer();
       if (arrayBuf.byteLength < 256) {
-        return res.status(502).json({ ok: false, error: 'Berkas gambar kosong dari upstream.' });
+        return res.status(probeOnly ? 200 : 502).json({
+          ok: false,
+          status: upstream.status,
+          kind: 'image-empty',
+          contentType,
+          byteLength: arrayBuf.byteLength,
+          latencyMs,
+          error: 'Berkas gambar kosong dari upstream.',
+        });
       }
-      const base64 = Buffer.from(arrayBuf).toString('base64');
+
       const mime = contentType.split(';')[0] || 'image/jpeg';
+
+      if (probeOnly) {
+        return res.status(200).json({
+          ok: true,
+          status: upstream.status,
+          kind: 'image',
+          contentType: mime,
+          byteLength: arrayBuf.byteLength,
+          latencyMs,
+        });
+      }
+
+      const base64 = Buffer.from(arrayBuf).toString('base64');
       return res.status(200).json({
         ok: true,
         status: upstream.status,
         kind: 'image',
         contentType: mime,
+        byteLength: arrayBuf.byteLength,
+        latencyMs,
         imageUrl: `data:${mime};base64,${base64}`,
       });
     }
 
     const textBody = await upstream.text();
+    if (probeOnly) {
+      return res.status(200).json({
+        ok: upstream.ok,
+        status: upstream.status,
+        kind: 'text',
+        contentType,
+        byteLength: textBody.length,
+        latencyMs,
+        preview: textBody.slice(0, 700),
+      });
+    }
+
     return res.status(200).json({
       ok: upstream.ok,
       status: upstream.status,
       kind: 'text',
       contentType,
+      latencyMs,
       body: textBody,
     });
   } catch (err) {
+    const latencyMs = Date.now() - startedAt;
     const isTimeout =
       err instanceof Error &&
-      (err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout|aborted/i.test(err.message));
+      (err.name === 'TimeoutError' ||
+        err.name === 'AbortError' ||
+        /timeout|aborted/i.test(err.message));
 
-    return res.status(504).json({
+    return res.status(probeOnly ? 200 : 504).json({
       ok: false,
+      status: 504,
+      latencyMs,
       error: isTimeout
         ? 'Waktu tunggu habis pada server model ini.'
         : 'Gagal menghubungi server model AI.',

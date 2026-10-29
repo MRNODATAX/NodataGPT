@@ -136,14 +136,14 @@ export function SettingsModal({
             </button>
           </div>
 
-          {/* Replay Interactive Opening Animation */}
+          {/* Replay Opening Animation */}
           <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-4">
             <div>
               <p className="text-sm font-medium text-white">
-                Animasi Pembuka Interaktif
+                Animasi Pembuka NodataGPT
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-[#94A3B8]">
-                Putar ulang animasi loading kosmik NodataGPT kapan saja.
+                Putar ulang animasi loading pembuka NodataGPT kapan saja.
               </p>
             </div>
             <button

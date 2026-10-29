@@ -172,7 +172,11 @@ export function ChatComposer({
         )}
 
         <div
-          className={`nd-glass-composer rounded-[26px] px-3 pt-2.5 pb-2 ${
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('button, input')) return;
+            textareaRef.current?.focus();
+          }}
+          className={`nd-glass-composer rounded-[26px] px-3.5 pt-2.5 pb-2 cursor-text ${
             imageMode ? 'nd-glass-composer-orange' : ''
           }`}
         >
@@ -210,7 +214,7 @@ export function ChatComposer({
                   ? 'Tanyakan masalah kompleks untuk dianalisis DeepThink...'
                   : 'Tanya NodataGPT apa saja...'
             }
-            className="max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1.5 py-0.5 text-[15px] leading-relaxed text-[#F8FAFC] placeholder-[#94A3B8] focus:outline-none sm:text-base"
+            className="nd-composer-textarea block max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[15px] leading-relaxed text-[#F8FAFC] caret-[#22D3EE] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none sm:text-base"
           />
 
           {/* Compact Single-Row Gemini + DeepSeek + Qwen Bottom Bar (Zero Wrapping on 320px+) */}

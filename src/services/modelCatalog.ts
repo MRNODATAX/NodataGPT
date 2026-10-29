@@ -331,38 +331,75 @@ export const DEFAULT_FALLBACK_ORDER: string[] = [
 export interface ImageEngineDefinition {
   id: string;
   name: string;
-  buildUrl: (prompt: string) => string;
+  provider: string;
+  delivery: 'gateway' | 'hybrid-json' | 'browser-img';
+  buildUrl: (prompt: string, ratio?: string) => string;
   timeoutMs: number;
 }
 
 export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
-    id: 'pollinations-img',
-    name: 'Pollinations Flux',
+    id: 'nexray-magicstudio',
+    name: 'MagicStudio HD · Nexray',
+    provider: 'Nexray AI',
+    delivery: 'gateway',
     buildUrl: (prompt) =>
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 99999)}`,
+      `https://api.nexray.eu.cc/ai/magicstudio?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 28000,
+  },
+  {
+    id: 'nexray-flux-v1',
+    name: 'Flux v1 · Nexray',
+    provider: 'Nexray AI',
+    delivery: 'gateway',
+    buildUrl: (prompt) =>
+      `https://api.nexray.eu.cc/ai/v1/flux?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 32000,
+  },
+  {
+    id: 'nexray-writecream',
+    name: 'WriteCream Studio · Nexray',
+    provider: 'Nexray AI',
+    delivery: 'gateway',
+    buildUrl: (prompt, ratio = '1:1') =>
+      `https://api.nexray.eu.cc/ai/writecreamimg?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(ratio)}`,
+    timeoutMs: 30000,
+  },
+  {
+    id: 'nexray-ideogram',
+    name: 'Ideogram Ultra · Nexray',
+    provider: 'Nexray AI',
+    delivery: 'gateway',
+    buildUrl: (prompt) =>
+      `https://api.nexray.eu.cc/ai/ideogram?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 42000,
+  },
+  {
+    id: 'varhad-img',
+    name: 'Varhad Text2Image',
+    provider: 'Varhad API',
+    delivery: 'hybrid-json',
+    buildUrl: (prompt) =>
+      `https://v2.api-varhad.my.id/ai/text2image?prompt=${encodeURIComponent(prompt)}`,
     timeoutMs: 32000,
   },
   {
     id: 'rin-flux',
-    name: 'Rin Flux Image',
+    name: 'Rin Flux Direct',
+    provider: 'Rin API',
+    delivery: 'browser-img',
     buildUrl: (prompt) =>
       `https://apiii-xrina.my.id/ai-image/flux?prompt=${encodeURIComponent(prompt)}`,
-    timeoutMs: 34000,
+    timeoutMs: 30000,
   },
   {
-    id: 'rin-text2img',
-    name: 'Rin Text2Img',
+    id: 'nexray-sologo',
+    name: 'Sologo AI · Nexray',
+    provider: 'Nexray AI',
+    delivery: 'gateway',
     buildUrl: (prompt) =>
-      `https://apiii-xrina.my.id/ai-image/text2img?prompt=${encodeURIComponent(prompt)}`,
-    timeoutMs: 34000,
-  },
-  {
-    id: 'varhad-img',
-    name: 'Varhad Image AI',
-    buildUrl: (prompt) =>
-      `https://v2.api-varhad.my.id/ai/text2image?prompt=${encodeURIComponent(prompt)}`,
-    timeoutMs: 34000,
+      `https://api.nexray.eu.cc/ai/sologo?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 36000,
   },
 ];
 

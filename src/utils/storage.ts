@@ -59,7 +59,25 @@ export function saveConversations(conversations: Conversation[]): void {
   try {
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
   } catch {
-    // Ignore storage quota errors
+    try {
+      let keptInlineImages = 0;
+      const compacted: Conversation[] = conversations.map((conv) => ({
+        ...conv,
+        messages: conv.messages.map((msg) => {
+          if (msg.imageUrl && msg.imageUrl.startsWith('data:image/')) {
+            keptInlineImages += 1;
+            if (keptInlineImages > 2) {
+              const { imageUrl: _dropped, ...rest } = msg;
+              return rest;
+            }
+          }
+          return msg;
+        }),
+      }));
+      localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(compacted));
+    } catch {
+      // Ignore storage quota errors
+    }
   }
 }
 

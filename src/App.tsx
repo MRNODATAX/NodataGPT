@@ -12,6 +12,7 @@ import { InstallPwaModal } from './components/InstallPwaModal';
 import {
   generateMultiEngineImage,
   getHealthyModelCount,
+  parseImagePromptIntent,
   sendMultiModelChat,
   type RouterStatusUpdate,
 } from './services/aiRouter';
@@ -468,7 +469,11 @@ export function App() {
       const trimmed = draft.trim();
       if ((!trimmed && !attachmentText) || isLoading) return;
 
-      const useImage = imageMode;
+      const intent = attachmentText
+        ? { isImageIntent: false, cleanPrompt: trimmed }
+        : parseImagePromptIntent(trimmed);
+      const useImage = imageMode || intent.isImageIntent;
+      const effectivePrompt = useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
       const useThinking = deepThink && !useImage;
       const displayContent =
         trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
@@ -478,6 +483,7 @@ export function App() {
         role: 'user',
         content: displayContent,
         createdAt: Date.now(),
+        isImageRequest: useImage,
         attachmentName,
       };
 
@@ -486,11 +492,12 @@ export function App() {
         role: 'assistant',
         content: '',
         status: 'waiting',
+        isImageRequest: useImage,
         createdAt: Date.now() + 1,
       };
 
       setDraft('');
-      if (useImage) setImageMode(false);
+      if (imageMode) setImageMode(false);
 
       let chatId = activeConversation?.id;
       let existingMessages: ChatMessage[] = [];
@@ -522,7 +529,7 @@ export function App() {
       }
 
       await executePrompt({
-        promptText: trimmed,
+        promptText: effectivePrompt,
         targetChatId: chatId,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: existingMessages,
@@ -541,10 +548,12 @@ export function App() {
       options?: { imageMode?: boolean; deepThink?: boolean }
     ) => {
       if (isLoading) return;
+      const isImg = Boolean(options?.imageMode);
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
         content: starterPrompt,
+        isImageRequest: isImg,
         createdAt: Date.now(),
       };
       const assistantPlaceholder: ChatMessage = {
@@ -552,6 +561,7 @@ export function App() {
         role: 'assistant',
         content: '',
         status: 'waiting',
+        isImageRequest: isImg,
         createdAt: Date.now() + 1,
       };
       const newChat: Conversation = {
@@ -569,7 +579,7 @@ export function App() {
         targetChatId: newChat.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: [],
-        asImage: Boolean(options?.imageMode),
+        asImage: isImg,
         useDeepThink: Boolean(options?.deepThink),
       });
     },
@@ -584,10 +594,19 @@ export function App() {
       );
       if (idx <= 0) return;
 
+      const targetAssistantMsg = activeConversation.messages[idx];
       const precedingUserMsg = [...activeConversation.messages.slice(0, idx)]
         .reverse()
         .find((m) => m.role === 'user');
       if (!precedingUserMsg) return;
+
+      const intent = parseImagePromptIntent(precedingUserMsg.content);
+      const regenerateAsImage = Boolean(
+        targetAssistantMsg?.imageUrl ||
+          targetAssistantMsg?.isImageRequest ||
+          precedingUserMsg.isImageRequest ||
+          intent.isImageIntent
+      );
 
       const trimmedMessages = activeConversation.messages.slice(0, idx);
       const historyBeforeUser = trimmedMessages.slice(0, -1);
@@ -597,6 +616,7 @@ export function App() {
         role: 'assistant',
         content: '',
         status: 'waiting',
+        isImageRequest: regenerateAsImage,
         createdAt: Date.now(),
       };
 
@@ -613,11 +633,15 @@ export function App() {
       );
 
       await executePrompt({
-        promptText: precedingUserMsg.content,
+        promptText:
+          regenerateAsImage && intent.cleanPrompt
+            ? intent.cleanPrompt
+            : precedingUserMsg.content,
         targetChatId: activeConversation.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: historyBeforeUser,
-        useDeepThink: deepThink,
+        asImage: regenerateAsImage,
+        useDeepThink: deepThink && !regenerateAsImage,
       });
     },
     [activeConversation, isLoading, deepThink, executePrompt]

@@ -15,6 +15,7 @@ export interface ChatMessage {
   answeredByName?: string;
   usedFallback?: boolean;
   imageUrl?: string;
+  isImageRequest?: boolean;
   attachmentName?: string;
 }
 

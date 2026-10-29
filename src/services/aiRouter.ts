@@ -3,6 +3,7 @@ import {
   AI_MODELS,
   DEFAULT_FALLBACK_ORDER,
   IMAGE_ENGINES,
+  type ImageEngineDefinition,
   getModelById,
 } from './modelCatalog';
 
@@ -724,6 +725,7 @@ export interface RouterStatusUpdate {
   isFallback: boolean;
   previousFailedModel?: string;
   deepThink?: boolean;
+  imageMode?: boolean;
 }
 
 export interface RouterResult {
@@ -820,6 +822,213 @@ export async function sendMultiModelChat({
   );
 }
 
+export function parseImagePromptIntent(rawPrompt: string): {
+  isImageIntent: boolean;
+  cleanPrompt: string;
+  ratio: string;
+} {
+  const trimmed = rawPrompt.trim();
+  if (!trimmed) {
+    return { isImageIntent: false, cleanPrompt: '', ratio: '1:1' };
+  }
+
+  let ratio = '1:1';
+  if (/\b(?:16:9|landscape|widescreen|wallpaper\s+desktop|horizontal)\b/i.test(trimmed)) {
+    ratio = '16:9';
+  } else if (/\b(?:9:16|portrait|story|reels|tiktok|wallpaper\s+hp|vertikal)\b/i.test(trimmed)) {
+    ratio = '9:16';
+  } else if (/\b4:5\b/.test(trimmed)) {
+    ratio = '4:5';
+  } else if (/\b3:2\b/.test(trimmed)) {
+    ratio = '3:2';
+  } else if (/\b2:3\b/.test(trimmed)) {
+    ratio = '2:3';
+  } else if (/\b21:9\b/.test(trimmed)) {
+    ratio = '21:9';
+  }
+
+  const slashMatch = trimmed.match(/^\/(?:img|image|gambar|draw|lukis)\s+([\s\S]+)$/i);
+  if (slashMatch) {
+    return {
+      isImageIntent: true,
+      cleanPrompt: slashMatch[1].trim(),
+      ratio,
+    };
+  }
+
+  const codeExclusion =
+    /\b(?:html|css|js|javascript|typescript|python|react|tailwind|kode|code|script|svg|canvas|komponen|component|sql|json|api|endpoint|daftar)\b/i;
+
+  if (codeExclusion.test(trimmed)) {
+    return { isImageIntent: false, cleanPrompt: trimmed, ratio };
+  }
+
+  const naturalImageMatch = trimmed.match(
+    /^(?:tolong\s+|coba\s+|bantu\s+|please\s+)?(?:buat(?:kan|in)?|bikin(?:kan|in)?|generate|create|draw|lukis(?:kan)?|gambar(?:kan)?|render)\s+(?:saya\s+|aku\s+)?(?:sebuah\s+|satu\s+|a\s+|an\s+)?(?:gambar|foto|ilustrasi|lukisan|poster|wallpaper|logo|image|picture|photo|artwork|illustration)\s*(?:tentang|berupa|dari|of|for|:|-)?\s*([\s\S]+)$/i
+  );
+
+  if (naturalImageMatch && naturalImageMatch[1].trim().length >= 2) {
+    return {
+      isImageIntent: true,
+      cleanPrompt: naturalImageMatch[1].trim(),
+      ratio,
+    };
+  }
+
+  return { isImageIntent: false, cleanPrompt: trimmed, ratio };
+}
+
+export function extractImageUrlFromJson(rawBody: string): string {
+  const trimmed = rawBody.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    if (parsed.status === false || parsed.ok === false || parsed.success === false) {
+      return '';
+    }
+
+    const isHttpOrDataImg = (val: unknown): val is string =>
+      typeof val === 'string' &&
+      val.trim().length > 8 &&
+      (/^(?:https?:\/\/|data:image\/)/i.test(val.trim()));
+
+    const topKeys = ['imageUrl', 'image_url', 'image', 'url', 'img', 'result', 'output', 'thumbnail'];
+    for (const k of topKeys) {
+      if (isHttpOrDataImg(parsed[k])) {
+        return parsed[k].trim();
+      }
+    }
+
+    const nestedContainers = ['result', 'data', 'output', 'response'];
+    for (const cKey of nestedContainers) {
+      const container = parsed[cKey];
+      if (Array.isArray(container) && container.length > 0) {
+        const first = container[0];
+        if (isHttpOrDataImg(first)) {
+          return first.trim();
+        }
+        if (first && typeof first === 'object') {
+          const firstObj = first as Record<string, unknown>;
+          for (const k of topKeys) {
+            if (isHttpOrDataImg(firstObj[k])) {
+              return firstObj[k].trim();
+            }
+          }
+        }
+      } else if (container && typeof container === 'object') {
+        const obj = container as Record<string, unknown>;
+        for (const k of topKeys) {
+          if (isHttpOrDataImg(obj[k])) {
+            return obj[k].trim();
+          }
+        }
+        if (Array.isArray(obj.images) && isHttpOrDataImg(obj.images[0])) {
+          return obj.images[0].trim();
+        }
+      }
+    }
+  } catch {
+    if (/^https?:\/\/\S+\.(?:png|jpe?g|webp)(?:\?\S*)?$/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  return '';
+}
+
+function orderImageEnginesForPrompt(prompt: string): ImageEngineDefinition[] {
+  const byId = new Map(IMAGE_ENGINES.map((e) => [e.id, e]));
+  const pick = (ids: string[]): ImageEngineDefinition[] => {
+    const chosen: ImageEngineDefinition[] = [];
+    const seen = new Set<string>();
+    for (const id of ids) {
+      const item = byId.get(id);
+      if (item && !seen.has(id)) {
+        chosen.push(item);
+        seen.add(id);
+      }
+    }
+    for (const item of IMAGE_ENGINES) {
+      if (!seen.has(item.id)) {
+        chosen.push(item);
+        seen.add(item.id);
+      }
+    }
+    return chosen;
+  };
+
+  if (/\blogo\b/i.test(prompt)) {
+    return pick([
+      'nexray-ideogram',
+      'nexray-sologo',
+      'nexray-magicstudio',
+      'nexray-flux-v1',
+      'nexray-writecream',
+    ]);
+  }
+
+  if (/\b(?:ideogram|poster|banner|tipografi|typography|tulisan|teks)\b/i.test(prompt)) {
+    return pick([
+      'nexray-ideogram',
+      'nexray-magicstudio',
+      'nexray-flux-v1',
+      'nexray-writecream',
+    ]);
+  }
+
+  if (/\bflux\b/i.test(prompt)) {
+    return pick([
+      'nexray-flux-v1',
+      'nexray-magicstudio',
+      'nexray-writecream',
+      'nexray-ideogram',
+    ]);
+  }
+
+  return IMAGE_ENGINES;
+}
+
+function preloadBrowserDirectImage(
+  url: string,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (typeof window === 'undefined' || typeof Image === 'undefined') {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const img = new Image();
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(ok);
+    };
+
+    const onAbort = () => {
+      img.src = '';
+      done(false);
+    };
+
+    const timer = window.setTimeout(() => {
+      img.src = '';
+      done(false);
+    }, timeoutMs);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    img.onload = () => {
+      done(img.naturalWidth >= 128 && img.naturalHeight >= 128);
+    };
+    img.onerror = () => done(false);
+    img.referrerPolicy = 'no-referrer';
+    img.src = url;
+  });
+}
+
 export async function generateMultiEngineImage({
   prompt,
   signal,
@@ -829,26 +1038,81 @@ export async function generateMultiEngineImage({
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
-  const cleanPrompt = prompt.trim();
+  const parsedIntent = parseImagePromptIntent(prompt);
+  const cleanPrompt = (parsedIntent.cleanPrompt || prompt).trim();
+  const ratio = parsedIntent.ratio;
+  const engines = orderImageEnginesForPrompt(cleanPrompt);
   let lastFailedName: string | undefined;
 
-  for (let idx = 0; idx < IMAGE_ENGINES.length; idx++) {
+  for (let idx = 0; idx < engines.length; idx++) {
     if (signal?.aborted) {
       throw new DOMException('Pembuatan gambar dibatalkan.', 'AbortError');
     }
 
-    const engine = IMAGE_ENGINES[idx];
+    const engine = engines[idx];
+    const targetUrl = engine.buildUrl(cleanPrompt, ratio);
+
     onStatus?.({
       modelName: engine.name,
       attempt: idx + 1,
       isFallback: idx > 0,
       previousFailedModel: lastFailedName,
+      imageMode: true,
     });
 
     try {
+      if (engine.delivery === 'browser-img') {
+        const loaded = await preloadBrowserDirectImage(
+          targetUrl,
+          engine.timeoutMs,
+          signal
+        );
+        if (loaded) {
+          return {
+            content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+            answeredById: engine.id,
+            answeredByName: engine.name,
+            usedFallback: idx > 0,
+            attemptsCount: idx + 1,
+            imageUrl: targetUrl,
+          };
+        }
+        lastFailedName = engine.name;
+        continue;
+      }
+
+      if (engine.delivery === 'hybrid-json' && typeof window !== 'undefined') {
+        try {
+          const directRes = await fetch(targetUrl, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal,
+          });
+          if (directRes.ok) {
+            const rawJson = await directRes.text();
+            const directImgUrl = extractImageUrlFromJson(rawJson);
+            if (directImgUrl) {
+              return {
+                content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+                answeredById: engine.id,
+                answeredByName: engine.name,
+                usedFallback: idx > 0,
+                attemptsCount: idx + 1,
+                imageUrl: directImgUrl,
+              };
+            }
+          }
+        } catch (directErr) {
+          if (directErr instanceof DOMException && directErr.name === 'AbortError') {
+            throw directErr;
+          }
+          // Fall through to serverless gateway attempt
+        }
+      }
+
       const res = await callGateway(
         {
-          targetUrl: engine.buildUrl(cleanPrompt),
+          targetUrl,
           method: 'GET',
           timeoutMs: engine.timeoutMs,
         },
@@ -857,7 +1121,7 @@ export async function generateMultiEngineImage({
 
       if (res.ok && res.kind === 'image' && res.imageUrl) {
         return {
-          content: `Gambar dibuat dari deskripsi: "${cleanPrompt}"`,
+          content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
           answeredById: engine.id,
           answeredByName: engine.name,
           usedFallback: idx > 0,
@@ -867,30 +1131,16 @@ export async function generateMultiEngineImage({
       }
 
       if (res.ok && typeof res.body === 'string') {
-        try {
-          const parsed = JSON.parse(res.body) as Record<string, unknown>;
-          const candidateUrl =
-            (typeof parsed.result === 'string' && parsed.result) ||
-            (typeof parsed.url === 'string' && parsed.url) ||
-            (typeof parsed.image === 'string' && parsed.image) ||
-            (parsed.data &&
-            typeof parsed.data === 'object' &&
-            typeof (parsed.data as Record<string, unknown>).url === 'string'
-              ? ((parsed.data as Record<string, unknown>).url as string)
-              : '');
-
-          if (candidateUrl && /^https?:\/\//i.test(candidateUrl)) {
-            return {
-              content: `Gambar dibuat dari deskripsi: "${cleanPrompt}"`,
-              answeredById: engine.id,
-              answeredByName: engine.name,
-              usedFallback: idx > 0,
-              attemptsCount: idx + 1,
-              imageUrl: candidateUrl,
-            };
-          }
-        } catch {
-          // Fall through to next engine
+        const candidateUrl = extractImageUrlFromJson(res.body);
+        if (candidateUrl) {
+          return {
+            content: `Gambar berhasil dibuat oleh **${engine.name}** dari deskripsi: *"${cleanPrompt}"*`,
+            answeredById: engine.id,
+            answeredByName: engine.name,
+            usedFallback: idx > 0,
+            attemptsCount: idx + 1,
+            imageUrl: candidateUrl,
+          };
         }
       }
     } catch (err) {

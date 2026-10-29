@@ -147,6 +147,50 @@ export function ChatThread({
     window.speechSynthesis.speak(utterance);
   };
 
+  const handleDownloadImage = (msg: ChatMessage) => {
+    const src = msg.imageUrl;
+    if (!src) return;
+
+    if (src.startsWith('data:image/')) {
+      try {
+        const commaIdx = src.indexOf(',');
+        const meta = src.slice(5, commaIdx);
+        const mime = meta.split(';')[0] || 'image/png';
+        const ext = mime.includes('png')
+          ? 'png'
+          : mime.includes('webp')
+            ? 'webp'
+            : 'jpg';
+        const binary = window.atob(src.slice(commaIdx + 1));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `nodatagpt-image-${msg.id.slice(0, 6)}.${ext}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
+        return;
+      } catch {
+        // Fallback below
+      }
+    }
+
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = `nodatagpt-image-${msg.id.slice(0, 6)}.png`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const formattedLiveSeconds = `${(elapsedMs / 1000).toFixed(1)} dtk`;
 
@@ -258,6 +302,14 @@ export function ChatThread({
                             </strong>
                             ...
                           </>
+                        ) : routerStatus?.imageMode || msg.isImageRequest ? (
+                          <>
+                            NodataGPT sedang melukis gambar
+                            {routerStatus?.modelName
+                              ? ` (${routerStatus.modelName})`
+                              : ''}
+                            ...
+                          </>
                         ) : (
                           <>
                             NodataGPT sedang menyusun jawaban
@@ -324,18 +376,16 @@ export function ChatThread({
                         />
                         <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
                           <span className="truncate text-xs text-[#94A3B8]">
-                            Hasil Gambar AI
+                            Hasil Gambar AI{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
                           </span>
-                          <a
-                            href={msg.imageUrl}
-                            download={`nodatagpt-image-${msg.id.slice(0, 6)}.jpg`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadImage(msg)}
+                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2] cursor-pointer"
                           >
                             <Download className="h-3.5 w-3.5" />
                             <span>Unduh</span>
-                          </a>
+                          </button>
                         </div>
                       </div>
                     )}

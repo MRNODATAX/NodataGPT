@@ -1918,6 +1918,7 @@ export interface RouterResult {
   attemptsCount: number;
   imageUrl?: string;
   videoUrl?: string;
+  videoPosterUrl?: string;
   audioUrl?: string;
   audioTitle?: string;
   galleryUrls?: string[];
@@ -1962,6 +1963,7 @@ export async function sendMultiModelChat({
       attemptsCount: 1,
       imageUrl: toolRes.imageUrl,
       videoUrl: toolRes.videoUrl,
+      videoPosterUrl: toolRes.videoPosterUrl,
       audioUrl: toolRes.audioUrl,
       audioTitle: toolRes.audioTitle,
       galleryUrls: toolRes.galleryUrls,

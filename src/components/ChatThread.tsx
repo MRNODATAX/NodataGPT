@@ -9,13 +9,15 @@ import {
   Clock,
   Copy,
   Download,
-  ExternalLink,
   FastForward,
   FileText,
   Film,
   ImageIcon,
+  Loader2,
+  Maximize2,
   Music,
   Pencil,
+  Play,
   RefreshCw,
   Send,
   Shuffle,
@@ -26,6 +28,12 @@ import {
 } from 'lucide-react';
 import type { ChatMessage } from '../types/chat';
 import type { RouterStatusUpdate } from '../services/aiRouter';
+import {
+  formatBytesShort,
+  getCachedMediaBlobUrl,
+  triggerDirectDownload,
+  type DownloadProgressInfo,
+} from '../utils/directDownload';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ChatThreadProps {
@@ -66,6 +74,358 @@ function ThinkingAccordion({ content }: { content: string }) {
       {expanded && (
         <div className="border-t border-white/8 px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap text-[#CBD5E1]">
           {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DirectDownloadButton({
+  url,
+  label,
+  kind,
+  fallbackId,
+  className,
+  iconSizeClass = 'h-3.5 w-3.5',
+  compact = false,
+  onDownloaded,
+}: {
+  url: string;
+  label: string;
+  kind?: 'video' | 'audio' | 'image' | 'file';
+  fallbackId?: string;
+  className: string;
+  iconSizeClass?: string;
+  compact?: boolean;
+  onDownloaded?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgressInfo | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (busy) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setBusy(false);
+      setProgress(null);
+      return;
+    }
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setBusy(true);
+    setDone(false);
+    setProgress(null);
+
+    try {
+      await triggerDirectDownload({
+        url,
+        label,
+        kind,
+        fallbackId,
+        signal: ctrl.signal,
+        onProgress: (info) => setProgress(info),
+      });
+      if (!ctrl.signal.aborted) {
+        setDone(true);
+        onDownloaded?.();
+        window.setTimeout(() => setDone(false), 2400);
+      }
+    } catch {
+      // Aborted or handled inside triggerDirectDownload
+    } finally {
+      if (abortRef.current === ctrl) {
+        abortRef.current = null;
+      }
+      setBusy(false);
+      setProgress(null);
+    }
+  };
+
+  let statusText = label;
+  if (busy) {
+    if (progress && progress.percent !== null) {
+      statusText = compact ? `${progress.percent}%` : `Mengunduh ${progress.percent}%...`;
+    } else if (progress && progress.loadedBytes > 0) {
+      statusText = compact
+        ? formatBytesShort(progress.loadedBytes)
+        : `Mengunduh ${formatBytesShort(progress.loadedBytes)}...`;
+    } else {
+      statusText = compact ? '...' : 'Menyiapkan...';
+    }
+  } else if (done) {
+    statusText = compact ? 'OK' : 'Terunduh';
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title={busy ? 'Klik untuk membatalkan unduhan' : `${label} (Unduh langsung tanpa tab baru)`}
+      className={`${className} cursor-pointer`}
+    >
+      {busy ? (
+        <Loader2 className={`${iconSizeClass} shrink-0 animate-spin`} />
+      ) : done ? (
+        <Check className={`${iconSizeClass} shrink-0 text-[#22D3EE]`} />
+      ) : (
+        <Download className={`${iconSizeClass} shrink-0`} />
+      )}
+      <span>{statusText}</span>
+    </button>
+  );
+}
+
+function DataSaverVideoCard({
+  videoUrl,
+  posterUrl,
+  answeredByName,
+  msgId,
+}: {
+  videoUrl: string;
+  posterUrl?: string;
+  answeredByName?: string;
+  msgId: string;
+}) {
+  const [playerActive, setPlayerActive] = useState(false);
+  const [, setCacheTick] = useState(0);
+
+  const cachedBlob = getCachedMediaBlobUrl(videoUrl);
+  const effectiveSrc = cachedBlob || videoUrl;
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/85">
+      {playerActive ? (
+        <video
+          src={effectiveSrc}
+          poster={posterUrl}
+          controls
+          autoPlay
+          playsInline
+          preload="metadata"
+          className="max-h-[420px] w-full bg-black object-contain"
+        />
+      ) : (
+        <div className="relative flex min-h-[210px] w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#060F1D] via-[#050811] to-[#170D07] px-4 py-7 text-center sm:min-h-[250px]">
+          {posterUrl && (
+            <img
+              src={posterUrl}
+              alt="Sampul video"
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-35 blur-[1px]"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/60" />
+
+          <div className="relative z-10 flex flex-col items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setPlayerActive(true)}
+              className="group inline-flex min-h-[46px] items-center gap-2.5 rounded-2xl border border-[#22D3EE]/55 bg-black/75 px-5 py-2.5 text-sm font-bold text-white shadow-[0_0_24px_rgba(34,211,238,0.24)] backdrop-blur-md transition-all hover:scale-[1.02] hover:border-[#22D3EE] hover:bg-[#0E7490]/85 cursor-pointer"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#22D3EE] text-black transition-transform group-hover:scale-105">
+                <Play className="h-3.5 w-3.5 fill-current translate-x-[0.5px]" />
+              </span>
+              <span>Putar Pratinjau Video</span>
+            </button>
+
+            <span className="rounded-full border border-white/12 bg-black/65 px-3 py-0.5 font-mono-code text-[10.5px] text-[#CBD5E1] backdrop-blur-xs">
+              {cachedBlob
+                ? 'Tersimpan di memori sesi · Putar 0 KB kuota'
+                : 'Mode Hemat Kuota · 0 MB diambil sebelum diputar'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-3.5 py-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-[#94A3B8]">
+          <Film className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+          <span className="truncate">
+            Video Siap Unduh{answeredByName ? ` · ${answeredByName}` : ''}
+          </span>
+        </span>
+        <DirectDownloadButton
+          url={videoUrl}
+          label="Unduh Video"
+          kind="video"
+          fallbackId={msgId}
+          onDownloaded={() => setCacheTick((t) => t + 1)}
+          className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
+        />
+      </div>
+    </div>
+  );
+}
+
+function DataSaverAudioCard({
+  audioUrl,
+  audioTitle,
+  answeredByName,
+  msgId,
+}: {
+  audioUrl: string;
+  audioTitle?: string;
+  answeredByName?: string;
+  msgId: string;
+}) {
+  const [, setCacheTick] = useState(0);
+  const effectiveSrc = getCachedMediaBlobUrl(audioUrl) || audioUrl;
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border border-[#22D3EE]/25 bg-[#07111F]/90 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-[#67E8F9]">
+          <Music className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+          <span className="truncate">
+            {audioTitle || answeredByName || 'Pemutar Audio'}
+          </span>
+        </span>
+        <DirectDownloadButton
+          url={audioUrl}
+          label="Unduh Audio"
+          kind="audio"
+          fallbackId={msgId}
+          iconSizeClass="h-3 w-3"
+          onDownloaded={() => setCacheTick((t) => t + 1)}
+          className="inline-flex min-h-[32px] shrink-0 items-center gap-1 rounded-lg border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-1 text-[11px] font-semibold text-[#CFFAFE] transition-colors hover:bg-[#22D3EE]/22"
+        />
+      </div>
+      <audio
+        src={effectiveSrc}
+        controls
+        preload="none"
+        className="h-10 w-full"
+      />
+    </div>
+  );
+}
+
+function DataSaverGalleryGrid({
+  urls,
+  msgId,
+}: {
+  urls: string[];
+  msgId: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const visibleUrls = showAll ? urls : urls.slice(0, 6);
+  const hiddenCount = urls.length - visibleUrls.length;
+
+  return (
+    <div className="mb-3 space-y-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {visibleUrls.map((gUrl, gIdx) => (
+          <div
+            key={`${msgId}-gal-${gIdx}`}
+            className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/75"
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxUrl(gUrl)}
+              aria-label={`Pratinjau gambar ${gIdx + 1}`}
+              className="h-full w-full cursor-pointer"
+            >
+              <img
+                src={gUrl}
+                alt={`Galeri ${gIdx + 1}`}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLightboxUrl(gUrl)}
+              aria-label="Perbesar gambar"
+              className="absolute top-1.5 left-1.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-black/70 text-[#CBD5E1] opacity-85 backdrop-blur-xs transition-colors hover:bg-black/90 hover:text-white cursor-pointer"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+
+            <DirectDownloadButton
+              url={gUrl}
+              label={`Unduh`}
+              kind="image"
+              fallbackId={`${msgId}-${gIdx + 1}`}
+              compact
+              iconSizeClass="h-3 w-3"
+              className="absolute right-1.5 bottom-1.5 inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-[#22D3EE]/45 bg-black/80 px-2 py-1 text-[10.5px] font-semibold text-[#CFFAFE] shadow-md backdrop-blur-xs transition-colors hover:bg-[#0E7490] hover:text-white"
+            />
+          </div>
+        ))}
+      </div>
+
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="inline-flex min-h-[34px] w-full items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/40 hover:text-white cursor-pointer"
+        >
+          <span>Tampilkan {hiddenCount} gambar HD lainnya (Hemat Kuota)</span>
+        </button>
+      )}
+
+      {lightboxUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div
+            className="relative flex max-h-[88dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#060B14] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+              <span className="font-display text-xs font-semibold text-[#CBD5E1]">
+                Pratinjau Gambar HD
+              </span>
+              <div className="flex items-center gap-2">
+                <DirectDownloadButton
+                  url={lightboxUrl}
+                  label="Unduh Gambar HD"
+                  kind="image"
+                  fallbackId={msgId}
+                  className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl bg-[#0E7490] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0891B2]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(null)}
+                  aria-label="Tutup pratinjau"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-1 items-center justify-center overflow-auto bg-black p-2">
+              <img
+                src={lightboxUrl}
+                alt="Pratinjau penuh"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="max-h-[76dvh] w-auto max-w-full object-contain"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -189,82 +549,6 @@ export function ChatThread({
     utterance.onerror = () => setSpeakingId(null);
     setSpeakingId(msg.id);
     window.speechSynthesis.speak(utterance);
-  };
-
-  const triggerDataUrlDownload = (dataUrl: string, msgId: string): boolean => {
-    try {
-      const commaIdx = dataUrl.indexOf(',');
-      if (commaIdx < 0) return false;
-      const meta = dataUrl.slice(5, commaIdx);
-      const mime = meta.split(';')[0] || 'image/png';
-      const ext = mime.includes('png')
-        ? 'png'
-        : mime.includes('webp')
-          ? 'webp'
-          : 'jpg';
-      const binary = window.atob(dataUrl.slice(commaIdx + 1));
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: mime });
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `nodatagpt-image-${msgId.slice(0, 6)}.${ext}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const handleDownloadImage = async (msg: ChatMessage) => {
-    const src = msg.imageUrl;
-    if (!src) return;
-
-    if (src.startsWith('data:image/')) {
-      if (triggerDataUrlDownload(src, msg.id)) return;
-    }
-
-    if (/^https?:\/\//i.test(src)) {
-      try {
-        const proxyRes = await fetch('/api/proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ targetUrl: src, method: 'GET', timeoutMs: 22000 }),
-        });
-        if (proxyRes.ok) {
-          const proxyJson = (await proxyRes.json()) as {
-            ok?: boolean;
-            kind?: string;
-            imageUrl?: string;
-          };
-          if (
-            proxyJson.ok &&
-            proxyJson.kind === 'image' &&
-            typeof proxyJson.imageUrl === 'string' &&
-            triggerDataUrlDownload(proxyJson.imageUrl, msg.id)
-          ) {
-            return;
-          }
-        }
-      } catch {
-        // Fallback below
-      }
-    }
-
-    const link = document.createElement('a');
-    link.href = src;
-    link.download = `nodatagpt-image-${msg.id.slice(0, 6)}.png`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const startEditingMessage = (msg: ChatMessage) => {
@@ -683,33 +967,12 @@ export function ChatThread({
                     )}
 
                     {msg.videoUrl && (
-                      <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/80">
-                        <video
-                          src={msg.videoUrl}
-                          controls
-                          playsInline
-                          preload="metadata"
-                          className="max-h-[420px] w-full bg-black object-contain"
-                        />
-                        <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3.5 py-2">
-                          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-[#94A3B8]">
-                            <Film className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
-                            <span className="truncate">
-                              Pemutar Video{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
-                            </span>
-                          </span>
-                          <a
-                            href={msg.videoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download
-                            className="inline-flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Unduh Video</span>
-                          </a>
-                        </div>
-                      </div>
+                      <DataSaverVideoCard
+                        videoUrl={msg.videoUrl}
+                        posterUrl={msg.videoPosterUrl}
+                        answeredByName={msg.answeredByName}
+                        msgId={msg.id}
+                      />
                     )}
 
                     {msg.imageUrl && (
@@ -720,77 +983,35 @@ export function ChatThread({
                           width={768}
                           height={768}
                           loading="lazy"
+                          decoding="async"
                           className="max-h-[420px] w-full bg-black object-contain"
                         />
                         <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
                           <span className="truncate text-xs text-[#94A3B8]">
                             Media Visual{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadImage(msg)}
-                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2] cursor-pointer"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Unduh</span>
-                          </button>
+                          <DirectDownloadButton
+                            url={msg.imageUrl}
+                            label="Unduh"
+                            kind="image"
+                            fallbackId={msg.id}
+                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
+                          />
                         </div>
                       </div>
                     )}
 
                     {msg.audioUrl && (
-                      <div className="mb-3 overflow-hidden rounded-xl border border-[#22D3EE]/25 bg-[#07111F]/90 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-[#67E8F9]">
-                            <Music className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
-                            <span className="truncate">
-                              {msg.audioTitle || msg.answeredByName || 'Pemutar Audio'}
-                            </span>
-                          </span>
-                          <a
-                            href={msg.audioUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={`nodatagpt-audio-${msg.id.slice(0, 6)}.mp3`}
-                            className="inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-lg border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-1 text-[11px] font-semibold text-[#CFFAFE] hover:bg-[#22D3EE]/22"
-                          >
-                            <Download className="h-3 w-3" />
-                            <span>Unduh Audio</span>
-                          </a>
-                        </div>
-                        <audio
-                          src={msg.audioUrl}
-                          controls
-                          preload="metadata"
-                          className="h-10 w-full"
-                        />
-                      </div>
+                      <DataSaverAudioCard
+                        audioUrl={msg.audioUrl}
+                        audioTitle={msg.audioTitle}
+                        answeredByName={msg.answeredByName}
+                        msgId={msg.id}
+                      />
                     )}
 
                     {msg.galleryUrls && msg.galleryUrls.length > 0 && (
-                      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {msg.galleryUrls.map((gUrl, gIdx) => (
-                          <a
-                            key={`${msg.id}-gal-${gIdx}`}
-                            href={gUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/70"
-                          >
-                            <img
-                              src={gUrl}
-                              alt={`Galeri ${gIdx + 1}`}
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            />
-                            <span className="absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-90 backdrop-blur-xs">
-                              <ExternalLink className="h-2.5 w-2.5 text-[#22D3EE]" />
-                              <span>HD</span>
-                            </span>
-                          </a>
-                        ))}
-                      </div>
+                      <DataSaverGalleryGrid urls={msg.galleryUrls} msgId={msg.id} />
                     )}
 
                     <MarkdownRenderer
@@ -803,21 +1024,18 @@ export function ChatThread({
                       (msg.summarizeTranscript && onSummarizeTranscript)) && (
                       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-2.5">
                         {msg.downloadItems?.map((dl, dlIdx) => (
-                          <a
+                          <DirectDownloadButton
                             key={`${msg.id}-dl-${dlIdx}`}
-                            href={dl.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download
+                            url={dl.url}
+                            label={dl.label}
+                            kind={dl.kind}
+                            fallbackId={`${msg.id}-${dlIdx + 1}`}
                             className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
                               dl.kind === 'audio'
                                 ? 'border-[#FB923C]/40 bg-[#FB923C]/14 text-[#FED7AA] hover:bg-[#FB923C]/24'
                                 : 'border-[#22D3EE]/40 bg-[#22D3EE]/14 text-[#CFFAFE] hover:bg-[#22D3EE]/24'
                             }`}
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>{dl.label}</span>
-                          </a>
+                          />
                         ))}
 
                         {msg.summarizeTranscript &&

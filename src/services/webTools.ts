@@ -29,6 +29,7 @@ export interface WebToolExecutionResult {
   usedFallback: boolean;
   imageUrl?: string;
   videoUrl?: string;
+  videoPosterUrl?: string;
   audioUrl?: string;
   audioTitle?: string;
   galleryUrls?: string[];
@@ -843,6 +844,12 @@ export async function executeWebToolCommand({
       const author = String(res1.author || 'TikTok Creator');
       const playUrl = typeof res1.play === 'string' ? res1.play : '';
       const musicUrl = typeof res1.music === 'string' ? res1.music : '';
+      const coverUrl =
+        (typeof res1.cover === 'string' && res1.cover.startsWith('http') && res1.cover) ||
+        (typeof res1.origin_cover === 'string' &&
+          res1.origin_cover.startsWith('http') &&
+          res1.origin_cover) ||
+        undefined;
       const images = Array.isArray(res1.images)
         ? res1.images.filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
         : [];
@@ -876,6 +883,7 @@ export async function executeWebToolCommand({
         answeredByName: 'TikTok HD · Snow API',
         usedFallback: false,
         videoUrl: images.length === 0 ? playUrl || undefined : undefined,
+        videoPosterUrl: images.length === 0 ? coverUrl : undefined,
         audioUrl: images.length > 0 && musicUrl ? musicUrl : undefined,
         galleryUrls: images.length > 0 ? images.slice(0, 12) : undefined,
         downloadItems: downloads,
@@ -941,16 +949,21 @@ export async function executeWebToolCommand({
       const hd = typeof res3.mp4_hd === 'string' ? res3.mp4_hd : '';
       const sd = typeof res3.mp4 === 'string' ? res3.mp4 : '';
       const mp3 = typeof res3.mp3 === 'string' ? res3.mp3 : '';
+      const thumb3 =
+        typeof res3.thumbnail === 'string' && res3.thumbnail.startsWith('http')
+          ? res3.thumbnail
+          : undefined;
       const downloads: MediaDownloadItem[] = [];
-      if (hd) downloads.push({ label: 'Unduh MP4 HD', url: hd, kind: 'video' });
-      if (sd && sd !== hd) downloads.push({ label: 'Unduh MP4 SD', url: sd, kind: 'video' });
+      if (sd) downloads.push({ label: 'Unduh MP4 (Hemat Kuota)', url: sd, kind: 'video' });
+      if (hd && hd !== sd) downloads.push({ label: 'Unduh MP4 HD', url: hd, kind: 'video' });
       if (mp3) downloads.push({ label: 'Unduh MP3', url: mp3, kind: 'audio' });
       return {
         content: `### 🎬 TikTok berhasil dimuat *(Auto-Fallback Varhad)*\n\n**Judul:** ${String(res3.title || 'Video TikTok')}`,
         answeredById: 'varhad-tiktok',
         answeredByName: 'TikTok DL · Varhad v2',
         usedFallback: true,
-        videoUrl: hd || sd || undefined,
+        videoUrl: sd || hd || undefined,
+        videoPosterUrl: thumb3,
         downloadItems: downloads,
       };
     }
@@ -985,6 +998,12 @@ export async function executeWebToolCommand({
         typeof res4.play === 'string' && res4.play.startsWith('http')
           ? res4.play
           : '';
+      const cover4 =
+        (typeof res4.cover === 'string' && res4.cover.startsWith('http') && res4.cover) ||
+        (typeof res4.origin_cover === 'string' &&
+          res4.origin_cover.startsWith('http') &&
+          res4.origin_cover) ||
+        undefined;
       const musicUrl =
         typeof res4.music === 'string' && res4.music.startsWith('http')
           ? res4.music
@@ -999,9 +1018,11 @@ export async function executeWebToolCommand({
         authorObj.nickname || authorObj.unique_id || 'TikTok Creator'
       );
       const downloads: MediaDownloadItem[] = [];
-      if (hdPlay) downloads.push({ label: 'Unduh MP4 HD (No WM)', url: hdPlay, kind: 'video' });
-      if (stdPlay && stdPlay !== hdPlay) {
-        downloads.push({ label: 'Unduh MP4 (No WM)', url: stdPlay, kind: 'video' });
+      if (stdPlay) {
+        downloads.push({ label: 'Unduh MP4 (No WM · Hemat)', url: stdPlay, kind: 'video' });
+      }
+      if (hdPlay && hdPlay !== stdPlay) {
+        downloads.push({ label: 'Unduh MP4 HD Original (No WM)', url: hdPlay, kind: 'video' });
       }
       if (musicUrl) {
         downloads.push({ label: 'Unduh Audio MP3', url: musicUrl, kind: 'audio' });
@@ -1016,7 +1037,8 @@ export async function executeWebToolCommand({
         answeredById: 'tikwm-official',
         answeredByName: 'TikTok HD · TikWM',
         usedFallback: true,
-        videoUrl: images.length === 0 ? hdPlay || stdPlay || undefined : undefined,
+        videoUrl: images.length === 0 ? stdPlay || hdPlay || undefined : undefined,
+        videoPosterUrl: images.length === 0 ? cover4 : undefined,
         audioUrl: images.length > 0 && musicUrl ? musicUrl : undefined,
         galleryUrls: images.length > 0 ? images.slice(0, 12) : undefined,
         downloadItems: downloads,
@@ -1109,6 +1131,7 @@ export async function executeWebToolCommand({
         usedFallback: false,
         imageUrl: isAudio ? thumb : undefined,
         videoUrl: !isAudio ? dlUrl : undefined,
+        videoPosterUrl: !isAudio ? thumb : undefined,
         audioUrl: isAudio ? dlUrl : undefined,
         audioTitle: title,
         downloadItems: [
@@ -1402,6 +1425,10 @@ export async function executeWebToolCommand({
           answeredByName: 'AIO Downloader · Nexray',
           usedFallback: false,
           videoUrl,
+          videoPosterUrl:
+            videoUrl && typeof res1.thumbnail === 'string' && res1.thumbnail.startsWith('http')
+              ? res1.thumbnail
+              : undefined,
           audioUrl: !videoUrl ? audioUrl : undefined,
           imageUrl:
             !videoUrl && typeof res1.thumbnail === 'string'

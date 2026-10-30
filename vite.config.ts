@@ -70,6 +70,60 @@ function localProxyPlugin(): Plugin {
           }
         });
       });
+
+      server.middlewares.use('/api/download', async (rawReq, rawRes) => {
+        const req = rawReq as unknown as NodeLikeReq & { url?: string };
+        const res = rawRes as unknown as NodeLikeRes & { write?: (chunk: Uint8Array) => void };
+        try {
+          const modulePath = './api/download.js';
+          const mod = (await import(/* @vite-ignore */ modulePath)) as {
+            default: {
+              fetch: (rq: unknown) => Promise<{
+                status: number;
+                headers: { forEach: (cb: (val: string, key: string) => void) => void };
+                body?: { getReader: () => { read: () => Promise<{ done: boolean; value?: Uint8Array }> } } | null;
+                text: () => Promise<string>;
+              }>;
+            };
+          };
+          const fullUrl = `http://localhost:5173/api/download${req.url || ''}`;
+          const g = globalThis as unknown as {
+            Headers: new () => { set: (k: string, v: string) => void };
+            Request: new (url: string, init: { method: string; headers: unknown }) => unknown;
+          };
+          const reqHeaders = new g.Headers();
+          for (const [k, v] of Object.entries(req.headers || {})) {
+            if (typeof v === 'string') reqHeaders.set(k, v);
+          }
+          const webReq = new g.Request(fullUrl, {
+            method: req.method || 'GET',
+            headers: reqHeaders,
+          });
+          const webRes = await mod.default.fetch(webReq);
+          res.statusCode = webRes.status;
+          webRes.headers.forEach((val: string, key: string) => res.setHeader(key, val));
+          if (webRes.body && res.write) {
+            const reader = webRes.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) res.write(value);
+            }
+            res.end();
+          } else {
+            res.end(await webRes.text());
+          }
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: err instanceof Error ? err.message : 'Local download proxy error',
+            })
+          );
+        }
+      });
     },
   };
 }
@@ -141,6 +195,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,

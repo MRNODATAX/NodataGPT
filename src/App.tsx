@@ -408,6 +408,7 @@ export function App() {
                     usedFallback: result.usedFallback,
                     imageUrl: result.imageUrl,
                     videoUrl: result.videoUrl,
+                    videoPosterUrl: result.videoPosterUrl,
                     audioUrl: result.audioUrl,
                     audioTitle: result.audioTitle,
                     galleryUrls: result.galleryUrls,

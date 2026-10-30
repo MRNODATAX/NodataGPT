@@ -25,6 +25,7 @@ export interface ChatMessage {
   usedFallback?: boolean;
   imageUrl?: string;
   videoUrl?: string;
+  videoPosterUrl?: string;
   audioUrl?: string;
   audioTitle?: string;
   galleryUrls?: string[];

@@ -14,7 +14,8 @@ import go from 'highlight.js/lib/languages/go';
 import rust from 'highlight.js/lib/languages/rust';
 import java from 'highlight.js/lib/languages/java';
 import php from 'highlight.js/lib/languages/php';
-import { Check, Code2, Copy, Eye } from 'lucide-react';
+import { Check, Code2, Copy, Download, Eye, Loader2 } from 'lucide-react';
+import { triggerDirectDownload } from '../utils/directDownload';
 
 hljs.registerLanguage('javascript', javascript);
 hljs.registerLanguage('js', javascript);
@@ -155,6 +156,74 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   );
 }
 
+function SmartMarkdownLink({
+  href,
+  children,
+}: {
+  href?: string;
+  children: React.ReactNode;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const labelText = Array.isArray(children)
+    ? children.map((c) => (typeof c === 'string' ? c : '')).join('')
+    : typeof children === 'string'
+      ? children
+      : '';
+
+  const isDirectMediaDownload =
+    Boolean(href && /^https?:\/\//i.test(href)) &&
+    (/\.(?:mp4|webm|mp3|m4a|ogg|wav|flac)(?:[?#]|$)/i.test(href || '') ||
+      /\b(?:unduh|download)\b/i.test(labelText));
+
+  if (!isDirectMediaDownload || !href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={async (e) => {
+        e.preventDefault();
+        if (downloading) return;
+        setDownloading(true);
+        setDone(false);
+        try {
+          await triggerDirectDownload({
+            url: href,
+            label: labelText || 'media',
+          });
+          setDone(true);
+          window.setTimeout(() => setDone(false), 2200);
+        } finally {
+          setDownloading(false);
+        }
+      }}
+      className="inline-flex items-center gap-1 rounded-md border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2 py-0.5 text-xs font-semibold text-[#67E8F9] no-underline transition-colors hover:bg-[#22D3EE]/22 cursor-pointer"
+    >
+      {downloading ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : done ? (
+        <Check className="h-3 w-3 text-[#22D3EE]" />
+      ) : (
+        <Download className="h-3 w-3" />
+      )}
+      <span>
+        {downloading
+          ? 'Mengunduh...'
+          : done
+            ? 'Terunduh'
+            : children}
+      </span>
+    </button>
+  );
+}
+
 export function MarkdownRenderer({
   content,
   isStreaming,
@@ -183,11 +252,7 @@ export function MarkdownRenderer({
             );
           },
           a({ href, children }) {
-            return (
-              <a href={href} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            );
+            return <SmartMarkdownLink href={href}>{children}</SmartMarkdownLink>;
           },
         }}
       >

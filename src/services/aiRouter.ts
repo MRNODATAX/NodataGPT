@@ -39,6 +39,8 @@ export const NODATAGPT_COMPACT_PERSONA =
 
 const DEEPTHINK_ORDER = [
   'deepseek',
+  'synox-qwen80b',
+  'qwen-direct',
   'varhad-claude',
   'claude',
   'llm7',
@@ -422,6 +424,127 @@ export function splitThinkingBlock(rawText: string): {
   };
 }
 
+function inferCodeFenceLang(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  switch (ext) {
+    case 'html':
+    case 'htm':
+      return 'html';
+    case 'css':
+      return 'css';
+    case 'js':
+    case 'mjs':
+      return 'javascript';
+    case 'ts':
+      return 'typescript';
+    case 'tsx':
+      return 'tsx';
+    case 'jsx':
+      return 'jsx';
+    case 'py':
+      return 'python';
+    case 'json':
+      return 'json';
+    case 'sql':
+      return 'sql';
+    default:
+      return ext || 'text';
+  }
+}
+
+function formatSynoxCoderPayload(obj: Record<string, unknown>): string {
+  if (!Array.isArray(obj.files) || obj.files.length === 0) return '';
+  const validFiles = obj.files.filter(
+    (f): f is { path: string; content: string } =>
+      Boolean(
+        f &&
+          typeof f === 'object' &&
+          typeof (f as Record<string, unknown>).path === 'string' &&
+          typeof (f as Record<string, unknown>).content === 'string' &&
+          String((f as Record<string, unknown>).content).trim().length > 0
+      )
+  );
+  if (validFiles.length === 0) return '';
+
+  const htmlFile = validFiles.find((f) => /\.html?$/i.test(f.path));
+  const cssFiles = validFiles.filter((f) => /\.css$/i.test(f.path));
+  const jsFiles = validFiles.filter((f) => /\.(?:m?js)$/i.test(f.path));
+
+  const sections: string[] = [];
+
+  if (htmlFile && (cssFiles.length > 0 || jsFiles.length > 0)) {
+    let bundledHtml = htmlFile.content;
+    const inlineCss = cssFiles.map((c) => c.content).join('\n\n');
+    const inlineJs = jsFiles.map((j) => j.content).join('\n\n');
+
+    if (inlineCss) {
+      bundledHtml = bundledHtml.replace(
+        /<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi,
+        ''
+      );
+      if (/<\/head>/i.test(bundledHtml)) {
+        bundledHtml = bundledHtml.replace(
+          /<\/head>/i,
+          `<style>\n${inlineCss}\n</style>\n</head>`
+        );
+      } else {
+        bundledHtml = `<style>\n${inlineCss}\n</style>\n${bundledHtml}`;
+      }
+    }
+
+    if (inlineJs) {
+      bundledHtml = bundledHtml.replace(
+        /<script\b[^>]*src=["'][^"']+["'][^>]*>\s*<\/script>/gi,
+        ''
+      );
+      if (/<\/body>/i.test(bundledHtml)) {
+        bundledHtml = bundledHtml.replace(
+          /<\/body>/i,
+          `<script>\n${inlineJs}\n</script>\n</body>`
+        );
+      } else {
+        bundledHtml = `${bundledHtml}\n<script>\n${inlineJs}\n</script>`;
+      }
+    }
+
+    sections.push(
+      `Berikut proyek kode lengkap (**${validFiles.length} berkas**) yang siap langsung dijalankan pada **Pratinjau Live Artifact**:\n\n### Bundel Siap Pratinjau (\`index.html\`)\n\`\`\`html\n${bundledHtml.trim()}\n\`\`\``
+    );
+
+    for (const file of validFiles) {
+      if (file === htmlFile) continue;
+      const lang = inferCodeFenceLang(file.path);
+      sections.push(`### \`${file.path}\`\n\`\`\`${lang}\n${file.content.trim()}\n\`\`\``);
+    }
+
+    return sections.join('\n\n');
+  }
+
+  for (const file of validFiles) {
+    const lang = inferCodeFenceLang(file.path);
+    sections.push(`### \`${file.path}\`\n\`\`\`${lang}\n${file.content.trim()}\n\`\`\``);
+  }
+  return sections.join('\n\n');
+}
+
+function appendWebReferences(text: string, refs: unknown): string {
+  if (!Array.isArray(refs) || refs.length === 0) return text;
+  const cleanUrls = refs
+    .filter((r): r is string => typeof r === 'string' && /^https?:\/\//i.test(r.trim()))
+    .slice(0, 6);
+  if (cleanUrls.length === 0) return text;
+
+  const lines = cleanUrls.map((url) => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '');
+      return `- [${host}](${url})`;
+    } catch {
+      return `- ${url}`;
+    }
+  });
+  return `${text}\n\n---\n**Referensi Pencarian Web:**\n${lines.join('\n')}`;
+}
+
 export function extractUniversalAnswer(rawBody: string): {
   content: string;
   thinkingContent?: string;
@@ -432,12 +555,15 @@ export function extractUniversalAnswer(rawBody: string): {
   try {
     const data = JSON.parse(trimmed) as Record<string, unknown>;
 
+    const baxiaRet = Array.isArray(data.ret) ? data.ret.join(' ') : '';
     if (
       data.status === false ||
       data.Status === false ||
       data.Status === 'Error' ||
       data.ok === false ||
-      data.success === false
+      data.success === false ||
+      baxiaRet.includes('RGV587_ERROR') ||
+      baxiaRet.includes('FAIL_SYS_USER_VALIDATE')
     ) {
       return { content: '' };
     }
@@ -514,13 +640,23 @@ export function extractUniversalAnswer(rawBody: string): {
           (typeof obj.thinking === 'string' && obj.thinking.trim()) ||
           (typeof obj.reasoning === 'string' && obj.reasoning.trim()) ||
           explicitReasoning;
+
+        // Synox AI Coder multi-file project payload ({ projectType, files: [{ path, content }] })
+        const formattedCoder = formatSynoxCoderPayload(obj);
+        if (formattedCoder) {
+          return {
+            content: formattedCoder,
+            thinkingContent: nestedThink,
+          };
+        }
+
         for (const key of directKeys) {
           const val = obj[key];
           if (typeof val === 'string' && val.trim()) {
             const parsed = splitThinkingBlock(sanitizeAnswerText(val));
             if (parsed.content) {
               return {
-                content: parsed.content,
+                content: appendWebReferences(parsed.content, obj.references),
                 thinkingContent: nestedThink || parsed.thinkingContent,
               };
             }
@@ -574,7 +710,8 @@ export function buildModelRequests(
   model: AIModelDefinition,
   rawPrompt: string,
   history: ChatMessage[],
-  settings: AppSettings
+  settings: AppSettings,
+  deepThink?: boolean
 ): ProxyRequestSpec[] {
   const t = model.timeoutMs;
   const inlinePrompt = buildInlinePersonalizedPrompt(
@@ -589,24 +726,27 @@ export function buildModelRequests(
     buildInlinePersonalizedPrompt(rawPrompt, history, settings, 1100, 'compact')
   );
   const mediumPersona = encodeURIComponent(buildSystemPersona(settings, 'medium'));
+  const contextualUserText = buildContextualUserText(rawPrompt, history, settings, 4500);
   const contextualUser = encodeURIComponent(
     buildContextualUserText(rawPrompt, history, settings, 2200)
   );
+  const fullSystemPersona = buildSystemPersona(settings, 'full');
   const llm7Messages = buildChatMessagesPayload(rawPrompt, history, settings, 4500);
+  const synoxSession = 'nodatagpt-web';
 
   switch (model.id) {
     case 'gemini':
-      // 1st: Direct Google Gemini Web RPC Scraper (/api/gemini — 102-slot StreamGenerate, ~2s fail-fast on soft-block)
-      // 2nd+: Instant live Flash-class mirrors (LLM7 Nemotron-3 30B, Stenly AI Prompt, Nexray Overchat)
-      // Last: Neosoft Gemini scraper (if upstream recovers)
+      // 1st: Direct Google Gemini Web RPC Scraper (/api/gemini — 102-slot StreamGenerate)
+      // 2nd+: Instant live Flash-class mirrors (LLM7 Nemotron-3 30B, Synox Gemma AI, Stenly, Nexray)
       return [
         {
           targetUrl: '/api/gemini',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            text: buildContextualUserText(rawPrompt, history, settings, 4500),
-            system: buildSystemPersona(settings, 'full'),
+            text: contextualUserText,
+            system: fullSystemPersona,
+            thinking: Boolean(deepThink),
           }),
           timeoutMs: 16000,
         },
@@ -622,6 +762,19 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
+          targetUrl: 'https://api.synoxcloud.xyz/ai-chat/gemma-ai',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: inlinePrompt,
+            sessionId: synoxSession,
+            deepSearch: 'false',
+            apikey: 'FREE',
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
           targetUrl: `https://www.stenly.org/api/ai/aiprompt?prompt=${mediumPersona}&teks=${contextualUser}`,
           timeoutMs: 18000,
           clientFirst: true,
@@ -630,15 +783,28 @@ export function buildModelRequests(
           targetUrl: `https://api.nexray.eu.cc/ai/overchat?text=${compactQ}`,
           timeoutMs: 20000,
         },
-        {
-          targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${compactQ}`,
-          timeoutMs: 8000,
-          clientFirst: true,
-        },
       ];
 
     case 'chatgpt':
+      // 1st: Direct chatgpt.com Sentinel PoW + Conduit SSE Scraper (/api/chatgpt)
+      // 2nd+: Synox GPT-4o Mini -> Rin ChatGPT -> LLM7 OpenAI
       return [
+        {
+          targetUrl: '/api/chatgpt',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            model: 'auto',
+          }),
+          timeoutMs: 15000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 19000,
+          clientFirst: true,
+        },
         {
           targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`,
           timeoutMs: 18000,
@@ -655,9 +821,242 @@ export function buildModelRequests(
           timeoutMs: 20000,
           clientFirst: true,
         },
+      ];
+
+    case 'qwen-direct':
+      // 1st: Direct chat.qwen.ai v2 (ssxmod_itna + bx-ua + phase SSE) Scraper (/api/qwen)
+      // 2nd+: Synox Qwen3-Next 80B -> Stenly Qwen3 -> Rin Qwen 80B
+      return [
+        {
+          targetUrl: '/api/qwen',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            model: 'qwen3.5-plus',
+            thinking: Boolean(deepThink),
+          }),
+          timeoutMs: 15000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/qwen?text=${q}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-gpt4o':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-gpt5nano':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
         {
           targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactQ}`,
           timeoutMs: 20000,
+        },
+      ];
+
+    case 'synox-qwen80b':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/qwen?text=${q}`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${compactQ}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-llama4':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/llama-4-scout?pesan=${q}&history=%5B%5D&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/llama4?text=${compactQ}`,
+          timeoutMs: 18000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-coder':
+      // If user asks conversational/identity questions, prioritize Codestral with full persona;
+      // otherwise run Synox multi-file AI Coder first with Codestral fallback
+      if (/\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu)|nama\s+kamu)\b/i.test(rawPrompt)) {
+        return [
+          {
+            targetUrl: 'https://api.llm7.io/v1/chat/completions',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'codestral-latest',
+              messages: llm7Messages,
+            }),
+            timeoutMs: 22000,
+            clientFirst: true,
+          },
+        ];
+      }
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/ai-coder?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'codestral-latest',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-turboseek':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/turboseek-ai?query=${compactQ}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?prompt=${q}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-unlimited':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/unlimited-ai?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?prompt=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/powerbrain-ai?message=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?prompt=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'synox-gemma':
+      return [
+        {
+          targetUrl: 'https://api.synoxcloud.xyz/ai-chat/gemma-ai',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: inlinePrompt,
+            sessionId: synoxSession,
+            deepSearch: 'false',
+            apikey: 'FREE',
+          }),
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?prompt=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nemotron-3-nano:30b',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
         },
       ];
 
@@ -767,7 +1166,20 @@ export function buildModelRequests(
       ];
 
     case 'deepseek':
+      // 1st: Direct chat.deepseek.com v2.7.1 (DeepSeekHashV1 23-round Keccak PoW) Scraper (/api/deepseek)
+      // 2nd+: Xemoz DeepSeek V3.2 Thinking -> LLM7 Nemotron-3 30B -> Synox Qwen3-Next 80B
       return [
+        {
+          targetUrl: '/api/deepseek',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            thinking: Boolean(deepThink ?? true),
+          }),
+          timeoutMs: 15000,
+        },
         {
           targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${compactQ}`,
           timeoutMs: t,
@@ -780,6 +1192,11 @@ export function buildModelRequests(
             model: 'nemotron-3-nano:30b',
             messages: llm7Messages,
           }),
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: 22000,
           clientFirst: true,
         },
@@ -799,7 +1216,25 @@ export function buildModelRequests(
       ];
 
     case 'qwen3':
+      // 1st: Direct chat.qwen.ai v2 (qwen3-coder-plus) -> Synox Qwen3-Next 80B -> Stenly Qwen3 -> Codestral
       return [
+        {
+          targetUrl: '/api/qwen',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            model: 'qwen3-coder-plus',
+            thinking: Boolean(deepThink),
+          }),
+          timeoutMs: 15000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
         {
           targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
           timeoutMs: t,
@@ -1324,7 +1759,7 @@ export async function sendMultiModelChat({
       deepThink,
     });
 
-    const specs = buildModelRequests(model, prompt, history, settings);
+    const specs = buildModelRequests(model, prompt, history, settings, deepThink);
 
     if (specs.length === 0) {
       lastFailedName = model.shortName;
@@ -1373,7 +1808,7 @@ export async function sendMultiModelChat({
 }
 
 export interface SpecializedImageToolSpec {
-  kind: 'removebg' | 'dreamart' | 'hd' | 'brat';
+  kind: 'removebg' | 'dreamart' | 'hd' | 'brat' | 'meigen';
   label: string;
   summary: string;
   candidates: Array<{
@@ -1386,6 +1821,28 @@ export interface SpecializedImageToolSpec {
 export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageToolSpec | null {
   const trimmed = rawPrompt.trim();
   if (!trimmed) return null;
+
+  const meigenMatch = trimmed.match(/^\/meigen\s+([\s\S]+)$/i);
+  if (meigenMatch && meigenMatch[1].trim()) {
+    const query = meigenMatch[1].trim();
+    return {
+      kind: 'meigen',
+      label: 'Synox MeiGen AI',
+      summary: `Karya visual AI ditemukan oleh **MeiGen AI · Synox Cloud** untuk kata kunci: *"${query}"*`,
+      candidates: [
+        {
+          id: 'synox-meigen-search',
+          name: 'MeiGen AI · Synox Cloud',
+          url: `https://api.synoxcloud.xyz/search/meigen-ai?q=${encodeURIComponent(query)}&apikey=FREE`,
+        },
+        {
+          id: 'nexray-magicstudio-fallback',
+          name: 'MagicStudio HD · Nexray',
+          url: `https://api.nexray.eu.cc/ai/magicstudio?prompt=${encodeURIComponent(query)}`,
+        },
+      ],
+    };
+  }
 
   const bratMatch = trimmed.match(/^\/brat\s+([\s\S]+)$/i);
   if (bratMatch && bratMatch[1].trim()) {
@@ -1584,6 +2041,9 @@ export function extractImageUrlFromJson(rawBody: string): string {
             if (isHttpOrDataImg(firstObj[k])) {
               return firstObj[k].trim();
             }
+          }
+          if (Array.isArray(firstObj.images) && isHttpOrDataImg(firstObj.images[0])) {
+            return firstObj.images[0].trim();
           }
         }
       } else if (container && typeof container === 'object') {
@@ -1864,6 +2324,11 @@ export async function generateMultiEngineImage({
 
     const engine = engines[idx];
     const targetUrl = engine.buildUrl(cleanPrompt, ratio);
+    const engineMethod = engine.method ?? 'GET';
+    const engineBody =
+      engineMethod === 'POST' && engine.buildBody
+        ? engine.buildBody(cleanPrompt, ratio)
+        : undefined;
 
     onStatus?.({
       modelName: engine.name,
@@ -1904,8 +2369,12 @@ export async function generateMultiEngineImage({
 
         try {
           const directRes = await fetch(targetUrl, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
+            method: engineMethod,
+            headers: {
+              Accept: 'application/json',
+              ...(engine.headers ?? {}),
+            },
+            body: engineBody,
             signal: directAbort.signal,
           });
           if (directRes.ok) {
@@ -1937,7 +2406,9 @@ export async function generateMultiEngineImage({
       const res = await callGateway(
         {
           targetUrl,
-          method: 'GET',
+          method: engineMethod,
+          headers: engine.headers,
+          body: engineBody,
           timeoutMs: engine.timeoutMs,
         },
         signal

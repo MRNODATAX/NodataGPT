@@ -13,28 +13,165 @@ export const AI_MODELS: AIModelDefinition[] = [
     timeoutMs: 20000,
     accent: 'dual',
   },
+  // === 4 DIRECT UPSTREAM WEB SCRAPERS (GEMINI, CHATGPT, DEEPSEEK, QWEN.AI) ===
   {
     id: 'gemini',
     name: 'Gemini Flash (Direct Scraper)',
     shortName: 'Gemini Direct',
-    provider: 'Google Web RPC + Mirror',
+    provider: 'gemini.google.com + Mirror',
     priority: 1,
-    category: 'utama',
-    description: 'Scraper langsung Gemini Web 81-slot tanpa akun + failover otomatis ke mirror aktif.',
+    category: 'scraper',
+    description: 'Scraper langsung Google Gemini Web 102-slot StreamGenerate + auto-failover ke mirror aktif.',
     maxPromptChars: 8000,
     timeoutMs: 26000,
     accent: 'cyan',
   },
   {
     id: 'chatgpt',
-    name: 'ChatGPT Cepat',
-    shortName: 'ChatGPT Cepat',
-    provider: 'Pollinations',
+    name: 'ChatGPT (Direct Scraper)',
+    shortName: 'ChatGPT Direct',
+    provider: 'chatgpt.com + Synox Mirror',
+    priority: 1,
+    category: 'scraper',
+    description: 'Scraper langsung chatgpt.com Sentinel PoW + Conduit SSE dengan failover ke Synox GPT-4o Mini.',
+    maxPromptChars: 4500,
+    timeoutMs: 24000,
+    accent: 'cyan',
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek V3.2 (Direct Scraper)',
+    shortName: 'DeepSeek Direct',
+    provider: 'deepseek.com PoW + Mirror',
     priority: 2,
-    category: 'utama',
-    description: 'Model ringan latensi rendah dengan jalur ganda GET dan OpenAI POST.',
+    category: 'scraper',
+    description: 'Scraper langsung chat.deepseek.com (DeepSeekHashV1 23-round Keccak PoW) + failover V3.2 Thinking.',
+    maxPromptChars: 4500,
+    timeoutMs: 25000,
+    accent: 'orange',
+  },
+  {
+    id: 'qwen-direct',
+    name: 'Qwen 3.5 Plus (Direct Scraper)',
+    shortName: 'Qwen Direct',
+    provider: 'chat.qwen.ai + Synox Mirror',
+    priority: 2,
+    category: 'scraper',
+    description: 'Scraper langsung chat.qwen.ai v2 (ssxmod_itna + bx-ua + phase SSE) + failover Qwen3-Next 80B.',
+    maxPromptChars: 5000,
+    timeoutMs: 26000,
+    accent: 'cyan',
+  },
+
+  // === SYNOX CLOUD VERIFIED MODELS (apikey=FREE, Client-First Quota Safe) ===
+  {
+    id: 'synox-gpt4o',
+    name: 'GPT-4o Mini (Synox Cloud)',
+    shortName: 'Synox GPT-4o',
+    provider: 'Synox Cloud',
+    priority: 2,
+    category: 'synox',
+    description: 'Jalur GPT-4o Mini via Synox Cloud dengan sesi percakapan ringan dan respons cepat.',
+    maxPromptChars: 4000,
+    timeoutMs: 22000,
+    accent: 'cyan',
+  },
+  {
+    id: 'synox-gpt5nano',
+    name: 'GPT-5 Nano Cepat (Synox)',
+    shortName: 'GPT-5 Nano',
+    provider: 'Synox Cloud',
+    priority: 3,
+    category: 'synox',
+    description: 'Model generasi GPT-5 Nano latensi rendah di Synox Cloud untuk tanya jawab instan.',
+    maxPromptChars: 4000,
+    timeoutMs: 22000,
+    accent: 'cyan',
+  },
+  {
+    id: 'synox-qwen80b',
+    name: 'Qwen3-Next 80B Instruct',
+    shortName: 'Synox Qwen 80B',
+    provider: 'Synox Cloud',
+    priority: 3,
+    category: 'synox',
+    description: 'Model Qwen3-Next 80B parameter besar via Synox Cloud untuk analisis, logika, dan kode.',
+    maxPromptChars: 4500,
+    timeoutMs: 26000,
+    accent: 'orange',
+  },
+  {
+    id: 'synox-llama4',
+    name: 'Llama 4 Scout (Synox Cloud)',
+    shortName: 'Synox Llama 4',
+    provider: 'Synox Cloud',
+    priority: 4,
+    category: 'synox',
+    description: 'Meta Llama 4 Scout dengan dukungan riwayat percakapan di jalur Synox Cloud.',
+    maxPromptChars: 4000,
+    timeoutMs: 22000,
+    accent: 'cyan',
+  },
+  {
+    id: 'synox-coder',
+    name: 'Synox AI Coder (Multi-File)',
+    shortName: 'Synox Coder',
+    provider: 'Synox Cloud',
+    priority: 5,
+    category: 'synox',
+    description: 'Generator proyek HTML/CSS/JS multi-file otomatis siap pratinjau live Artifact.',
+    maxPromptChars: 3500,
+    timeoutMs: 32000,
+    accent: 'cyan',
+  },
+  {
+    id: 'synox-turboseek',
+    name: 'TurboSeek Web Search AI',
+    shortName: 'TurboSeek AI',
+    provider: 'Synox Cloud',
+    priority: 6,
+    category: 'synox',
+    description: 'Mesin penjawab berbasis pencarian web aktual lengkap dengan daftar tautan referensi.',
     maxPromptChars: 2400,
-    timeoutMs: 16000,
+    timeoutMs: 26000,
+    accent: 'orange',
+  },
+  {
+    id: 'synox-unlimited',
+    name: 'Unlimited & Nova AI (Synox)',
+    shortName: 'Synox Unlimited',
+    provider: 'Synox Cloud',
+    priority: 6,
+    category: 'synox',
+    description: 'Rantai 4-lapis Synox (UnlimitedAI → NovaAI → PowerBrain → Algolia) tahan gangguan.',
+    maxPromptChars: 3500,
+    timeoutMs: 24000,
+    accent: 'cyan',
+  },
+  {
+    id: 'synox-gemma',
+    name: 'Gemma AI Chat (Synox POST)',
+    shortName: 'Synox Gemma',
+    provider: 'Synox Cloud',
+    priority: 7,
+    category: 'synox',
+    description: 'Endpoint POST Gemma AI pada Synox Cloud untuk diskusi terstruktur dan ringkas.',
+    maxPromptChars: 4000,
+    timeoutMs: 24000,
+    accent: 'cyan',
+  },
+
+  // === CORE & MULTI-MIRROR MODELS ===
+  {
+    id: 'llm7',
+    name: 'GPT-4o / Codestral Router',
+    shortName: 'LLM7 Fast',
+    provider: 'LLM7 OpenAI API',
+    priority: 1,
+    category: 'utama',
+    description: 'Endpoint OpenAI-compatible latensi ~1.5 dtk tanpa kunci untuk diskusi dan kode.',
+    maxPromptChars: 4500,
+    timeoutMs: 26000,
     accent: 'cyan',
   },
   {
@@ -50,23 +187,11 @@ export const AI_MODELS: AIModelDefinition[] = [
     accent: 'cyan',
   },
   {
-    id: 'llm7',
-    name: 'GPT-4o / Codestral Router',
-    shortName: 'LLM7 Fast',
-    provider: 'LLM7 OpenAI API',
-    priority: 1,
-    category: 'utama',
-    description: 'Endpoint OpenAI-compatible latensi ~1.5 dtk tanpa kunci untuk diskusi dan kode.',
-    maxPromptChars: 4500,
-    timeoutMs: 26000,
-    accent: 'cyan',
-  },
-  {
     id: 'varhad-unlimited',
     name: 'UnlimitedAI Creative',
     shortName: 'UnlimitedAI',
     provider: 'Varhad API v2',
-    priority: 2,
+    priority: 4,
     category: 'utama',
     description: 'Model serbaguna Varhad v2 dengan jalur Hybrid Browser untuk diskusi & penulisan.',
     maxPromptChars: 4000,
@@ -78,7 +203,7 @@ export const AI_MODELS: AIModelDefinition[] = [
     name: 'DeepAI Cepat',
     shortName: 'DeepAI v2',
     provider: 'Varhad API v2',
-    priority: 3,
+    priority: 5,
     category: 'utama',
     description: 'Jalur respons cepat DeepAI pada server Varhad v2 dengan parser 2-lapis.',
     maxPromptChars: 2800,
@@ -90,24 +215,12 @@ export const AI_MODELS: AIModelDefinition[] = [
     name: 'Overchat Multi-AI',
     shortName: 'Overchat',
     provider: 'Nexray AI',
-    priority: 4,
+    priority: 6,
     category: 'utama',
     description: 'Jalur stabil bebas blokir untuk tanya jawab harian berbahasa Indonesia.',
     maxPromptChars: 3500,
     timeoutMs: 24000,
     accent: 'cyan',
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek V3.2 Thinking',
-    shortName: 'DeepSeek V3.2',
-    provider: 'Xemoz',
-    priority: 5,
-    category: 'reasoning',
-    description: 'Penalaran bertahap untuk logika, debugging, dan analisis mendalam.',
-    maxPromptChars: 2000,
-    timeoutMs: 22000,
-    accent: 'orange',
   },
   {
     id: 'honcho',
@@ -123,13 +236,13 @@ export const AI_MODELS: AIModelDefinition[] = [
   },
   {
     id: 'qwen3',
-    name: 'Qwen3 Coder',
+    name: 'Qwen3 Coder (Direct + Mirror)',
     shortName: 'Qwen3 Coder',
-    provider: 'Stenly',
-    priority: 9,
+    provider: 'Qwen.ai + Synox + Stenly',
+    priority: 8,
     category: 'reasoning',
-    description: 'Andal untuk arsitektur kode, TypeScript, Python, SQL, dan automasi.',
-    maxPromptChars: 3000,
+    description: 'Scraper langsung Qwen3 Coder Plus + Synox Qwen 80B + Stenly untuk arsitektur kode.',
+    maxPromptChars: 3500,
     timeoutMs: 28000,
     accent: 'cyan',
   },
@@ -343,12 +456,20 @@ export const AI_MODELS: AIModelDefinition[] = [
 
 export const DEFAULT_FALLBACK_ORDER: string[] = [
   'llm7',
+  'synox-gpt4o',
+  'synox-qwen80b',
   'bintang-llama4',
   'claude',
   'nexray-overchat',
+  'synox-llama4',
+  'synox-gpt5nano',
   'varhad-unlimited',
   'varhad-claude',
+  'gemini',
+  'chatgpt',
+  'qwen-direct',
   'deepseek',
+  'synox-unlimited',
   'gpt5',
   'varhad-deepai',
   'qwen3',
@@ -360,8 +481,6 @@ export const DEFAULT_FALLBACK_ORDER: string[] = [
   'honcho',
   'stenly',
   'wormgpt',
-  'gemini',
-  'chatgpt',
   'rin-claude',
   'bintang-deepv4',
   'bintang-deepv3',
@@ -377,7 +496,10 @@ export interface ImageEngineDefinition {
   badge: string;
   description: string;
   delivery: 'gateway' | 'hybrid-json' | 'browser-img';
+  method?: 'GET' | 'POST';
+  headers?: Record<string, string>;
   buildUrl: (prompt: string, ratio?: string) => string;
+  buildBody?: (prompt: string, ratio?: string) => string;
   timeoutMs: number;
 }
 
@@ -389,6 +511,23 @@ export interface ImageModelOption {
   category: ImageModelCategory;
   badge: string;
   description: string;
+}
+
+function resolveStableDiffDimensions(ratio = '1:1'): { width: number; height: number } {
+  switch (ratio) {
+    case '16:9':
+    case '21:9':
+      return { width: 1024, height: 576 };
+    case '9:16':
+      return { width: 576, height: 1024 };
+    case '4:5':
+    case '2:3':
+      return { width: 640, height: 832 };
+    case '3:2':
+      return { width: 832, height: 640 };
+    default:
+      return { width: 768, height: 768 };
+  }
 }
 
 export const IMAGE_ENGINES: ImageEngineDefinition[] = [
@@ -458,6 +597,45 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
     timeoutMs: 32000,
   },
   {
+    id: 'synox-stablediff',
+    name: 'Stable Diffusion XL · Synox',
+    shortName: 'Synox StableDiff',
+    provider: 'Synox Cloud',
+    category: 'artistik',
+    badge: 'POST SDXL + Rasio',
+    description: 'Mesin POST Stable Diffusion Synox Cloud dengan parameter steps, guidance, & dimensi rasio otomatis.',
+    delivery: 'hybrid-json',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    buildUrl: () => 'https://api.synoxcloud.xyz/ai-generate/stablediff',
+    buildBody: (prompt, ratio = '1:1') => {
+      const dims = resolveStableDiffDimensions(ratio);
+      return JSON.stringify({
+        prompt,
+        negative_prompt: 'blurry, low quality, deformed, watermark, bad anatomy',
+        width: dims.width,
+        height: dims.height,
+        steps: 25,
+        guidance_scale: 7.5,
+        apikey: 'FREE',
+      });
+    },
+    timeoutMs: 34000,
+  },
+  {
+    id: 'synox-meigen',
+    name: 'MeiGen AI Artwork · Synox',
+    shortName: 'Synox MeiGen',
+    provider: 'Synox Cloud',
+    category: 'cepat',
+    badge: 'Galeri AI ~2s',
+    description: 'Pencarian & kurasi karya visual AI resolusi tinggi dari MeiGen AI (mendukung /meigen <kata kunci>).',
+    delivery: 'hybrid-json',
+    buildUrl: (prompt) =>
+      `https://api.synoxcloud.xyz/search/meigen-ai?q=${encodeURIComponent(prompt)}&apikey=FREE`,
+    timeoutMs: 24000,
+  },
+  {
     id: 'rin-flux',
     name: 'Rin Flux Direct',
     shortName: 'Rin Flux',
@@ -505,9 +683,9 @@ export const IMAGE_MODELS: ImageModelOption[] = [
     shortName: 'Auto Gambar',
     provider: 'NodataGPT Image Router',
     category: 'auto',
-    badge: '8 Mesin Siaga',
+    badge: '10 Mesin Siaga',
     description:
-      'Memilih mesin gambar paling tepat sesuai isi prompt (Ideogram untuk poster/teks, WriteCream untuk rasio 16:9/9:16, Sologo untuk logo, MagicStudio HD untuk kecepatan) dengan Auto-Fallback otomatis.',
+      'Memilih mesin gambar paling tepat sesuai isi prompt (Ideogram untuk poster/teks, WriteCream/StableDiff untuk rasio, Sologo untuk logo, MagicStudio HD untuk kecepatan) dengan Auto-Fallback otomatis.',
   },
   ...IMAGE_ENGINES.map((e) => ({
     id: e.id,

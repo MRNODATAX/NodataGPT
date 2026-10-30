@@ -23,6 +23,8 @@ const ALLOWED_HOSTS = new Set([
   'comiku.my.id',
   'bintangapi.my.id',
   'api.nexray.eu.cc',
+  'api.synoxcloud.xyz',
+  'images.meigen.ai',
   'api.deepseek.com',
   'generativelanguage.googleapis.com',
 ]);

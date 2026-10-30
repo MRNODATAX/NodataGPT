@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { AIModelDefinition } from '../types/chat';
+import { IMAGE_ENGINES } from '../services/modelCatalog';
 
 interface WelcomeScreenProps {
   activeModel: AIModelDefinition;
@@ -66,7 +67,7 @@ const STARTERS: StarterItem[] = [
     id: 'image',
     shortLabel: 'Buat Gambar AI',
     title: 'Visualisasikan ide menjadi karya gambar AI',
-    subtitle: '8 mesin gambar AI pilihan + Auto-Fallback otomatis',
+    subtitle: `${IMAGE_ENGINES.length} mesin gambar AI pilihan + Auto-Fallback otomatis`,
     prompt:
       'Cinematic anime night sky over futuristic Tokyo rooftop with shooting stars, glowing cyan and warm orange city lights, masterpiece 4k',
     tag: 'Gambar AI',

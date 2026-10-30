@@ -46,6 +46,8 @@ export type ImageModelCategory = 'auto' | 'cepat' | 'artistik' | 'desain' | 'dir
 
 export type ModelCategory =
   | 'auto'
+  | 'scraper'
+  | 'synox'
   | 'utama'
   | 'reasoning'
   | 'bintang'

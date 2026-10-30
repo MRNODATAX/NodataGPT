@@ -40,6 +40,8 @@ interface ModelPickerModalProps {
 
 const CHAT_CATEGORIES: Array<{ id: 'all' | ModelCategory; label: string }> = [
   { id: 'all', label: 'Semua' },
+  { id: 'scraper', label: 'Direct Scraper' },
+  { id: 'synox', label: 'Synox Cloud' },
   { id: 'utama', label: 'Utama & Cepat' },
   { id: 'reasoning', label: 'Kode & Logika' },
   { id: 'bintang', label: 'Bintang & WormGPT' },

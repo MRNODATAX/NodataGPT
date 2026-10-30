@@ -1,4 +1,9 @@
-import type { AIModelDefinition, AppSettings, ChatMessage } from '../types/chat';
+import type {
+  AIModelDefinition,
+  AppSettings,
+  ChatMessage,
+  MediaDownloadItem,
+} from '../types/chat';
 import {
   AI_MODELS,
   DEFAULT_FALLBACK_ORDER,
@@ -6,6 +11,19 @@ import {
   type ImageEngineDefinition,
   getModelById,
 } from './modelCatalog';
+import {
+  ROUTER_IMAGE_MODEL_ID,
+  executeRouterChatCompletion,
+  generateRouterImage,
+  getRouterDisplayLabel,
+  isRouterConfiguredAndReady,
+  isRouterModelSelection,
+  resolveRouterModelName,
+} from './routerGateway';
+import {
+  detectWebToolCommand,
+  executeWebToolCommand,
+} from './webTools';
 
 const CIRCUIT_STORAGE_KEY = 'nodatagpt.circuit.v1';
 const STRIKE_THRESHOLD = 3;
@@ -2011,7 +2029,10 @@ function buildCandidateChain(
 
   const baseFallback = DEFAULT_FALLBACK_ORDER.map((id) => getModelById(id));
 
-  if (settings.selectedModelId === 'auto') {
+  if (
+    settings.selectedModelId === 'auto' ||
+    isRouterModelSelection(settings.selectedModelId)
+  ) {
     const merged = [...unlockedOfficial, ...baseFallback];
     const healthy = merged.filter((m) => !isModelCoolingDown(m.id));
     return healthy.length > 0 ? healthy : merged;
@@ -2046,6 +2067,12 @@ export interface RouterResult {
   usedFallback: boolean;
   attemptsCount: number;
   imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  audioTitle?: string;
+  galleryUrls?: string[];
+  downloadItems?: MediaDownloadItem[];
+  summarizeTranscript?: string;
 }
 
 export async function sendMultiModelChat({
@@ -2063,9 +2090,107 @@ export async function sendMultiModelChat({
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
-  const candidates = buildCandidateChain(settings, deepThink).slice(0, 8);
+  // 0. Check Phase 2 Web Tools (Categories A, B, and D slash commands)
+  const webToolCommand = detectWebToolCommand(prompt);
+  if (webToolCommand) {
+    const toolRes = await executeWebToolCommand({
+      command: webToolCommand,
+      signal,
+      onStatus: (info) => {
+        onStatus?.({
+          modelName: `${info.toolName} · ${info.mirrorName}`,
+          attempt: info.attempt,
+          isFallback: info.isFallback,
+        });
+      },
+    });
+    return {
+      content: toolRes.content,
+      answeredById: toolRes.answeredById,
+      answeredByName: toolRes.answeredByName,
+      usedFallback: toolRes.usedFallback,
+      attemptsCount: 1,
+      imageUrl: toolRes.imageUrl,
+      videoUrl: toolRes.videoUrl,
+      audioUrl: toolRes.audioUrl,
+      audioTitle: toolRes.audioTitle,
+      galleryUrls: toolRes.galleryUrls,
+      downloadItems: toolRes.downloadItems,
+      summarizeTranscript: toolRes.summarizeTranscript,
+    };
+  }
+
   let lastFailedName: string | undefined;
   let lastReason = 'Tidak ada server model yang merespons saat ini.';
+  let attemptOffset = 0;
+
+  // 1. Priority 0: AI Router Gateway (9Router / OmniRoute / OpenRouter / Custom)
+  const explicitRouterSelected = isRouterModelSelection(settings.selectedModelId);
+  const autoRouterPrioritized =
+    settings.selectedModelId === 'auto' && isRouterConfiguredAndReady(settings);
+
+  if (explicitRouterSelected || autoRouterPrioritized) {
+    const providerLabel = getRouterDisplayLabel(settings);
+    const targetRouterModel = resolveRouterModelName(
+      settings.selectedModelId,
+      settings
+    );
+
+    if (!isRouterConfiguredAndReady(settings)) {
+      const notReadyMsg =
+        'AI Router Gateway (9Router / OmniRoute) belum diaktifkan atau belum memiliki API Key di Pengaturan.';
+      if (explicitRouterSelected && !settings.autoFallback) {
+        throw new Error(notReadyMsg);
+      }
+      lastFailedName = providerLabel;
+      lastReason = notReadyMsg;
+    } else {
+      attemptOffset = 1;
+      onStatus?.({
+        modelName: `${providerLabel}: ${targetRouterModel}`,
+        attempt: 1,
+        isFallback: false,
+        deepThink,
+      });
+
+      try {
+        const routerRes = await executeRouterChatCompletion({
+          prompt,
+          history,
+          settings,
+          systemPersona: buildSystemPersona(settings, 'full'),
+          modelIdOverride: targetRouterModel,
+          deepThink,
+          signal,
+        });
+        return {
+          content: routerRes.content,
+          thinkingContent: routerRes.thinkingContent,
+          answeredById: explicitRouterSelected
+            ? settings.selectedModelId
+            : 'custom-ai-router',
+          answeredByName: `${routerRes.resolvedModel} · ${routerRes.providerLabel}`,
+          usedFallback: false,
+          attemptsCount: 1,
+        };
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
+        lastReason =
+          err instanceof Error
+            ? err.message
+            : `Gagal menghubungi gateway ${providerLabel}.`;
+        lastFailedName = `${providerLabel} (${targetRouterModel})`;
+
+        if (explicitRouterSelected && !settings.autoFallback) {
+          throw new Error(lastReason);
+        }
+      }
+    }
+  }
+
+  const candidates = buildCandidateChain(settings, deepThink).slice(0, 8);
 
   for (let idx = 0; idx < candidates.length; idx++) {
     if (signal?.aborted) {
@@ -2073,13 +2198,17 @@ export async function sendMultiModelChat({
     }
 
     const model = candidates[idx];
+    const totalAttempt = attemptOffset + idx + 1;
     const isFallback =
-      idx > 0 && (settings.selectedModelId !== 'auto' || Boolean(deepThink));
+      totalAttempt > 1 &&
+      (settings.selectedModelId !== 'auto' ||
+        Boolean(deepThink) ||
+        attemptOffset > 0);
 
     onStatus?.({
       modelName: model.shortName,
-      attempt: idx + 1,
-      isFallback: idx > 0,
+      attempt: totalAttempt,
+      isFallback: totalAttempt > 1,
       previousFailedModel: lastFailedName,
       deepThink,
     });
@@ -2106,8 +2235,10 @@ export async function sendMultiModelChat({
               thinkingContent: parsed.thinkingContent,
               answeredById: model.id,
               answeredByName: `${model.shortName} · ${model.provider}`,
-              usedFallback: isFallback || (settings.selectedModelId === 'auto' && idx > 0),
-              attemptsCount: idx + 1,
+              usedFallback:
+                isFallback ||
+                (settings.selectedModelId === 'auto' && totalAttempt > 1),
+              attemptsCount: totalAttempt,
             };
           }
         }
@@ -2723,12 +2854,14 @@ export async function generateMultiEngineImage({
   prompt,
   selectedImageModelId = 'auto',
   autoFallback = true,
+  settings,
   signal,
   onStatus,
 }: {
   prompt: string;
   selectedImageModelId?: string;
   autoFallback?: boolean;
+  settings?: AppSettings;
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
@@ -2809,16 +2942,78 @@ export async function generateMultiEngineImage({
   const parsedIntent = parseImagePromptIntent(prompt);
   const cleanPrompt = (parsedIntent.cleanPrompt || prompt).trim();
   const ratio = parsedIntent.ratio;
+
+  let routerAttempted = false;
+  let lastFailedName: string | undefined;
+
+  const explicitRouterImage = selectedImageModelId === ROUTER_IMAGE_MODEL_ID;
+  const autoRouterImage =
+    selectedImageModelId === 'auto' &&
+    Boolean(
+      settings &&
+        isRouterConfiguredAndReady(settings) &&
+        settings.routerImageModel.trim()
+    );
+
+  if (explicitRouterImage || autoRouterImage) {
+    if (!settings || !isRouterConfiguredAndReady(settings)) {
+      const msg =
+        'AI Router Gateway belum aktif di Pengaturan untuk memakai /v1/images/generations.';
+      if (explicitRouterImage && !autoFallback) {
+        throw new Error(msg);
+      }
+      lastFailedName = 'AI Router Image';
+    } else {
+      routerAttempted = true;
+      const providerLabel = getRouterDisplayLabel(settings);
+      onStatus?.({
+        modelName: `${providerLabel} Image`,
+        attempt: 1,
+        isFallback: false,
+        imageMode: true,
+      });
+
+      try {
+        const routerImg = await generateRouterImage({
+          prompt: cleanPrompt,
+          ratio,
+          settings,
+          signal,
+        });
+        return {
+          content: `Gambar berhasil dibuat oleh **${routerImg.modelUsed}** · **${routerImg.providerLabel}** dari deskripsi: *"${cleanPrompt}"*`,
+          answeredById: ROUTER_IMAGE_MODEL_ID,
+          answeredByName: `${routerImg.modelUsed} · ${routerImg.providerLabel}`,
+          usedFallback: false,
+          attemptsCount: 1,
+          imageUrl: routerImg.imageUrl,
+        };
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
+        if (explicitRouterImage && !autoFallback) {
+          throw err instanceof Error
+            ? err
+            : new Error('Gagal membuat gambar melalui AI Router.');
+        }
+        lastFailedName = `${providerLabel} Image`;
+      }
+    }
+  }
+
   const engines = buildImageEngineChain({
     prompt: cleanPrompt,
     ratio,
-    selectedImageModelId,
+    selectedImageModelId: explicitRouterImage ? 'auto' : selectedImageModelId,
     autoFallback,
   });
   const firstEngine = engines[0];
-  let lastFailedName: string | undefined;
 
   const formatSuccessCaption = (engine: ImageEngineDefinition, idx: number): string => {
+    if (routerAttempted && lastFailedName) {
+      return `Gambar berhasil dibuat oleh **${engine.name}** *(auto-fallback dari ${lastFailedName})* untuk deskripsi: *"${cleanPrompt}"*`;
+    }
     if (idx > 0 && firstEngine && firstEngine.id !== engine.id) {
       return `Gambar berhasil dibuat oleh **${engine.name}** *(auto-fallback dari ${firstEngine.shortName})* untuk deskripsi: *"${cleanPrompt}"*`;
     }
@@ -2831,6 +3026,7 @@ export async function generateMultiEngineImage({
     }
 
     const engine = engines[idx];
+    const attemptNum = (routerAttempted ? 1 : 0) + idx + 1;
     const targetUrl = engine.buildUrl(cleanPrompt, ratio);
     const engineMethod = engine.method ?? 'GET';
     const engineBody =
@@ -2840,8 +3036,8 @@ export async function generateMultiEngineImage({
 
     onStatus?.({
       modelName: engine.name,
-      attempt: idx + 1,
-      isFallback: idx > 0,
+      attempt: attemptNum,
+      isFallback: attemptNum > 1,
       previousFailedModel: lastFailedName,
       imageMode: true,
     });

@@ -9,13 +9,17 @@ import {
   Clock,
   Copy,
   Download,
+  ExternalLink,
   FastForward,
   FileText,
+  Film,
   ImageIcon,
+  Music,
   Pencil,
   RefreshCw,
   Send,
   Shuffle,
+  Sparkles,
   Volume2,
   VolumeX,
   X,
@@ -34,6 +38,7 @@ interface ChatThreadProps {
   onEditAndResendUserMessage: (userMessageId: string, updatedContent: string) => void;
   onFlushStream: () => void;
   onOpenImageModelPicker: () => void;
+  onSummarizeTranscript?: (transcript: string) => void;
 }
 
 function ThinkingAccordion({ content }: { content: string }) {
@@ -77,6 +82,7 @@ export function ChatThread({
   onEditAndResendUserMessage,
   onFlushStream,
   onOpenImageModelPicker,
+  onSummarizeTranscript,
 }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
@@ -676,6 +682,36 @@ export function ChatThread({
                       <ThinkingAccordion content={msg.thinkingContent} />
                     )}
 
+                    {msg.videoUrl && (
+                      <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/80">
+                        <video
+                          src={msg.videoUrl}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="max-h-[420px] w-full bg-black object-contain"
+                        />
+                        <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3.5 py-2">
+                          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-[#94A3B8]">
+                            <Film className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+                            <span className="truncate">
+                              Pemutar Video{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
+                            </span>
+                          </span>
+                          <a
+                            href={msg.videoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                            className="inline-flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2]"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Unduh Video</span>
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
                     {msg.imageUrl && (
                       <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/75">
                         <img
@@ -688,7 +724,7 @@ export function ChatThread({
                         />
                         <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
                           <span className="truncate text-xs text-[#94A3B8]">
-                            Hasil Gambar AI{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
+                            Media Visual{msg.answeredByName ? ` · ${msg.answeredByName}` : ''}
                           </span>
                           <button
                             type="button"
@@ -702,10 +738,104 @@ export function ChatThread({
                       </div>
                     )}
 
+                    {msg.audioUrl && (
+                      <div className="mb-3 overflow-hidden rounded-xl border border-[#22D3EE]/25 bg-[#07111F]/90 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold text-[#67E8F9]">
+                            <Music className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+                            <span className="truncate">
+                              {msg.audioTitle || msg.answeredByName || 'Pemutar Audio'}
+                            </span>
+                          </span>
+                          <a
+                            href={msg.audioUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={`nodatagpt-audio-${msg.id.slice(0, 6)}.mp3`}
+                            className="inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-lg border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-1 text-[11px] font-semibold text-[#CFFAFE] hover:bg-[#22D3EE]/22"
+                          >
+                            <Download className="h-3 w-3" />
+                            <span>Unduh Audio</span>
+                          </a>
+                        </div>
+                        <audio
+                          src={msg.audioUrl}
+                          controls
+                          preload="metadata"
+                          className="h-10 w-full"
+                        />
+                      </div>
+                    )}
+
+                    {msg.galleryUrls && msg.galleryUrls.length > 0 && (
+                      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {msg.galleryUrls.map((gUrl, gIdx) => (
+                          <a
+                            key={`${msg.id}-gal-${gIdx}`}
+                            href={gUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/70"
+                          >
+                            <img
+                              src={gUrl}
+                              alt={`Galeri ${gIdx + 1}`}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                            />
+                            <span className="absolute right-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-90 backdrop-blur-xs">
+                              <ExternalLink className="h-2.5 w-2.5 text-[#22D3EE]" />
+                              <span>HD</span>
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+
                     <MarkdownRenderer
                       content={msg.content}
                       isStreaming={isTypingContent}
                     />
+
+                    {/* Extra Download Pills & 1-Click Transcript AI Summary */}
+                    {((msg.downloadItems && msg.downloadItems.length > 0) ||
+                      (msg.summarizeTranscript && onSummarizeTranscript)) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-2.5">
+                        {msg.downloadItems?.map((dl, dlIdx) => (
+                          <a
+                            key={`${msg.id}-dl-${dlIdx}`}
+                            href={dl.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                            className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              dl.kind === 'audio'
+                                ? 'border-[#FB923C]/40 bg-[#FB923C]/14 text-[#FED7AA] hover:bg-[#FB923C]/24'
+                                : 'border-[#22D3EE]/40 bg-[#22D3EE]/14 text-[#CFFAFE] hover:bg-[#22D3EE]/24'
+                            }`}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>{dl.label}</span>
+                          </a>
+                        ))}
+
+                        {msg.summarizeTranscript &&
+                          onSummarizeTranscript &&
+                          !isLoading && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onSummarizeTranscript(msg.summarizeTranscript!)
+                              }
+                              className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl bg-[#EA580C] px-3 py-1.5 text-xs font-semibold text-white shadow-[0_0_14px_rgba(251,146,60,0.25)] transition-colors hover:bg-[#F97316] cursor-pointer"
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>Ringkas Transkrip dengan AI</span>
+                            </button>
+                          )}
+                      </div>
+                    )}
 
                     {/* Live Typing Footer (Seconds Ticking + Instant Reveal Button from WormGPT) */}
                     {isTypingContent && isLastAssistant ? (
@@ -794,7 +924,7 @@ export function ChatThread({
                             </button>
                           )}
 
-                          {msg.imageUrl && (
+                          {msg.imageUrl && msg.isImageRequest && (
                             <button
                               type="button"
                               onClick={onOpenImageModelPicker}

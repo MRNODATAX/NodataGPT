@@ -1,7 +1,25 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Play, Sparkles, Trash2, X } from 'lucide-react';
-import type { AppSettings } from '../types/chat';
+import {
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Network,
+  Play,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
+import type { AppSettings, RouterPresetId } from '../types/chat';
 import { AI_MODELS } from '../services/modelCatalog';
+import {
+  ROUTER_PRESETS,
+  ROUTER_PRIMARY_MODEL_ID,
+  discoverRouterModels,
+  normalizeRouterBaseUrl,
+} from '../services/routerGateway';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -23,10 +41,17 @@ export function SettingsModal({
   onClearAllChats,
 }: SettingsModalProps) {
   const [confirmClear, setConfirmClear] = useState(false);
+  const [showRouterKey, setShowRouterKey] = useState(false);
+  const [routerTesting, setRouterTesting] = useState(false);
+  const [routerTestResult, setRouterTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setConfirmClear(false);
+      setRouterTestResult(null);
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,6 +62,77 @@ export function SettingsModal({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const activePreset = ROUTER_PRESETS[settings.routerPreset] || ROUTER_PRESETS['9router'];
+  const combinedModelChips = Array.from(
+    new Set([
+      ...(settings.routerDiscoveredModels || []).slice(0, 16),
+      ...activePreset.suggestedModels,
+    ])
+  ).slice(0, 18);
+
+  const handleSelectRouterPreset = (presetId: RouterPresetId) => {
+    const preset = ROUTER_PRESETS[presetId];
+    setRouterTestResult(null);
+    onUpdateSettings({
+      ...settings,
+      routerPreset: presetId,
+      routerBaseUrl: preset.defaultBaseUrl,
+      routerModel: preset.defaultModel,
+    });
+  };
+
+  const handleTestRouterConnection = async () => {
+    setRouterTesting(true);
+    setRouterTestResult(null);
+    try {
+      const res = await discoverRouterModels({
+        baseUrl: settings.routerBaseUrl,
+        apiKey: settings.routerApiKey,
+        preset: settings.routerPreset,
+      });
+
+      if (res.ok) {
+        const nextModel =
+          settings.routerModel.trim() ||
+          res.models[0] ||
+          activePreset.defaultModel;
+        onUpdateSettings({
+          ...settings,
+          routerEnabled: true,
+          routerBaseUrl: res.normalizedBaseUrl,
+          routerModel: nextModel,
+          routerDiscoveredModels: res.models,
+          selectedModelId:
+            settings.selectedModelId === 'auto'
+              ? ROUTER_PRIMARY_MODEL_ID
+              : settings.selectedModelId,
+        });
+        setRouterTestResult({
+          ok: true,
+          message:
+            res.models.length > 0
+              ? `Terhubung (${res.latencyMs} ms · ${res.usedRelay ? 'Cloud Relay' : 'Langsung Browser'}). Ditemukan ${res.models.length} model/combo aktif!`
+              : `Terhubung ke ${res.normalizedBaseUrl} (${res.latencyMs} ms). Gateway siap digunakan.`,
+        });
+      } else {
+        setRouterTestResult({
+          ok: false,
+          message: res.error || 'Gagal terhubung ke AI Router.',
+        });
+      }
+    } catch (err) {
+      setRouterTestResult({
+        ok: false,
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Gagal menguji koneksi AI Router.',
+      });
+    } finally {
+      setRouterTesting(false);
+    }
+  };
 
   return (
     <div
@@ -314,6 +410,316 @@ export function SettingsModal({
               placeholder="Opsional: Tambahkan gaya khusus (misal: gunakan gaya santai, sertakan analogi praktis, atau fokus pada TypeScript)..."
               className="w-full rounded-xl border border-white/10 bg-black/45 p-2.5 text-xs leading-relaxed text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
             />
+          </div>
+
+          {/* AI Router Gateway (9Router, OmniRoute, OpenRouter, Custom OpenAI-Compatible) */}
+          <div className="space-y-3 rounded-2xl border border-[#22D3EE]/30 bg-gradient-to-br from-[#081322]/90 via-[#070E1A]/90 to-[#180E08]/80 p-4 shadow-[0_0_24px_rgba(34,211,238,0.08)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Network className="h-4 w-4 shrink-0 text-[#22D3EE]" />
+                  <span className="font-display text-sm font-bold text-white">
+                    AI Router Gateway (9Router &amp; OmniRoute)
+                  </span>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 font-mono-code text-[10px] font-semibold ${
+                      settings.routerEnabled
+                        ? 'border-[#22D3EE]/45 bg-[#22D3EE]/15 text-[#67E8F9]'
+                        : 'border-white/15 bg-white/[0.04] text-[#94A3B8]'
+                    }`}
+                  >
+                    {settings.routerEnabled ? 'Aktif · Prioritas 0' : 'Nonaktif'}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] leading-relaxed text-[#CBD5E1]">
+                  Hubungkan API Key &amp; Base URL dari{' '}
+                  <strong className="text-[#67E8F9]">9Router</strong>,{' '}
+                  <strong className="text-[#FDBA74]">OmniRoute</strong>,{' '}
+                  OpenRouter, atau gateway OpenAI-compatible kustom (lokal{' '}
+                  <code className="font-mono-code text-[#F8FAFC]">:20128/v1</code>{' '}
+                  maupun Cloud/VPS) lengkap dengan persona NodataGPT &amp; Auto-Fallback.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-label="Aktifkan AI Router Gateway"
+                aria-checked={settings.routerEnabled}
+                onClick={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    routerEnabled: !settings.routerEnabled,
+                    selectedModelId: !settings.routerEnabled
+                      ? ROUTER_PRIMARY_MODEL_ID
+                      : settings.selectedModelId === ROUTER_PRIMARY_MODEL_ID
+                        ? 'auto'
+                        : settings.selectedModelId,
+                  })
+                }
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${
+                  settings.routerEnabled ? 'bg-[#0E7490]' : 'bg-white/20'
+                }`}
+              >
+                <span
+                  className={`block h-5 w-5 rounded-full bg-white transition-transform ${
+                    settings.routerEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Preset Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {(['9router', 'omniroute', 'openrouter', 'custom'] as RouterPresetId[]).map(
+                (presetId) => {
+                  const p = ROUTER_PRESETS[presetId];
+                  const isActive = settings.routerPreset === presetId;
+                  return (
+                    <button
+                      key={presetId}
+                      type="button"
+                      onClick={() => handleSelectRouterPreset(presetId)}
+                      className={`rounded-xl border px-2.5 py-2 text-left transition-all cursor-pointer ${
+                        isActive
+                          ? 'border-[#22D3EE] bg-[#22D3EE]/15 text-white shadow-[0_0_14px_rgba(34,211,238,0.16)]'
+                          : 'border-white/10 bg-black/45 text-[#CBD5E1] hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{p.name}</div>
+                      <div className="mt-0.5 truncate font-mono-code text-[9.5px] text-[#94A3B8]">
+                        {p.badge}
+                      </div>
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-[#94A3B8]">
+              {activePreset.description}
+            </p>
+
+            {/* Quick Endpoint Chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {activePreset.endpointChips.map((chip) => {
+                const isSelectedUrl =
+                  normalizeRouterBaseUrl(settings.routerBaseUrl, settings.routerPreset) ===
+                  chip.url;
+                return (
+                  <button
+                    key={chip.url}
+                    type="button"
+                    onClick={() => {
+                      setRouterTestResult(null);
+                      onUpdateSettings({
+                        ...settings,
+                        routerBaseUrl: chip.url,
+                      });
+                    }}
+                    className={`rounded-lg border px-2 py-1 font-mono-code text-[10.5px] transition-colors cursor-pointer ${
+                      isSelectedUrl
+                        ? 'border-[#FB923C]/60 bg-[#FB923C]/18 text-[#FED7AA]'
+                        : 'border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/25 hover:text-white'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Base URL */}
+            <div>
+              <label
+                htmlFor="router-base-url-input"
+                className="mb-1 block text-xs font-medium text-[#CBD5E1]"
+              >
+                Endpoint Base URL ({activePreset.name})
+              </label>
+              <input
+                id="router-base-url-input"
+                type="url"
+                value={settings.routerBaseUrl}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    ...settings,
+                    routerBaseUrl: e.target.value,
+                  })
+                }
+                onBlur={() =>
+                  onUpdateSettings({
+                    ...settings,
+                    routerBaseUrl: normalizeRouterBaseUrl(
+                      settings.routerBaseUrl,
+                      settings.routerPreset
+                    ),
+                  })
+                }
+                placeholder={activePreset.defaultBaseUrl}
+                className="h-9 w-full rounded-lg border border-white/12 bg-black/60 px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+              />
+            </div>
+
+            {/* Router API Key */}
+            <div>
+              <label
+                htmlFor="router-api-key-input"
+                className="mb-1 block text-xs font-medium text-[#CBD5E1]"
+              >
+                API Key {activePreset.name} (Bearer Token)
+              </label>
+              <div className="relative">
+                <input
+                  id="router-api-key-input"
+                  type={showRouterKey ? 'text' : 'password'}
+                  value={settings.routerApiKey}
+                  onChange={(e) => {
+                    const nextKey = e.target.value;
+                    onUpdateSettings({
+                      ...settings,
+                      routerApiKey: nextKey,
+                      routerEnabled:
+                        nextKey.trim().length > 0 ? true : settings.routerEnabled,
+                    });
+                  }}
+                  placeholder={activePreset.keyPlaceholder}
+                  className="h-9 w-full rounded-lg border border-white/12 bg-black/60 pr-10 pl-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowRouterKey((s) => !s)}
+                  aria-label={showRouterKey ? 'Sembunyikan API Key' : 'Tampilkan API Key'}
+                  className="absolute top-1/2 right-2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[#94A3B8] hover:text-white cursor-pointer"
+                >
+                  {showRouterKey ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Active Router Chat Model / Combo */}
+            <div>
+              <label
+                htmlFor="router-model-input"
+                className="mb-1 block text-xs font-medium text-[#CBD5E1]"
+              >
+                Model / Combo Utama (contoh: <code className="font-mono-code text-[#67E8F9]">auto</code>, <code className="font-mono-code text-[#67E8F9]">auto/coding</code>, <code className="font-mono-code text-[#FDBA74]">cc/claude-opus-4-7</code>)
+              </label>
+              <input
+                id="router-model-input"
+                type="text"
+                value={settings.routerModel}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    ...settings,
+                    routerModel: e.target.value,
+                  })
+                }
+                placeholder={activePreset.defaultModel}
+                className="h-9 w-full rounded-lg border border-white/12 bg-black/60 px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+              />
+
+              {/* Suggested + Discovered Model Chips */}
+              {combinedModelChips.length > 0 && (
+                <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+                  {combinedModelChips.map((modelId) => {
+                    const selected = settings.routerModel.trim() === modelId;
+                    return (
+                      <button
+                        key={modelId}
+                        type="button"
+                        onClick={() =>
+                          onUpdateSettings({
+                            ...settings,
+                            routerEnabled: true,
+                            routerModel: modelId,
+                            selectedModelId: ROUTER_PRIMARY_MODEL_ID,
+                          })
+                        }
+                        className={`rounded-md border px-2 py-0.5 font-mono-code text-[10px] transition-colors cursor-pointer ${
+                          selected
+                            ? 'border-[#22D3EE] bg-[#22D3EE]/20 text-white'
+                            : 'border-white/10 bg-black/45 text-[#94A3B8] hover:border-white/25 hover:text-white'
+                        }`}
+                      >
+                        {modelId}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Optional Router Image Model */}
+            <div>
+              <label
+                htmlFor="router-image-model-input"
+                className="mb-1 block text-xs font-medium text-[#CBD5E1]"
+              >
+                Model Gambar Router Opsional (/v1/images/generations)
+              </label>
+              <input
+                id="router-image-model-input"
+                type="text"
+                value={settings.routerImageModel}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    ...settings,
+                    routerImageModel: e.target.value,
+                  })
+                }
+                placeholder="Opsional, misal: openai/gpt-image-2 atau kosongkan"
+                className="h-9 w-full rounded-lg border border-white/12 bg-black/60 px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#FB923C] focus:outline-none"
+              />
+            </div>
+
+            {/* Test Connection & Discover /v1/models Button */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={routerTesting}
+                onClick={handleTestRouterConnection}
+                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[#0E7490] px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_0_16px_rgba(34,211,238,0.2)] transition-colors hover:bg-[#0891B2] disabled:opacity-60 cursor-pointer"
+              >
+                {routerTesting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {routerTesting
+                    ? 'Menguji /v1/models...'
+                    : 'Tes Koneksi & Muat /v1/models'}
+                </span>
+              </button>
+
+              {settings.routerDiscoveredModels.length > 0 && (
+                <span className="font-mono-code text-[11px] text-[#67E8F9]">
+                  {settings.routerDiscoveredModels.length} model termuat
+                </span>
+              )}
+            </div>
+
+            {routerTestResult && (
+              <div
+                className={`flex items-start gap-2 rounded-xl border p-2.5 text-xs leading-relaxed ${
+                  routerTestResult.ok
+                    ? 'border-[#22D3EE]/40 bg-[#22D3EE]/12 text-[#CFFAFE]'
+                    : 'border-[#FB923C]/45 bg-[#FB923C]/12 text-[#FED7AA]'
+                }`}
+              >
+                <CheckCircle2
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${
+                    routerTestResult.ok ? 'text-[#22D3EE]' : 'text-[#FB923C]'
+                  }`}
+                />
+                <span>{routerTestResult.message}</span>
+              </div>
+            )}
           </div>
 
           {/* Optional Personal API Keys */}

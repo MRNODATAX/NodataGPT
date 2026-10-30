@@ -1,4 +1,16 @@
-import type { AIModelDefinition, ImageModelCategory } from '../types/chat';
+import type {
+  AIModelDefinition,
+  AppSettings,
+  ImageModelCategory,
+} from '../types/chat';
+import {
+  ROUTER_IMAGE_MODEL_ID,
+  ROUTER_MODEL_PREFIX,
+  ROUTER_PRESETS,
+  ROUTER_PRIMARY_MODEL_ID,
+  getRouterDisplayLabel,
+  resolveRouterModelName,
+} from './routerGateway';
 
 export const AI_MODELS: AIModelDefinition[] = [
   {
@@ -11,6 +23,20 @@ export const AI_MODELS: AIModelDefinition[] = [
     description: 'Memilih model tercepat yang sehat dan otomatis beralih jika terjadi gangguan.',
     maxPromptChars: 8000,
     timeoutMs: 20000,
+    accent: 'dual',
+  },
+  {
+    id: ROUTER_PRIMARY_MODEL_ID,
+    name: 'AI Router Gateway (9Router / OmniRoute)',
+    shortName: 'AI Router',
+    provider: '9Router · OmniRoute · OpenRouter',
+    priority: 0,
+    category: 'router',
+    description:
+      'Gunakan API Key & Base URL dari 9Router, OmniRoute (auto/coding, cc/claude-opus-4-7, dsb.), OpenRouter, atau gateway OpenAI-compatible kustom Anda.',
+    maxPromptChars: 12000,
+    timeoutMs: 42000,
+    requiresKey: 'router',
     accent: 'dual',
   },
   // === 4 DIRECT UPSTREAM WEB SCRAPERS (GEMINI, CHATGPT, DEEPSEEK, QWEN.AI) ===
@@ -805,6 +831,16 @@ export const IMAGE_MODELS: ImageModelOption[] = [
     description:
       'Memilih mesin gambar paling tepat sesuai isi prompt (Ideogram untuk poster/teks, SDXL/Flux untuk anime & seni, WriteCream/StableDiff untuk rasio, Sologo untuk logo, MagicStudio HD untuk kecepatan) dengan Auto-Fallback otomatis.',
   },
+  {
+    id: ROUTER_IMAGE_MODEL_ID,
+    name: 'AI Router Image (/v1/images/generations)',
+    shortName: 'Router Image',
+    provider: '9Router · OmniRoute · OpenAI',
+    category: 'router',
+    badge: 'Gateway /v1/images',
+    description:
+      'Membuat gambar menggunakan endpoint OpenAI-compatible /v1/images/generations pada OmniRoute / 9Router Anda dengan Auto-Fallback ke mesin gambar NodataGPT.',
+  },
   ...IMAGE_ENGINES.map((e) => ({
     id: e.id,
     name: e.name,
@@ -816,7 +852,96 @@ export const IMAGE_MODELS: ImageModelOption[] = [
   })),
 ];
 
-export function getModelById(id: string): AIModelDefinition {
+export function buildDynamicRouterModelDefinitions(
+  settings: AppSettings
+): AIModelDefinition[] {
+  const providerLabel = getRouterDisplayLabel(settings);
+  const presetSuggestions =
+    ROUTER_PRESETS[settings.routerPreset]?.suggestedModels || [];
+
+  const uniqueModelNames: string[] = [];
+  const seen = new Set<string>();
+
+  const pushUnique = (raw: string) => {
+    const clean = raw.trim();
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    uniqueModelNames.push(clean);
+  };
+
+  if (settings.routerModel?.trim()) {
+    pushUnique(settings.routerModel);
+  }
+  for (const m of settings.routerDiscoveredModels || []) {
+    pushUnique(m);
+  }
+  for (const s of presetSuggestions) {
+    pushUnique(s);
+  }
+
+  return uniqueModelNames.slice(0, 60).map((modelId) => {
+    const shortLabel =
+      modelId.length > 20 ? `${modelId.slice(0, 19)}…` : modelId;
+    const isFromDiscovery = (settings.routerDiscoveredModels || []).includes(
+      modelId
+    );
+    return {
+      id: `${ROUTER_MODEL_PREFIX}${modelId}`,
+      name: `${modelId} (${providerLabel})`,
+      shortName: shortLabel,
+      provider: providerLabel,
+      priority: 0,
+      category: 'router',
+      description: isFromDiscovery
+        ? `Model / kombo aktif yang ditemukan langsung dari endpoint /v1/models pada ${providerLabel}.`
+        : `Preset model / kombo pintar ${providerLabel} melalui /v1/chat/completions.`,
+      maxPromptChars: 12000,
+      timeoutMs: 42000,
+      requiresKey: 'router',
+      accent: modelId.startsWith('auto') ? 'dual' : 'cyan',
+    };
+  });
+}
+
+export function getModelById(
+  id: string,
+  settings?: AppSettings
+): AIModelDefinition {
+  if (settings && (id === ROUTER_PRIMARY_MODEL_ID || id.startsWith(ROUTER_MODEL_PREFIX))) {
+    const resolved = resolveRouterModelName(id, settings);
+    const providerLabel = getRouterDisplayLabel(settings);
+    const shortResolved =
+      resolved.length > 18 ? `${resolved.slice(0, 17)}…` : resolved;
+    return {
+      id,
+      name: `${providerLabel} · ${resolved}`,
+      shortName: `${providerLabel}: ${shortResolved}`,
+      provider: providerLabel,
+      priority: 0,
+      category: 'router',
+      description: `Terhubung ke gateway ${providerLabel} dengan model/combo "${resolved}".`,
+      maxPromptChars: 12000,
+      timeoutMs: 42000,
+      requiresKey: 'router',
+      accent: 'dual',
+    };
+  }
+  if (id.startsWith(ROUTER_MODEL_PREFIX)) {
+    const modelName = id.slice(ROUTER_MODEL_PREFIX.length);
+    return {
+      id,
+      name: `AI Router · ${modelName}`,
+      shortName: modelName.slice(0, 18),
+      provider: 'AI Router Gateway',
+      priority: 0,
+      category: 'router',
+      description: `Model "${modelName}" melalui AI Router Gateway.`,
+      maxPromptChars: 12000,
+      timeoutMs: 42000,
+      requiresKey: 'router',
+      accent: 'dual',
+    };
+  }
   return AI_MODELS.find((m) => m.id === id) || AI_MODELS[0];
 }
 

@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  Blocks,
   BrainCircuit,
   Calculator,
   Code2,
@@ -24,6 +25,7 @@ interface WelcomeScreenProps {
     options?: { imageMode?: boolean; deepThink?: boolean }
   ) => void;
   onOpenModelPicker: () => void;
+  onOpenToolsStudio: () => void;
 }
 
 interface StarterItem {
@@ -99,6 +101,7 @@ export function WelcomeScreen({
   onSelectModelDirect,
   onSelectStarter,
   onOpenModelPicker,
+  onOpenToolsStudio,
 }: WelcomeScreenProps) {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-4 sm:px-6 sm:py-9">
@@ -174,6 +177,15 @@ export function WelcomeScreen({
           >
             <ImageIcon className="h-3.5 w-3.5 text-[#FB923C]" />
             <span>Buat Gambar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenToolsStudio}
+            className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-[#22D3EE]/35 bg-[#22D3EE]/10 px-3 py-1 text-xs font-medium text-[#CFFAFE] backdrop-blur-md transition-all hover:border-[#22D3EE]/65 hover:text-white cursor-pointer"
+          >
+            <Blocks className="h-3.5 w-3.5 text-[#22D3EE]" />
+            <span>Tools Studio</span>
           </button>
 
           <button

@@ -16,7 +16,11 @@ import type {
   ImageModelCategory,
   ModelCategory,
 } from '../types/chat';
-import { AI_MODELS, IMAGE_MODELS } from '../services/modelCatalog';
+import {
+  AI_MODELS,
+  IMAGE_MODELS,
+  buildDynamicRouterModelDefinitions,
+} from '../services/modelCatalog';
 import {
   getImageEngineCooldownRemainingSec,
   getModelCooldownRemainingSec,
@@ -25,6 +29,10 @@ import {
   resetAllImageEngineCooldowns,
   resetAllModelCooldowns,
 } from '../services/aiRouter';
+import {
+  ROUTER_IMAGE_MODEL_ID,
+  isRouterConfiguredAndReady,
+} from '../services/routerGateway';
 
 interface ModelPickerModalProps {
   isOpen: boolean;
@@ -40,6 +48,7 @@ interface ModelPickerModalProps {
 
 const CHAT_CATEGORIES: Array<{ id: 'all' | ModelCategory; label: string }> = [
   { id: 'all', label: 'Semua' },
+  { id: 'router', label: '9Router & OmniRoute' },
   { id: 'scraper', label: 'Direct Scraper' },
   { id: 'snow', label: 'Snow API' },
   { id: 'synox', label: 'Synox Cloud' },
@@ -52,6 +61,7 @@ const CHAT_CATEGORIES: Array<{ id: 'all' | ModelCategory; label: string }> = [
 
 const IMAGE_CATEGORIES: Array<{ id: 'all' | ImageModelCategory; label: string }> = [
   { id: 'all', label: 'Semua' },
+  { id: 'router', label: 'AI Router' },
   { id: 'cepat', label: 'Cepat & Rasio' },
   { id: 'artistik', label: 'Artistik & Flux' },
   { id: 'desain', label: 'Poster & Logo' },
@@ -94,9 +104,26 @@ export function ModelPickerModal({
     return () => window.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
+  const dynamicRouterModels = useMemo(
+    () => buildDynamicRouterModelDefinitions(settings),
+    [settings]
+  );
+
   const filteredChatModels = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return AI_MODELS.filter((m) => {
+    const includeDynamicRouter =
+      settings.routerEnabled ||
+      activeChatCategory === 'router' ||
+      q.length > 0;
+    const pool = includeDynamicRouter
+      ? [
+          ...AI_MODELS.slice(0, 2),
+          ...dynamicRouterModels,
+          ...AI_MODELS.slice(2),
+        ]
+      : AI_MODELS;
+
+    return pool.filter((m) => {
       if (
         activeChatCategory !== 'all' &&
         m.category !== activeChatCategory &&
@@ -112,7 +139,7 @@ export function ModelPickerModal({
         m.description.toLowerCase().includes(q)
       );
     });
-  }, [query, activeChatCategory]);
+  }, [query, activeChatCategory, settings.routerEnabled, dynamicRouterModels]);
 
   const filteredImageModels = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -147,6 +174,8 @@ export function ModelPickerModal({
     if (model.requiresKey === 'gemini') return Boolean(settings.geminiApiKey.trim());
     if (model.requiresKey === 'deepseek')
       return Boolean(settings.deepseekApiKey.trim());
+    if (model.requiresKey === 'router')
+      return isRouterConfiguredAndReady(settings);
     return true;
   };
 
@@ -475,6 +504,14 @@ export function ModelPickerModal({
                     key={imgModel.id}
                     type="button"
                     onClick={() => {
+                      if (
+                        imgModel.id === ROUTER_IMAGE_MODEL_ID &&
+                        !isRouterConfiguredAndReady(settings)
+                      ) {
+                        onClose();
+                        onOpenSettings();
+                        return;
+                      }
                       onSelectImageModel(imgModel.id);
                       onClose();
                     }}

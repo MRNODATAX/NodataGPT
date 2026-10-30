@@ -1,4 +1,9 @@
-import type { AppSettings, ChatMessage, Conversation } from '../types/chat';
+import type {
+  AppSettings,
+  ChatMessage,
+  Conversation,
+  RouterPresetId,
+} from '../types/chat';
 
 const CONVERSATIONS_KEY = 'nodatagpt.conversations.v3';
 const ACTIVE_CHAT_KEY = 'nodatagpt.activeChatId.v3';
@@ -7,6 +12,13 @@ const SIDEBAR_COLLAPSED_KEY = 'nodatagpt.sidebarCollapsed.v3';
 
 const LEGACY_PERSONA_DEFAULT =
   'Kamu adalah asisten AI NodataGPT yang cerdas, lugas, dan membantu.';
+
+const VALID_ROUTER_PRESETS = new Set<RouterPresetId>([
+  '9router',
+  'omniroute',
+  'openrouter',
+  'custom',
+]);
 
 export const DEFAULT_SETTINGS: AppSettings = {
   selectedModelId: 'auto',
@@ -20,6 +32,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customPersona: '',
   geminiApiKey: '',
   deepseekApiKey: '',
+  routerEnabled: false,
+  routerPreset: '9router',
+  routerBaseUrl: 'http://localhost:20128/v1',
+  routerApiKey: '',
+  routerModel: 'auto',
+  routerImageModel: '',
+  routerDiscoveredModels: [],
 };
 
 function sanitizeStoredMessages(messages: unknown): ChatMessage[] {
@@ -29,8 +48,14 @@ function sanitizeStoredMessages(messages: unknown): ChatMessage[] {
   for (const raw of messages) {
     if (!raw || typeof raw !== 'object') continue;
     const msg = raw as ChatMessage;
+    const hasRichMedia = Boolean(
+      msg.imageUrl ||
+        msg.videoUrl ||
+        msg.audioUrl ||
+        (Array.isArray(msg.galleryUrls) && msg.galleryUrls.length > 0)
+    );
     if (msg.role === 'assistant' && (msg.status === 'waiting' || msg.status === 'typing')) {
-      if ((msg.content || '').trim().length === 0 && !msg.imageUrl) {
+      if ((msg.content || '').trim().length === 0 && !hasRichMedia) {
         continue;
       }
       cleaned.push({ ...msg, status: 'done' });
@@ -77,8 +102,12 @@ export function saveConversations(conversations: Conversation[]): void {
             keptInlineImages += 1;
             if (keptInlineImages > 2) {
               const { imageUrl: _dropped, ...rest } = nextMsg;
-              return rest;
+              nextMsg = rest;
             }
+          }
+          if (nextMsg.audioUrl && nextMsg.audioUrl.startsWith('data:audio/')) {
+            const { audioUrl: _droppedAudio, ...restAudio } = nextMsg;
+            nextMsg = restAudio;
           }
           return nextMsg;
         }),
@@ -155,6 +184,32 @@ export function loadSettings(): AppSettings {
           : DEFAULT_SETTINGS.customPersona,
       geminiApiKey: typeof parsed?.geminiApiKey === 'string' ? parsed.geminiApiKey : '',
       deepseekApiKey: typeof parsed?.deepseekApiKey === 'string' ? parsed.deepseekApiKey : '',
+      routerEnabled:
+        typeof parsed?.routerEnabled === 'boolean'
+          ? parsed.routerEnabled
+          : DEFAULT_SETTINGS.routerEnabled,
+      routerPreset: VALID_ROUTER_PRESETS.has(parsed?.routerPreset)
+        ? parsed.routerPreset
+        : DEFAULT_SETTINGS.routerPreset,
+      routerBaseUrl:
+        typeof parsed?.routerBaseUrl === 'string' && parsed.routerBaseUrl.trim()
+          ? parsed.routerBaseUrl.trim()
+          : DEFAULT_SETTINGS.routerBaseUrl,
+      routerApiKey:
+        typeof parsed?.routerApiKey === 'string' ? parsed.routerApiKey : '',
+      routerModel:
+        typeof parsed?.routerModel === 'string' && parsed.routerModel.trim()
+          ? parsed.routerModel.trim()
+          : DEFAULT_SETTINGS.routerModel,
+      routerImageModel:
+        typeof parsed?.routerImageModel === 'string'
+          ? parsed.routerImageModel.trim()
+          : '',
+      routerDiscoveredModels: Array.isArray(parsed?.routerDiscoveredModels)
+        ? parsed.routerDiscoveredModels
+            .filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0)
+            .slice(0, 120)
+        : [],
     };
   } catch {
     return DEFAULT_SETTINGS;

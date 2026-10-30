@@ -2,6 +2,14 @@ export type MessageRole = 'user' | 'assistant';
 
 export type AssistantMessageStatus = 'waiting' | 'typing' | 'done' | 'error';
 
+export type RouterPresetId = '9router' | 'omniroute' | 'openrouter' | 'custom';
+
+export interface MediaDownloadItem {
+  label: string;
+  url: string;
+  kind?: 'video' | 'audio' | 'image' | 'file';
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -16,6 +24,12 @@ export interface ChatMessage {
   answeredByName?: string;
   usedFallback?: boolean;
   imageUrl?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  audioTitle?: string;
+  galleryUrls?: string[];
+  downloadItems?: MediaDownloadItem[];
+  summarizeTranscript?: string;
   isImageRequest?: boolean;
   attachmentName?: string;
   attachmentText?: string;
@@ -42,12 +56,26 @@ export interface AppSettings {
   customPersona: string;
   geminiApiKey: string;
   deepseekApiKey: string;
+  routerEnabled: boolean;
+  routerPreset: RouterPresetId;
+  routerBaseUrl: string;
+  routerApiKey: string;
+  routerModel: string;
+  routerImageModel: string;
+  routerDiscoveredModels: string[];
 }
 
-export type ImageModelCategory = 'auto' | 'cepat' | 'artistik' | 'desain' | 'direct';
+export type ImageModelCategory =
+  | 'auto'
+  | 'router'
+  | 'cepat'
+  | 'artistik'
+  | 'desain'
+  | 'direct';
 
 export type ModelCategory =
   | 'auto'
+  | 'router'
   | 'scraper'
   | 'snow'
   | 'synox'
@@ -67,6 +95,6 @@ export interface AIModelDefinition {
   description: string;
   maxPromptChars: number;
   timeoutMs: number;
-  requiresKey?: 'gemini' | 'deepseek';
+  requiresKey?: 'gemini' | 'deepseek' | 'router';
   accent: 'cyan' | 'orange' | 'dual';
 }

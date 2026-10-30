@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Blocks,
   Download,
   FileDown,
   MessageSquare,
@@ -29,6 +30,7 @@ interface SidebarProps {
   onTogglePinChat: (id: string) => void;
   onExportActiveChat: () => void;
   onOpenSettings: () => void;
+  onOpenToolsStudio: () => void;
   onOpenInstallModal: () => void;
 }
 
@@ -47,6 +49,7 @@ export function Sidebar({
   onTogglePinChat,
   onExportActiveChat,
   onOpenSettings,
+  onOpenToolsStudio,
   onOpenInstallModal,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,6 +275,22 @@ export function Sidebar({
               <span>Ekspor Percakapan (.md)</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              onOpenToolsStudio();
+              onCloseMobile();
+            }}
+            aria-label="Web Tools Studio"
+            title="Web Tools Studio"
+            className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl text-sm text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white cursor-pointer ${
+              showExpanded ? 'px-3 py-2' : 'justify-center p-2'
+            }`}
+          >
+            <Blocks className="h-4 w-4 shrink-0 text-[#22D3EE]" />
+            {showExpanded && <span>Web Tools Studio</span>}
+          </button>
 
           <button
             type="button"

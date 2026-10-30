@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
+  Blocks,
   BrainCircuit,
   ChevronDown,
   FileText,
@@ -35,6 +36,7 @@ interface ChatComposerProps {
   onToggleImageMode: () => void;
   onOpenModelPicker: () => void;
   onOpenImageModelPicker: () => void;
+  onOpenToolsStudio: () => void;
 }
 
 interface SpeechRecognitionInstance {
@@ -64,6 +66,7 @@ export function ChatComposer({
   onToggleImageMode,
   onOpenModelPicker,
   onOpenImageModelPicker,
+  onOpenToolsStudio,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -257,7 +260,7 @@ export function ChatComposer({
 
           {/* Compact Single-Row Gemini + DeepSeek + Qwen Bottom Bar (Zero Wrapping on 320px+) */}
           <div className="mt-1.5 flex items-center justify-between gap-1.5">
-            <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -303,6 +306,16 @@ export function ChatComposer({
               >
                 <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
                 <span>Gambar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenToolsStudio}
+                title="Buka Web Tools Studio (TikTok, YouTube, Spotify, Text2Video, TTS, BMKG, Berita)"
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-[#CBD5E1] transition-all hover:border-[#22D3EE]/50 hover:text-white cursor-pointer"
+              >
+                <Blocks className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+                <span>Tools</span>
               </button>
 
               <button

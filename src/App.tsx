@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, Menu, Plus, Settings, Shuffle } from 'lucide-react';
+import {
+  Blocks,
+  ChevronDown,
+  Download,
+  Menu,
+  Plus,
+  Settings,
+  Shuffle,
+} from 'lucide-react';
 import { StarfieldBackground } from './components/StarfieldBackground';
 import { SplashScreen } from './components/SplashScreen';
 import { Sidebar } from './components/Sidebar';
@@ -7,6 +15,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatThread } from './components/ChatThread';
 import { ChatComposer } from './components/ChatComposer';
 import { ModelPickerModal } from './components/ModelPickerModal';
+import { ToolsStudioModal } from './components/ToolsStudioModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import {
@@ -16,6 +25,7 @@ import {
   sendMultiModelChat,
   type RouterStatusUpdate,
 } from './services/aiRouter';
+import { detectWebToolCommand } from './services/webTools';
 import { getImageModelById, getModelById } from './services/modelCatalog';
 import { usePwaInstall } from './hooks/usePwaInstall';
 import {
@@ -31,7 +41,12 @@ import {
   saveSettings,
   saveSidebarCollapsed,
 } from './utils/storage';
-import type { AppSettings, ChatMessage, Conversation } from './types/chat';
+import type {
+  AppSettings,
+  ChatMessage,
+  Conversation,
+  MediaDownloadItem,
+} from './types/chat';
 
 interface PendingStreamState {
   chatId: string;
@@ -41,6 +56,8 @@ interface PendingStreamState {
   answeredById: string;
   answeredByName: string;
   usedFallback: boolean;
+  downloadItems?: MediaDownloadItem[];
+  summarizeTranscript?: string;
 }
 
 export function App() {
@@ -62,6 +79,7 @@ export function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelPickerTab, setModelPickerTab] = useState<'chat' | 'image'>('chat');
+  const [toolsStudioOpen, setToolsStudioOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
 
@@ -169,6 +187,8 @@ export function App() {
                 answeredById: pending.answeredById,
                 answeredByName: pending.answeredByName,
                 usedFallback: pending.usedFallback,
+                downloadItems: pending.downloadItems,
+                summarizeTranscript: pending.summarizeTranscript,
                 status: 'done',
                 durationMs: finalDuration,
               }
@@ -257,8 +277,8 @@ export function App() {
   );
 
   const activeModel = useMemo(
-    () => getModelById(settings.selectedModelId),
-    [settings.selectedModelId]
+    () => getModelById(settings.selectedModelId, settings),
+    [settings]
   );
 
   const activeImageModel = useMemo(
@@ -339,6 +359,7 @@ export function App() {
               prompt: fullPrompt,
               selectedImageModelId: settings.selectedImageModelId,
               autoFallback: settings.imageAutoFallback,
+              settings,
               signal: controller.signal,
               onStatus: (st) => setRouterStatus(st),
             })
@@ -358,10 +379,17 @@ export function App() {
           typeof window !== 'undefined' &&
           window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+        const hasRichMedia = Boolean(
+          result.imageUrl ||
+            result.videoUrl ||
+            result.audioUrl ||
+            (result.galleryUrls && result.galleryUrls.length > 0)
+        );
+
         const shouldStreamTypewriter =
           settings.streamEffect &&
           !reducedMotion &&
-          !result.imageUrl &&
+          !hasRichMedia &&
           result.content.length > 20;
 
         if (!shouldStreamTypewriter) {
@@ -380,6 +408,12 @@ export function App() {
                     answeredByName: result.answeredByName,
                     usedFallback: result.usedFallback,
                     imageUrl: result.imageUrl,
+                    videoUrl: result.videoUrl,
+                    audioUrl: result.audioUrl,
+                    audioTitle: result.audioTitle,
+                    galleryUrls: result.galleryUrls,
+                    downloadItems: result.downloadItems,
+                    summarizeTranscript: result.summarizeTranscript,
                     status: 'done',
                     isError: false,
                     durationMs: doneDuration,
@@ -401,6 +435,8 @@ export function App() {
           answeredById: result.answeredById,
           answeredByName: result.answeredByName,
           usedFallback: result.usedFallback,
+          downloadItems: result.downloadItems,
+          summarizeTranscript: result.summarizeTranscript,
         };
 
         let cursor = 0;
@@ -424,6 +460,10 @@ export function App() {
                     answeredById: result.answeredById,
                     answeredByName: result.answeredByName,
                     usedFallback: result.usedFallback,
+                    downloadItems: finished ? result.downloadItems : undefined,
+                    summarizeTranscript: finished
+                      ? result.summarizeTranscript
+                      : undefined,
                     status: finished ? 'done' : 'typing',
                     isError: false,
                     durationMs: finishDuration,
@@ -482,12 +522,14 @@ export function App() {
       const trimmed = draft.trim();
       if ((!trimmed && !attachmentText) || isLoading) return;
 
-      const intent = attachmentText
-        ? { isImageIntent: false, cleanPrompt: trimmed }
-        : parseImagePromptIntent(trimmed);
-      const useImage = imageMode || intent.isImageIntent;
+      const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
+      const intent =
+        attachmentText || isWebTool
+          ? { isImageIntent: false, cleanPrompt: trimmed }
+          : parseImagePromptIntent(trimmed);
+      const useImage = !isWebTool && (imageMode || intent.isImageIntent);
       const effectivePrompt = useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
-      const useThinking = deepThink && !useImage;
+      const useThinking = deepThink && !useImage && !isWebTool;
       const displayContent =
         trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
 
@@ -554,6 +596,68 @@ export function App() {
       });
     },
     [draft, isLoading, imageMode, deepThink, activeConversation, executePrompt]
+  );
+
+  const handleRunDirectCommand = useCallback(
+    async (commandText: string) => {
+      const clean = commandText.trim();
+      if (!clean || isLoading) return;
+
+      const userMsg: ChatMessage = {
+        id: generateId(),
+        role: 'user',
+        content: clean,
+        createdAt: Date.now(),
+        isImageRequest: false,
+      };
+      const assistantPlaceholder: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        status: 'waiting',
+        isImageRequest: false,
+        createdAt: Date.now() + 1,
+      };
+
+      let chatId = activeConversation?.id;
+      let existingMessages: ChatMessage[] = [];
+
+      if (!chatId) {
+        const newChat: Conversation = {
+          id: generateId(),
+          title: deriveChatTitle(clean),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: [userMsg, assistantPlaceholder],
+        };
+        chatId = newChat.id;
+        setConversations((prev) => [newChat, ...prev]);
+        setActiveChatId(chatId);
+      } else {
+        existingMessages = activeConversation?.messages ?? [];
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === chatId
+              ? {
+                  ...c,
+                  updatedAt: Date.now(),
+                  messages: [...c.messages, userMsg, assistantPlaceholder],
+                }
+              : c
+          )
+        );
+      }
+
+      await executePrompt({
+        promptText: clean,
+        targetChatId: chatId,
+        assistantMsgId: assistantPlaceholder.id,
+        priorMessages: existingMessages,
+        asImage: false,
+        useDeepThink: false,
+      });
+    },
+    [isLoading, activeConversation, executePrompt]
   );
 
   const handleSelectStarter = useCallback(
@@ -720,15 +824,20 @@ export function App() {
         abortControllerRef.current = null;
       }
 
-      const intent = targetUserMsg.attachmentText
-        ? { isImageIntent: false, cleanPrompt: trimmed }
-        : parseImagePromptIntent(trimmed);
+      const isWebTool = Boolean(
+        !targetUserMsg.attachmentText && detectWebToolCommand(trimmed)
+      );
+      const intent =
+        targetUserMsg.attachmentText || isWebTool
+          ? { isImageIntent: false, cleanPrompt: trimmed }
+          : parseImagePromptIntent(trimmed);
       const useImage =
         !targetUserMsg.attachmentText &&
+        !isWebTool &&
         Boolean(targetUserMsg.isImageRequest || imageMode || intent.isImageIntent);
       const effectivePrompt =
         useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
-      const useThinking = deepThink && !useImage;
+      const useThinking = deepThink && !useImage && !isWebTool;
 
       const priorMessages = activeConversation.messages.slice(0, idx);
       const updatedUserMsg: ChatMessage = {
@@ -824,6 +933,7 @@ export function App() {
           if (activeConversation) exportConversationMarkdown(activeConversation);
         }}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenToolsStudio={() => setToolsStudioOpen(true)}
         onOpenInstallModal={() => setInstallModalOpen(true)}
       />
 
@@ -886,6 +996,17 @@ export function App() {
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
+              onClick={() => setToolsStudioOpen(true)}
+              aria-label="Buka Web Tools Studio"
+              title="Web Tools Studio (Downloader, Video AI, TTS, BMKG, Berita)"
+              className="hidden h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/45 hover:text-white sm:inline-flex cursor-pointer"
+            >
+              <Blocks className="h-4 w-4 text-[#22D3EE]" />
+              <span>Tools</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleNewChat}
               aria-label="Mulai percakapan baru"
               title="Percakapan Baru (Ctrl+K)"
@@ -943,6 +1064,7 @@ export function App() {
                 }}
                 onSelectStarter={handleSelectStarter}
                 onOpenModelPicker={() => openModelPicker(imageMode ? 'image' : 'chat')}
+                onOpenToolsStudio={() => setToolsStudioOpen(true)}
               />
             </div>
           ) : (
@@ -956,6 +1078,11 @@ export function App() {
               onEditAndResendUserMessage={handleEditAndResendUserMessage}
               onFlushStream={handleFlushStream}
               onOpenImageModelPicker={() => openModelPicker('image')}
+              onSummarizeTranscript={(transcript) =>
+                handleRunDirectCommand(
+                  `Tolong buatkan ringkasan eksekutif dan poin-poin inti yang rapi dari transkrip video YouTube berikut:\n\n${transcript}`
+                )
+              }
             />
           )}
 
@@ -981,9 +1108,17 @@ export function App() {
             }}
             onOpenModelPicker={() => openModelPicker('chat')}
             onOpenImageModelPicker={() => openModelPicker('image')}
+            onOpenToolsStudio={() => setToolsStudioOpen(true)}
           />
         </main>
       </div>
+
+      <ToolsStudioModal
+        isOpen={toolsStudioOpen}
+        onClose={() => setToolsStudioOpen(false)}
+        onRunCommand={handleRunDirectCommand}
+        onInsertCommand={(cmd) => setDraft(cmd)}
+      />
 
       <ModelPickerModal
         isOpen={modelPickerOpen}

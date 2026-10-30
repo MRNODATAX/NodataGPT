@@ -26,9 +26,88 @@ const ALLOWED_HOSTS = new Set([
   'api.synoxcloud.xyz',
   'api.snowping.cfd',
   'images.meigen.ai',
+  'sora.aritek.app',
+  'cdn-spotify.zm.io.vn',
+  'wxtechhk.oss-cn-hongkong.aliyuncs.com',
+  'dl.snapcdn.app',
+  'www.omdown.site',
+  'i.pinimg.com',
+  'www.gstatic.com',
+  'data.bmkg.go.id',
+  'static.bmkg.go.id',
+  '9router.com',
+  'www.9router.com',
+  'omniroute.dev',
+  'www.omniroute.dev',
+  'omnirouter.li',
+  'openrouter.ai',
   'api.deepseek.com',
   'generativelanguage.googleapis.com',
 ]);
+
+const ALLOWED_ROUTER_PATH_SUFFIXES = [
+  '/models',
+  '/chat/completions',
+  '/responses',
+  '/messages',
+  '/images/generations',
+  '/videos/generations',
+  '/audio/speech',
+];
+
+function isBlockedInternalHost(hostname) {
+  const host = String(hostname || '').trim().toLowerCase();
+  if (!host) return true;
+  if (
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '[::1]' ||
+    host === '::1' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.localhost')
+  ) {
+    return true;
+  }
+
+  if (host.startsWith('[') || host.includes(':')) {
+    const bare = host.replace(/^\[|\]$/g, '');
+    if (
+      bare === '::1' ||
+      bare === '::' ||
+      bare.startsWith('fc') ||
+      bare.startsWith('fd') ||
+      bare.startsWith('fe80')
+    ) {
+      return true;
+    }
+  }
+
+  const ipv4Match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 192 && b === 168) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      a >= 224
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isAllowedCustomRouterUrl(parsedUrl) {
+  if (!parsedUrl || parsedUrl.protocol !== 'https:') return false;
+  if (isBlockedInternalHost(parsedUrl.hostname)) return false;
+  const cleanPath = String(parsedUrl.pathname || '').replace(/\/+$/, '').toLowerCase();
+  return ALLOWED_ROUTER_PATH_SUFFIXES.some((suffix) => cleanPath.endsWith(suffix));
+}
 
 const DEFAULT_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
@@ -126,6 +205,7 @@ export default async function handler(req, res) {
   const requestBody = typeof payload?.body === 'string' ? payload.body : undefined;
   const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs) || 24000, 4000), 52000);
   const probeOnly = Boolean(payload?.probe);
+  const routerRelay = Boolean(payload?.routerRelay);
 
   if (!targetUrl) {
     return res.status(400).json({ ok: false, error: 'targetUrl wajib diisi.' });
@@ -138,7 +218,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Format targetUrl tidak valid.' });
   }
 
-  if (parsedUrl.protocol !== 'https:' || !ALLOWED_HOSTS.has(parsedUrl.hostname)) {
+  const isHostAllowed =
+    parsedUrl.protocol === 'https:' &&
+    (ALLOWED_HOSTS.has(parsedUrl.hostname) ||
+      (routerRelay && isAllowedCustomRouterUrl(parsedUrl)));
+
+  if (!isHostAllowed) {
+    if (routerRelay && parsedUrl.protocol === 'http:') {
+      return res.status(400).json({
+        ok: false,
+        error:
+          'Endpoint HTTP lokal (seperti http://localhost:20128/v1) dipanggil langsung oleh browser Anda, bukan melalui server cloud.',
+      });
+    }
     return res.status(403).json({
       ok: false,
       error: `Host tidak diizinkan oleh gateway NodataGPT: ${parsedUrl.hostname}`,
@@ -146,7 +238,7 @@ export default async function handler(req, res) {
   }
 
   const forwardHeaders = {
-    Accept: 'image/*, application/json, text/plain, */*',
+    Accept: 'image/*, audio/*, application/json, text/event-stream, text/plain, */*',
     'User-Agent': req.headers?.['user-agent'] || DEFAULT_UA,
     ...extraHeaders,
   };
@@ -203,6 +295,44 @@ export default async function handler(req, res) {
         byteLength: arrayBuf.byteLength,
         latencyMs,
         imageUrl: `data:${mime};base64,${base64}`,
+      });
+    }
+
+    if (upstream.ok && contentType.startsWith('audio/')) {
+      const arrayBuf = await upstream.arrayBuffer();
+      if (arrayBuf.byteLength < 256) {
+        return res.status(502).json({
+          ok: false,
+          status: upstream.status,
+          kind: 'audio-empty',
+          contentType,
+          byteLength: arrayBuf.byteLength,
+          latencyMs,
+          error: 'Berkas audio kosong dari upstream.',
+        });
+      }
+
+      const mime = contentType.split(';')[0] || 'audio/mpeg';
+      if (probeOnly) {
+        return res.status(200).json({
+          ok: true,
+          status: upstream.status,
+          kind: 'audio',
+          contentType: mime,
+          byteLength: arrayBuf.byteLength,
+          latencyMs,
+        });
+      }
+
+      const base64 = Buffer.from(arrayBuf).toString('base64');
+      return res.status(200).json({
+        ok: true,
+        status: upstream.status,
+        kind: 'audio',
+        contentType: mime,
+        byteLength: arrayBuf.byteLength,
+        latencyMs,
+        audioUrl: `data:${mime};base64,${base64}`,
       });
     }
 

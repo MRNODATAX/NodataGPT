@@ -185,35 +185,67 @@ export function ChatThread({
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleDownloadImage = (msg: ChatMessage) => {
+  const triggerDataUrlDownload = (dataUrl: string, msgId: string): boolean => {
+    try {
+      const commaIdx = dataUrl.indexOf(',');
+      if (commaIdx < 0) return false;
+      const meta = dataUrl.slice(5, commaIdx);
+      const mime = meta.split(';')[0] || 'image/png';
+      const ext = mime.includes('png')
+        ? 'png'
+        : mime.includes('webp')
+          ? 'webp'
+          : 'jpg';
+      const binary = window.atob(dataUrl.slice(commaIdx + 1));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `nodatagpt-image-${msgId.slice(0, 6)}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleDownloadImage = async (msg: ChatMessage) => {
     const src = msg.imageUrl;
     if (!src) return;
 
     if (src.startsWith('data:image/')) {
+      if (triggerDataUrlDownload(src, msg.id)) return;
+    }
+
+    if (/^https?:\/\//i.test(src)) {
       try {
-        const commaIdx = src.indexOf(',');
-        const meta = src.slice(5, commaIdx);
-        const mime = meta.split(';')[0] || 'image/png';
-        const ext = mime.includes('png')
-          ? 'png'
-          : mime.includes('webp')
-            ? 'webp'
-            : 'jpg';
-        const binary = window.atob(src.slice(commaIdx + 1));
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
+        const proxyRes = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ targetUrl: src, method: 'GET', timeoutMs: 22000 }),
+        });
+        if (proxyRes.ok) {
+          const proxyJson = (await proxyRes.json()) as {
+            ok?: boolean;
+            kind?: string;
+            imageUrl?: string;
+          };
+          if (
+            proxyJson.ok &&
+            proxyJson.kind === 'image' &&
+            typeof proxyJson.imageUrl === 'string' &&
+            triggerDataUrlDownload(proxyJson.imageUrl, msg.id)
+          ) {
+            return;
+          }
         }
-        const blob = new Blob([bytes], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = `nodatagpt-image-${msg.id.slice(0, 6)}.${ext}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
-        return;
       } catch {
         // Fallback below
       }

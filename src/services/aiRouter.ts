@@ -41,7 +41,9 @@ const DEEPTHINK_ORDER = [
   'deepseek',
   'synox-qwen80b',
   'qwen-direct',
+  'snow-claude-haiku',
   'varhad-claude',
+  'snow-aicode',
   'claude',
   'llm7',
   'honcho',
@@ -387,6 +389,14 @@ function sanitizeAnswerText(text: string): string {
     )
     // Normalize leaked third-party upstream wrapper bot branding to NodataGPT (Mr.NODATA)
     .replace(
+      /(?:Saya|Aku)\s+adalah\s+\*{0,2}Claude(?:\s+[\d.]+\s*Haiku|\s+Haiku(?:\s+[\d.]+)?|\s+Sonnet(?:\s+[\d.]+)?)?\*{0,2}[\s\S]*?(?:Saya\s+bukan\s+NodataGPT[\s\S]*?(?:diri\s+saya\s+sendiri\.?|penciptanya\.?)|Duck\.ai\.?)/gi,
+      'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA** dalam ekosistem **NODATA**.'
+    )
+    .replace(
+      /\bI\s+am\s+\*{0,2}Claude(?:\s+[\d.]+\s*Haiku|\s+Haiku(?:\s+[\d.]+)?)?\*{0,2}[\s\S]*?(?:I\s+am\s+not\s+NodataGPT[\s\S]*?myself\.?|Duck\.ai\.?)/gi,
+      'I am **NodataGPT**, an intelligent AI assistant created and developed by **Mr.NODATA**.'
+    )
+    .replace(
       /Aku\s+HanzzAi,?\s*asisten\s+resmi\s+website\s+HanzzExe\s*[—–-]?\s*bukan\s+NodataGPT\s+buatan\s+Mr\.?\s*NODATA\.?/gi,
       'Aku adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
     )
@@ -402,7 +412,7 @@ function sanitizeAnswerText(text: string): string {
       'berbagai topik diskusi, pemrograman, dan analisis sebagai **NodataGPT** karya **Mr.NODATA**'
     )
     .replace(
-      /(?:Saya|Aku)\s+adalah\s+\*{0,2}Gemini\*{0,2},?\s+(?:sebuah\s+)?model\s+bahasa\s+besar\s+yang\s+(?:dikembangkan|dibuat|dilatih)\s+oleh\s+\*{0,2}Google\*{0,2}\.?/gi,
+      /(?:Saya|Aku)\s+adalah\s+\*{0,2}(?:Gemini|Mistral(?:\s+Small)?)\*{0,2},?\s+(?:sebuah\s+)?(?:model\s+bahasa\s+besar|asisten\s+AI|model\s+AI)\s+yang\s+(?:dikembangkan|dibuat|dilatih)\s+oleh\s+\*{0,2}(?:Google|Mistral\s+AI)\*{0,2}\.?/gi,
       'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
     )
     .replace(
@@ -419,6 +429,8 @@ function sanitizeAnswerText(text: string): string {
       cleaned
     ) ||
     /^Empty response from Gemini backend\.?$/i.test(cleaned) ||
+    /^You are out of credits\.?[\s\S]*$/i.test(cleaned) ||
+    /^Gagal setelah beberapa kali percobaan[\s\S]*$/i.test(cleaned) ||
     /^⚠️\s*App Update Required[\s\S]*$/i.test(cleaned) ||
     /^(?:fetch failed|task failed|not exist|internal server error|service unavailable)$/i.test(
       cleaned
@@ -554,7 +566,8 @@ function formatSynoxCoderPayload(obj: Record<string, unknown>): string {
 
 function appendWebReferences(text: string, refs: unknown): string {
   if (!Array.isArray(refs) || refs.length === 0) return text;
-  const items: Array<{ label: string; url: string }> = [];
+  const directItems: Array<{ label: string; url: string }> = [];
+  const redirectItems: Array<{ label: string; url: string }> = [];
 
   for (const r of refs) {
     if (typeof r === 'string' && /^https?:\/\//i.test(r.trim())) {
@@ -565,21 +578,28 @@ function appendWebReferences(text: string, refs: unknown): string {
       } catch {
         // keep raw url
       }
-      items.push({ label, url });
+      directItems.push({ label, url });
     } else if (r && typeof r === 'object') {
       const obj = r as Record<string, unknown>;
-      const url = typeof obj.url === 'string' ? obj.url.trim() : '';
-      if (/^https?:\/\//i.test(url)) {
+      const rawUrl =
+        (typeof obj.url === 'string' && obj.url.trim()) ||
+        (typeof obj.link === 'string' && obj.link.trim()) ||
+        '';
+      if (/^https?:\/\//i.test(rawUrl)) {
         const title =
           (typeof obj.title === 'string' && obj.title.trim()) ||
           (typeof obj.name === 'string' && obj.name.trim()) ||
-          url;
-        items.push({ label: title, url });
+          rawUrl;
+        if (/^https?:\/\/(?:www\.)?google\.com\/goto\?/i.test(rawUrl)) {
+          redirectItems.push({ label: title, url: rawUrl });
+        } else {
+          directItems.push({ label: title, url: rawUrl });
+        }
       }
     }
-    if (items.length >= 6) break;
   }
 
+  const items = [...directItems, ...redirectItems].slice(0, 6);
   if (items.length === 0) return text;
   const lines = items.map((it) => `- [${it.label}](${it.url})`);
   return `${text}\n\n---\n**Referensi Pencarian Web:**\n${lines.join('\n')}`;
@@ -598,6 +618,7 @@ export function extractUniversalAnswer(rawBody: string): {
     const baxiaRet = Array.isArray(data.ret) ? data.ret.join(' ') : '';
     if (
       data.status === false ||
+      (typeof data.status === 'number' && data.status >= 400) ||
       data.Status === false ||
       data.Status === 'Error' ||
       data.ok === false ||
@@ -690,25 +711,60 @@ export function extractUniversalAnswer(rawBody: string): {
           };
         }
 
+        const webRefs = obj.references ?? obj.source ?? obj.sources;
+
+        if (Array.isArray(obj.choices) && obj.choices.length > 0) {
+          const first = obj.choices[0] as Record<string, unknown>;
+          const msg = first?.message as Record<string, unknown> | undefined;
+          if (typeof msg?.content === 'string' && msg.content.trim()) {
+            const parsed = splitThinkingBlock(sanitizeAnswerText(msg.content));
+            if (parsed.content) {
+              return {
+                content: appendWebReferences(parsed.content, webRefs),
+                thinkingContent: nestedThink || parsed.thinkingContent,
+              };
+            }
+          }
+        }
+
         for (const key of directKeys) {
           const val = obj[key];
           if (typeof val === 'string' && val.trim()) {
             const parsed = splitThinkingBlock(sanitizeAnswerText(val));
             if (parsed.content) {
               return {
-                content: appendWebReferences(parsed.content, obj.references),
+                content: appendWebReferences(parsed.content, webRefs),
                 thinkingContent: nestedThink || parsed.thinkingContent,
               };
             }
           }
         }
-        // Support 2-level nested objects (e.g. Varhad v2 DeepAI: { status: true, result: { status: true, result: "..." } })
-        for (const subCKey of containerKeys) {
+        // Support 2-level nested objects (e.g. Varhad v2 DeepAI & Snow Gemini result.text.choices)
+        const subContainerKeys = ['data', 'result', 'response', 'output', 'text'];
+        for (const subCKey of subContainerKeys) {
           const subNested = obj[subCKey];
           if (subNested && typeof subNested === 'object' && !Array.isArray(subNested)) {
             const subObj = subNested as Record<string, unknown>;
-            if (subObj.status === false || subObj.ok === false || subObj.success === false) {
+            if (
+              subObj.status === false ||
+              subObj.ok === false ||
+              subObj.success === false ||
+              subObj.error
+            ) {
               continue;
+            }
+            if (Array.isArray(subObj.choices) && subObj.choices.length > 0) {
+              const first = subObj.choices[0] as Record<string, unknown>;
+              const msg = first?.message as Record<string, unknown> | undefined;
+              if (typeof msg?.content === 'string' && msg.content.trim()) {
+                const parsed = splitThinkingBlock(sanitizeAnswerText(msg.content));
+                if (parsed.content) {
+                  return {
+                    content: appendWebReferences(parsed.content, webRefs),
+                    thinkingContent: nestedThink || parsed.thinkingContent,
+                  };
+                }
+              }
             }
             for (const key of directKeys) {
               const val = subObj[key];
@@ -716,7 +772,7 @@ export function extractUniversalAnswer(rawBody: string): {
                 const parsed = splitThinkingBlock(sanitizeAnswerText(val));
                 if (parsed.content) {
                   return {
-                    content: parsed.content,
+                    content: appendWebReferences(parsed.content, webRefs),
                     thinkingContent: nestedThink || parsed.thinkingContent,
                   };
                 }
@@ -819,7 +875,7 @@ export function buildModelRequests(
 
     case 'chatgpt':
       // 1st: Direct chatgpt.com Sentinel PoW + Conduit SSE Scraper (/api/chatgpt)
-      // 2nd+: Synox GPT-4o Mini -> Rin ChatGPT -> LLM7 OpenAI
+      // 2nd+: Snow ChatGPT Mobile -> Synox GPT-4o Mini -> Rin ChatGPT -> LLM7 OpenAI
       return [
         {
           targetUrl: '/api/chatgpt',
@@ -831,6 +887,10 @@ export function buildModelRequests(
             model: 'auto',
           }),
           timeoutMs: 15000,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
@@ -848,6 +908,209 @@ export function buildModelRequests(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-gpt54-mini':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=gpt-5.4-mini&sessionId=`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=gpt-5.4-nano&sessionId=`,
+          timeoutMs: 18000,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 19000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 19000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-gpt54-nano':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=gpt-5.4-nano&sessionId=`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=gpt-5.4-mini&sessionId=`,
+          timeoutMs: 18000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?pesan=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 19000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-claude-haiku':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=claude-haiku-4-5&sessionId=`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://apiii-xrina.my.id/ai/claudehaiku?text=${q}`,
+          timeoutMs: 14000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'snow-mistral-2603':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=mistral-small-2603&sessionId=`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'mistral-Nemo-Instruct-2407',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-openai':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: '/api/chatgpt',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            model: 'auto',
+          }),
+          timeoutMs: 16000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 19000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-aicode':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'codestral-latest',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-felo':
+      if (
+        /\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu|developer(?:mu)?)|nama\s+kamu|who\s+(?:are\s+you|created\s+you|made\s+you))\b/i.test(
+          rawPrompt
+        )
+      ) {
+        return [
+          {
+            targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+            timeoutMs: 18000,
+          },
+          {
+            targetUrl: 'https://api.llm7.io/v1/chat/completions',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'default',
+              messages: llm7Messages,
+            }),
+            timeoutMs: 20000,
+            clientFirst: true,
+          },
+        ];
+      }
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/feloai?text=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 900)
+          )}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/turboseek-ai?q=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 800)
+          )}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'default',
+            messages: llm7Messages,
+          }),
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'snow-gemini':
+      return [
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/gemini?q=${q}&sessionId=`,
+          timeoutMs: 12000,
+        },
+        {
+          targetUrl: '/api/gemini',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: contextualUserText,
+            system: fullSystemPersona,
+            thinking: Boolean(deepThink),
+          }),
+          timeoutMs: 16000,
+        },
+        {
+          targetUrl: 'https://api.llm7.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nemotron-3-nano:30b',
             messages: llm7Messages,
           }),
           timeoutMs: 20000,
@@ -1018,6 +1281,29 @@ export function buildModelRequests(
       ];
 
     case 'synox-turboseek':
+      if (
+        /\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu|developer(?:mu)?)|nama\s+kamu|who\s+(?:are\s+you|created\s+you|made\s+you))\b/i.test(
+          rawPrompt
+        )
+      ) {
+        return [
+          {
+            targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+            timeoutMs: 18000,
+          },
+          {
+            targetUrl: 'https://api.llm7.io/v1/chat/completions',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'default',
+              messages: llm7Messages,
+            }),
+            timeoutMs: 20000,
+            clientFirst: true,
+          },
+        ];
+      }
       return [
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/turboseek-ai?q=${encodeURIComponent(
@@ -1025,6 +1311,12 @@ export function buildModelRequests(
           )}&apikey=FREE`,
           timeoutMs: t,
           clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/feloai?text=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 900)
+          )}`,
+          timeoutMs: 24000,
         },
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?text=${contextualUser}&system=${mediumPersona}&apikey=FREE`,
@@ -1841,7 +2133,17 @@ export async function sendMultiModelChat({
 }
 
 export interface SpecializedImageToolSpec {
-  kind: 'removebg' | 'dreamart' | 'hd' | 'brat' | 'meigen';
+  kind:
+    | 'removebg'
+    | 'dreamart'
+    | 'nanobanana'
+    | 'hd'
+    | 'hdr'
+    | 'brat'
+    | 'meigen'
+    | 'tofigure'
+    | 'toglasses'
+    | 'tohitam';
   label: string;
   summary: string;
   candidates: Array<{
@@ -1882,9 +2184,14 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
     const text = bratMatch[1].trim();
     return {
       kind: 'brat',
-      label: 'Varhad Brat Maker',
+      label: 'Brat Maker AI',
       summary: `Gambar Brat berhasil dibuat untuk teks: *"${text}"*`,
       candidates: [
+        {
+          id: 'snow-brat',
+          name: 'Snow Brat Maker',
+          url: `https://api.snowping.cfd/api/maker/bratImg?text=${encodeURIComponent(text)}`,
+        },
         {
           id: 'varhad-brat-v2',
           name: 'Varhad Brat Maker v2',
@@ -1908,9 +2215,19 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
     const imgUrl = removeBgMatch[1].trim();
     return {
       kind: 'removebg',
-      label: 'Varhad RemoveBG AI',
-      summary: 'Latar belakang gambar berhasil dihapus secara transparan.',
+      label: 'RemoveBG HD AI',
+      summary: 'Latar belakang gambar berhasil dihapus secara transparan dengan kualitas HD.',
       candidates: [
+        {
+          id: 'snow-removebghd',
+          name: 'Snow RemoveBG HD',
+          url: `https://api.snowping.cfd/api/imagehd/removebghd?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'snow-removebg',
+          name: 'Snow RemoveBG AI',
+          url: `https://api.snowping.cfd/api/tools/removebg?url=${encodeURIComponent(imgUrl)}`,
+        },
         {
           id: 'varhad-removebg-v1',
           name: 'Varhad RemoveBG · v2 Server',
@@ -1925,18 +2242,55 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
     };
   }
 
+  const hdrMatch = trimmed.match(/^\/hdr\s+(https?:\/\/\S+)/i);
+  if (hdrMatch) {
+    const imgUrl = hdrMatch[1].trim();
+    return {
+      kind: 'hdr',
+      label: 'Snow HDR Enhancer',
+      summary: 'Pencahayaan, kontras, dan detail gambar berhasil ditingkatkan dengan **Snow HDR AI**.',
+      candidates: [
+        {
+          id: 'snow-hdr',
+          name: 'Snow HDR AI',
+          url: `https://api.snowping.cfd/api/imagehd/hdr?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'snow-remini-fallback',
+          name: 'Snow Remini HD',
+          url: `https://api.snowping.cfd/api/imagehd/remini?url=${encodeURIComponent(imgUrl)}`,
+        },
+      ],
+    };
+  }
+
   const hdMatch =
-    trimmed.match(/^\/(?:hd|upscale|jernihkan)\s+(https?:\/\/\S+)/i) ||
+    trimmed.match(/^\/(?:hd|upscale|remini|jernihkan)\s+(https?:\/\/\S+)/i) ||
     trimmed.match(
-      /^(?:tolong\s+|coba\s+)?(?:jernihkan|pertajam|upscale|hd(?:-kan)?)\s+(?:gambar\s+|foto\s+)?(https?:\/\/\S+)/i
+      /^(?:tolong\s+|coba\s+)?(?:jernihkan|pertajam|upscale|remini|hd(?:-kan)?)\s+(?:gambar\s+|foto\s+)?(https?:\/\/\S+)/i
     );
   if (hdMatch) {
     const imgUrl = hdMatch[1].trim();
     return {
       kind: 'hd',
-      label: 'Varhad HD Enhancer',
-      summary: 'Kualitas dan ketajaman gambar berhasil ditingkatkan (HD Upscale).',
+      label: 'Remini & HD Upscale AI',
+      summary: 'Kualitas, wajah, dan ketajaman gambar berhasil ditingkatkan (**Remini & HD Upscale**).',
       candidates: [
+        {
+          id: 'snow-remini',
+          name: 'Snow Remini HD',
+          url: `https://api.snowping.cfd/api/imagehd/remini?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'snow-upscale',
+          name: 'Snow AI Upscale',
+          url: `https://api.snowping.cfd/api/imagehd/upscale?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'snow-hdr-hd',
+          name: 'Snow HDR Enhancer',
+          url: `https://api.snowping.cfd/api/imagehd/hdr?url=${encodeURIComponent(imgUrl)}`,
+        },
         {
           id: 'varhad-hd-v1',
           name: 'Varhad HD Enhancer',
@@ -1951,6 +2305,31 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
     };
   }
 
+  const nanoBananaMatch = trimmed.match(
+    /^\/(?:nanobanana|editimg)\s+(https?:\/\/\S+)\s+([\s\S]+)$/i
+  );
+  if (nanoBananaMatch && nanoBananaMatch[2].trim()) {
+    const imgUrl = nanoBananaMatch[1].trim();
+    const editPrompt = nanoBananaMatch[2].trim();
+    return {
+      kind: 'nanobanana',
+      label: 'Snow NanoBanana Image Editor',
+      summary: `Gambar berhasil diedit oleh **NanoBanana AI** dengan instruksi: *"${editPrompt}"*`,
+      candidates: [
+        {
+          id: 'snow-nanobanana',
+          name: 'NanoBanana AI · Snow API',
+          url: `https://api.snowping.cfd/api/imageai/nanobanana?url=${encodeURIComponent(imgUrl)}&prompt=${encodeURIComponent(editPrompt)}`,
+        },
+        {
+          id: 'varhad-dreamart-fallback',
+          name: 'DreamArt AI · Varhad v2',
+          url: `https://v2.api-varhad.my.id/ai/dreamart?imgUrl=${encodeURIComponent(imgUrl)}&prompt=${encodeURIComponent(editPrompt)}`,
+        },
+      ],
+    };
+  }
+
   const dreamArtMatch = trimmed.match(
     /^\/dreamart\s+(https?:\/\/\S+)\s+([\s\S]+)$/i
   );
@@ -1959,13 +2338,74 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
     const stylePrompt = dreamArtMatch[2].trim();
     return {
       kind: 'dreamart',
-      label: 'Varhad DreamArt AI',
-      summary: `Gambar berhasil diolah ulang oleh **DreamArt AI** dengan gaya: *"${stylePrompt}"*`,
+      label: 'DreamArt & NanoBanana AI',
+      summary: `Gambar berhasil diolah ulang dengan gaya: *"${stylePrompt}"*`,
       candidates: [
         {
           id: 'varhad-dreamart',
           name: 'DreamArt AI · Varhad v2',
           url: `https://v2.api-varhad.my.id/ai/dreamart?imgUrl=${encodeURIComponent(imgUrl)}&prompt=${encodeURIComponent(stylePrompt)}`,
+        },
+        {
+          id: 'snow-nanobanana-fallback',
+          name: 'NanoBanana AI · Snow API',
+          url: `https://api.snowping.cfd/api/imageai/nanobanana?url=${encodeURIComponent(imgUrl)}&prompt=${encodeURIComponent(stylePrompt)}`,
+        },
+      ],
+    };
+  }
+
+  const toFigureMatch = trimmed.match(/^\/tofigure\s+(https?:\/\/\S+)/i);
+  if (toFigureMatch) {
+    const imgUrl = toFigureMatch[1].trim();
+    return {
+      kind: 'tofigure',
+      label: 'Snow 3D Action Figure AI',
+      summary: 'Foto berhasil diubah menjadi **3D Action Figure** oleh **Snow Image AI**.',
+      candidates: [
+        {
+          id: 'snow-tofigure',
+          name: 'Snow 3D Action Figure AI',
+          url: `https://api.snowping.cfd/api/imageai/tofigure?url=${encodeURIComponent(imgUrl)}`,
+        },
+      ],
+    };
+  }
+
+  const toGlassesMatch = trimmed.match(/^\/toglasses\s+(https?:\/\/\S+)/i);
+  if (toGlassesMatch) {
+    const imgUrl = toGlassesMatch[1].trim();
+    return {
+      kind: 'toglasses',
+      label: 'Snow AI Glasses Transform',
+      summary: 'Foto berhasil diberikan efek kacamata AI oleh **Snow Image AI**.',
+      candidates: [
+        {
+          id: 'snow-toglasses',
+          name: 'Snow AI Glasses',
+          url: `https://api.snowping.cfd/api/imageai/toglasses?url=${encodeURIComponent(imgUrl)}`,
+        },
+      ],
+    };
+  }
+
+  const toHitamMatch = trimmed.match(/^\/(?:tohitam|toireng)\s+(https?:\/\/\S+)/i);
+  if (toHitamMatch) {
+    const imgUrl = toHitamMatch[1].trim();
+    return {
+      kind: 'tohitam',
+      label: 'Snow & Varhad Tone Transform AI',
+      summary: 'Transformasi warna kulit karakter pada foto berhasil diproses oleh AI.',
+      candidates: [
+        {
+          id: 'snow-tohitam',
+          name: 'Snow Tone Transform AI',
+          url: `https://api.snowping.cfd/api/imageai/tohitam?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
+          id: 'varhad-toireng',
+          name: 'Varhad Toireng AI v2',
+          url: `https://v2.api-varhad.my.id/ai/toireng?imgUrl=${encodeURIComponent(imgUrl)}`,
         },
       ],
     };
@@ -2042,22 +2482,30 @@ export function extractImageUrlFromJson(rawBody: string): string {
   const trimmed = rawBody.trim();
   if (!trimmed) return '';
 
+  const normalizeImgCandidate = (val: unknown): string => {
+    if (typeof val !== 'string') return '';
+    const v = val.trim();
+    if (v.length <= 6) return '';
+    if (/^(?:https?:\/\/|data:image\/)/i.test(v)) return v;
+    if (/^\/files\/\S+/i.test(v)) return `https://api.snowping.cfd${v}`;
+    return '';
+  };
+
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-    if (parsed.status === false || parsed.ok === false || parsed.success === false) {
+    if (
+      parsed.status === false ||
+      (typeof parsed.status === 'number' && parsed.status >= 400) ||
+      parsed.ok === false ||
+      parsed.success === false
+    ) {
       return '';
     }
 
-    const isHttpOrDataImg = (val: unknown): val is string =>
-      typeof val === 'string' &&
-      val.trim().length > 8 &&
-      (/^(?:https?:\/\/|data:image\/)/i.test(val.trim()));
-
     const topKeys = ['imageUrl', 'image_url', 'image', 'url', 'img', 'result', 'output', 'thumbnail'];
     for (const k of topKeys) {
-      if (isHttpOrDataImg(parsed[k])) {
-        return parsed[k].trim();
-      }
+      const hit = normalizeImgCandidate(parsed[k]);
+      if (hit) return hit;
     }
 
     const nestedContainers = ['result', 'data', 'output', 'response'];
@@ -2065,29 +2513,45 @@ export function extractImageUrlFromJson(rawBody: string): string {
       const container = parsed[cKey];
       if (Array.isArray(container) && container.length > 0) {
         const first = container[0];
-        if (isHttpOrDataImg(first)) {
-          return first.trim();
-        }
+        const directFirst = normalizeImgCandidate(first);
+        if (directFirst) return directFirst;
         if (first && typeof first === 'object') {
           const firstObj = first as Record<string, unknown>;
           for (const k of topKeys) {
-            if (isHttpOrDataImg(firstObj[k])) {
-              return firstObj[k].trim();
-            }
+            const hit = normalizeImgCandidate(firstObj[k]);
+            if (hit) return hit;
           }
-          if (Array.isArray(firstObj.images) && isHttpOrDataImg(firstObj.images[0])) {
-            return firstObj.images[0].trim();
+          if (Array.isArray(firstObj.images)) {
+            const imgHit = normalizeImgCandidate(firstObj.images[0]);
+            if (imgHit) return imgHit;
           }
         }
       } else if (container && typeof container === 'object') {
         const obj = container as Record<string, unknown>;
-        for (const k of topKeys) {
-          if (isHttpOrDataImg(obj[k])) {
-            return obj[k].trim();
-          }
+        if (obj.status === false || obj.ok === false || obj.success === false) {
+          continue;
         }
-        if (Array.isArray(obj.images) && isHttpOrDataImg(obj.images[0])) {
-          return obj.images[0].trim();
+        for (const k of topKeys) {
+          const hit = normalizeImgCandidate(obj[k]);
+          if (hit) return hit;
+        }
+        if (Array.isArray(obj.images)) {
+          const imgHit = normalizeImgCandidate(obj.images[0]);
+          if (imgHit) return imgHit;
+        }
+        // Support 2-level nested objects (e.g. Comiku SDXL: { status: true, result: { status: true, result: "data:image/png;base64,..." } })
+        for (const subCKey of nestedContainers) {
+          const sub = obj[subCKey];
+          if (sub && typeof sub === 'object' && !Array.isArray(sub)) {
+            const subObj = sub as Record<string, unknown>;
+            if (subObj.status === false || subObj.ok === false || subObj.success === false) {
+              continue;
+            }
+            for (const k of topKeys) {
+              const hit = normalizeImgCandidate(subObj[k]);
+              if (hit) return hit;
+            }
+          }
         }
       }
     }
@@ -2129,6 +2593,7 @@ function orderImageEnginesForPrompt(
       'nexray-writecream',
       'nexray-magicstudio',
       'nexray-flux-v1',
+      'comiku-sdxl',
       'nexray-ideogram',
       'varhad-img',
     ]);
@@ -2141,6 +2606,16 @@ function orderImageEnginesForPrompt(
       'nexray-magicstudio',
       'nexray-flux-v1',
       'nexray-writecream',
+    ]);
+  }
+
+  if (/\b(?:anime|manga|waifu|chibi|ilustrasi|cyberpunk|ghibli)\b/i.test(prompt)) {
+    return pick([
+      'nexray-flux-v1',
+      'comiku-sdxl',
+      'nexray-magicstudio',
+      'nexray-ideogram',
+      'varhad-img',
     ]);
   }
 

@@ -24,6 +24,7 @@ const ALLOWED_HOSTS = new Set([
   'bintangapi.my.id',
   'api.nexray.eu.cc',
   'api.synoxcloud.xyz',
+  'api.snowping.cfd',
   'images.meigen.ai',
   'api.deepseek.com',
   'generativelanguage.googleapis.com',

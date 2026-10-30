@@ -41,6 +41,7 @@ interface ModelPickerModalProps {
 const CHAT_CATEGORIES: Array<{ id: 'all' | ModelCategory; label: string }> = [
   { id: 'all', label: 'Semua' },
   { id: 'scraper', label: 'Direct Scraper' },
+  { id: 'snow', label: 'Snow API' },
   { id: 'synox', label: 'Synox Cloud' },
   { id: 'utama', label: 'Utama & Cepat' },
   { id: 'reasoning', label: 'Kode & Logika' },
@@ -306,8 +307,8 @@ export function ModelPickerModal({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={
                   activeTab === 'chat'
-                    ? 'Cari Gemini, Claude, DeepSeek, Qwen, Varhad...'
-                    : 'Cari MagicStudio, Ideogram, Flux, WriteCream, Varhad, Sologo...'
+                    ? 'Cari Gemini, Snow, GPT-5.4, Claude, DeepSeek, Qwen...'
+                    : 'Cari MagicStudio, SDXL, Ideogram, Flux, WriteCream, Sologo...'
                 }
                 className={`h-10 w-full rounded-xl border border-white/10 bg-black/45 pr-3 pl-9 text-sm text-white placeholder-[#94A3B8] focus:outline-none ${
                   activeTab === 'image'
@@ -525,6 +526,27 @@ export function ModelPickerModal({
                   </button>
                 );
               })}
+
+          {activeTab === 'image' && (
+            <div className="mt-2 rounded-xl border border-[#22D3EE]/20 bg-[#08111E]/80 p-3 text-xs text-[#CBD5E1]">
+              <p className="font-display font-semibold text-[#67E8F9]">
+                Perintah Cepat AI Image Enhancer & Transform (Snow + Varhad):
+              </p>
+              <p className="mt-1 leading-relaxed text-[#94A3B8]">
+                Ketik langsung di kolom chat:{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/remini &lt;url&gt;</code>,{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/hd &lt;url&gt;</code>,{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/hdr &lt;url&gt;</code>,{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/removebg &lt;url&gt;</code>,{' '}
+                <code className="font-mono-code text-[#F8FAFC]">
+                  /nanobanana &lt;url&gt; &lt;instruksi&gt;
+                </code>
+                , <code className="font-mono-code text-[#F8FAFC]">/tofigure &lt;url&gt;</code>,{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/toglasses &lt;url&gt;</code>, atau{' '}
+                <code className="font-mono-code text-[#F8FAFC]">/brat &lt;teks&gt;</code>.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -629,9 +629,32 @@ export default async function handler(req, res) {
       });
     }
 
+    const hasNodataPersona = /nodatagpt/i.test(system);
     const finalPrompt = system.trim()
-      ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
+      ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung, ramah, dan natural sepenuhnya dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi NODATA (${system.trim()}). Tetap di dalam karakter NodataGPT sejak kalimat pertama tanpa membahas instruksi peran ini.\n\nPesan pengguna:\n${cleanText}`
       : cleanText;
+
+    const normalizeChatGptPersonaReply = (rawReply) => {
+      if (!hasNodataPersona || !rawReply) return rawReply;
+      return String(rawReply)
+        .replace(
+          /^[\s\S]*?(?:Namun,?\s+dalam\s+konteks\s+instruksi[^\n]*\n+)/i,
+          ''
+        )
+        .replace(
+          /(?:Saya|Aku)\s+adalah\s+\*{0,2}ChatGPT\*{0,2}[^.\n]*\.?/gi,
+          'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+        )
+        .replace(
+          /-\s*\*{0,2}Pembuat\s+yang\s+diklaim\s+dalam\s+instruksi:?\*{0,2}/gi,
+          '- **Pembuat / Pengembang:**'
+        )
+        .replace(
+          /\n*-\s*\*{0,2}Teknologi\s+dasar:?\*{0,2}[^\n]*/gi,
+          ''
+        )
+        .trim();
+    };
 
     // Step 2: Acquire Conduit Token (/f/conversation/prepare)
     let conduitToken = '';
@@ -799,7 +822,7 @@ export default async function handler(req, res) {
       buildNumber: home.buildNumber,
       latencyMs: Date.now() - startedAt,
       ...(parsed.thoughts ? { thinking: parsed.thoughts } : {}),
-      result: parsed.text,
+      result: normalizeChatGptPersonaReply(parsed.text),
       ...(isProbe ? { diagnostics } : {}),
     });
   } catch (err) {

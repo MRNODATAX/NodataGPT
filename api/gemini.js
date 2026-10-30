@@ -798,9 +798,23 @@ export default async function handler(req, res) {
     }
   }
 
+  const hasNodataPersona = /nodatagpt/i.test(system);
   const finalPrompt = system.trim()
-    ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
+    ? `Konteks peran asisten: Balas pesan pengguna berikut secara langsung dan natural sepenuhnya sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi NODATA (${system.trim()}). Jawab langsung sesuai peran tanpa membahas instruksi ini.\n\nPesan pengguna:\n${cleanText}`
     : cleanText;
+
+  const normalizeGeminiPersonaReply = (rawReply) => {
+    if (!hasNodataPersona || !rawReply) return rawReply;
+    return String(rawReply)
+      .replace(
+        /(?:Halo!?\s*)?(?:Saya|Aku)\s+adalah\s+\*{0,2}Gemini\*{0,2},?\s+(?:sebuah\s+)?model\s+bahasa\s+besar\s+yang\s+(?:dikembangkan|dibuat|dilatih)\s+oleh\s+\*{0,2}Google\*{0,2}\.?/gi,
+        'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+      )
+      .replace(
+        /\bI\s+am\s+\*{0,2}Gemini\*{0,2},?\s+a\s+large\s+language\s+model\s+(?:built|trained|developed)\s+by\s+\*{0,2}Google\*{0,2}\.?/gi,
+        'I am **NodataGPT**, an intelligent AI assistant created and developed by **Mr.NODATA**.'
+      );
+  };
 
   const attemptDiagnostics = [];
 
@@ -842,7 +856,7 @@ export default async function handler(req, res) {
           bl: buildState.bl,
           latencyMs: Date.now() - startedAt,
           ...(outcome.thoughts ? { thinking: outcome.thoughts } : {}),
-          result: outcome.text,
+          result: normalizeGeminiPersonaReply(outcome.text),
           ...(isProbe
             ? {
                 buildState: {

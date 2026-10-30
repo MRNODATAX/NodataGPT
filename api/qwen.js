@@ -746,6 +746,32 @@ export default async function handler(req, res) {
   const auth = await resolveOptionalQwenBearerToken(sec.cookieString);
   const chatMode = auth.token ? 'normal' : 'guest';
 
+  let sessionCookies = process.env.QWEN_COOKIE
+    ? `${process.env.QWEN_COOKIE.trim()}; ${sec.cookieString}`
+    : sec.cookieString;
+
+  const absorbSetCookies = (headersObj) => {
+    const rawList =
+      typeof headersObj?.getSetCookie === 'function'
+        ? headersObj.getSetCookie()
+        : headersObj?.get('set-cookie')
+          ? [headersObj.get('set-cookie')]
+          : [];
+    const map = new Map();
+    for (const part of sessionCookies.split(';')) {
+      const eq = part.indexOf('=');
+      if (eq > 0) map.set(part.slice(0, eq).trim(), part.slice(eq + 1).trim());
+    }
+    for (const raw of rawList) {
+      const first = String(raw || '').split(';')[0]?.trim();
+      const eq = first ? first.indexOf('=') : -1;
+      if (eq > 0) map.set(first.slice(0, eq).trim(), first.slice(eq + 1).trim());
+    }
+    sessionCookies = Array.from(map.entries())
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+  };
+
   const buildQwenHeaders = (extra = {}) => {
     const headers = {
       Accept: 'application/json, text/event-stream, text/plain, */*',
@@ -754,6 +780,12 @@ export default async function handler(req, res) {
       Origin: QWEN_BASE,
       Referer: `${QWEN_BASE}/`,
       'User-Agent': DEFAULT_USER_AGENT,
+      'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"macOS"',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
       source: 'web',
       version: QWEN_WEB_VERSION,
       'bx-v': BAXIA_VERSION,
@@ -763,9 +795,7 @@ export default async function handler(req, res) {
       'X-Requested-With': 'XMLHttpRequest',
       'x-request-id': crypto.randomUUID(),
       timezone: formatQwenTimezoneHeader(),
-      Cookie: process.env.QWEN_COOKIE
-        ? `${process.env.QWEN_COOKIE.trim()}; ${sec.cookieString}`
-        : sec.cookieString,
+      Cookie: sessionCookies,
       ...extra,
     };
     if (auth.token) {
@@ -779,12 +809,12 @@ export default async function handler(req, res) {
     const nowMs = Date.now();
     const newChatStart = Date.now();
     const newChatPayload = {
-      title: 'New Chat',
+      chatId: '',
       models: [model],
-      chat_mode: chatMode,
-      chat_type: 't2t',
-      timestamp: nowMs,
       project_id: '',
+      timestamp: nowMs,
+      chat_type: 't2t',
+      chat_mode: chatMode,
     };
 
     const newChatRes = await fetchWithTimeout(
@@ -797,6 +827,7 @@ export default async function handler(req, res) {
       4500
     );
 
+    absorbSetCookies(newChatRes.headers);
     const newChatRaw = await newChatRes.text();
     let conversationId = '';
 
@@ -890,7 +921,7 @@ export default async function handler(req, res) {
     const compStart = Date.now();
     const nowSec = Math.floor(Date.now() / 1000);
     const finalPrompt = system.trim()
-      ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
+      ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung dan natural dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA (${system.trim()}).\n\nPesan pengguna:\n${cleanText}`
       : cleanText;
 
     const compPayload = {

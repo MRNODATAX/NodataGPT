@@ -256,20 +256,20 @@ export function buildInlinePersonalizedPrompt(
   maxChars: number,
   forcedTier?: PersonaTier
 ): string {
-  // Keep GET query strings WAF-safe (no XML <tag> brackets) and compact enough
-  // to avoid Cloudflare/Nginx URL-length & XSS firewall false-positives.
+  // Keep GET query strings WAF-safe (no XML <tag> brackets) and use collaborative
+  // in-character framing so upstream wrappers adopt NodataGPT persona naturally.
   const effectiveBudget = Math.min(maxChars, 1800);
   const tier =
     forcedTier ?? (effectiveBudget >= 1400 ? 'medium' : 'compact');
   const systemText = buildSystemPersona(settings, tier);
-  const header = `[Instruksi Sistem NodataGPT: ${systemText}]\n\n`;
+  const header = `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung dan natural dalam karakter sebagai NodataGPT (${systemText})\n\n`;
   const remainingBudget = Math.max(140, effectiveBudget - header.length - 24);
   const userPart = buildContextualUserText(prompt, history, settings, remainingBudget);
 
   if (userPart.startsWith('Riwayat singkat percakapan:')) {
     return `${header}${userPart}`;
   }
-  return `${header}Pertanyaan pengguna:\n${userPart}`;
+  return `${header}Pesan pengguna:\n${userPart}`;
 }
 
 export function buildChatMessagesPayload(
@@ -378,11 +378,36 @@ function sanitizeAnswerText(text: string): string {
   const cleaned = trimmed
     .replace(/^<system_instruction>[\s\S]*?<\/system_instruction>\s*/i, '')
     .replace(/^\[Instruksi Sistem NodataGPT:[\s\S]*?\]\s*/i, '')
+    .replace(/^Konteks peran percakapan:[\s\S]*?Pesan pengguna:\s*/i, '')
     .replace(/^NodataGPT\s*:\s*/i, '')
     .replace(/\n*---\n*\*?Support Pollinations\.AI[\s\S]*$/i, '')
     .replace(
       /\n*(?:\*{3,}|-{3,})?\s*\n*(?:Sebagai informasi tambahan|For additional information)[\s\S]*?https?:\/\/(?:www\.)?rewind\.ai[\s\S]*$/i,
       ''
+    )
+    // Normalize leaked third-party upstream wrapper bot branding to NodataGPT (Mr.NODATA)
+    .replace(
+      /Aku\s+HanzzAi,?\s*asisten\s+resmi\s+website\s+HanzzExe\s*[—–-]?\s*bukan\s+NodataGPT\s+buatan\s+Mr\.?\s*NODATA\.?/gi,
+      'Aku adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+    )
+    .replace(/\bHanzzAi\b/gi, 'NodataGPT')
+    .replace(/\b(?:website\s+)?HanzzExe\b/gi, 'ekosistem NODATA karya Mr.NODATA')
+    .replace(
+      /\bI\s+am\s+UnlimitedAI\.Chat,?\s+an\s+artificial\s+intelligence\s+created\s+by\s+the\s+UnlimitedAI\.Chat\s+team\.?/gi,
+      'I am **NodataGPT**, an intelligent AI assistant created and developed by **Mr.NODATA**.'
+    )
+    .replace(/\bUnlimitedAI\.Chat(?:\s+team)?\b/gi, 'NodataGPT (Mr.NODATA)')
+    .replace(
+      /seputar\s+DocSearch\s+dan\s+dokumentasi\s+terkait\s+dari\s+indeks\s+docsearch-markdown/gi,
+      'berbagai topik diskusi, pemrograman, dan analisis sebagai **NodataGPT** karya **Mr.NODATA**'
+    )
+    .replace(
+      /(?:Saya|Aku)\s+adalah\s+\*{0,2}Gemini\*{0,2},?\s+(?:sebuah\s+)?model\s+bahasa\s+besar\s+yang\s+(?:dikembangkan|dibuat|dilatih)\s+oleh\s+\*{0,2}Google\*{0,2}\.?/gi,
+      'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+    )
+    .replace(
+      /^(?:Halo!?\s*)?(?:Saya|Aku)\s+adalah\s+\*{0,2}ChatGPT\*{0,2},\s*asisten\s+AI/i,
+      'Saya adalah **NodataGPT**, asisten AI buatan **Mr.NODATA**'
     )
     .trim();
 
@@ -529,19 +554,34 @@ function formatSynoxCoderPayload(obj: Record<string, unknown>): string {
 
 function appendWebReferences(text: string, refs: unknown): string {
   if (!Array.isArray(refs) || refs.length === 0) return text;
-  const cleanUrls = refs
-    .filter((r): r is string => typeof r === 'string' && /^https?:\/\//i.test(r.trim()))
-    .slice(0, 6);
-  if (cleanUrls.length === 0) return text;
+  const items: Array<{ label: string; url: string }> = [];
 
-  const lines = cleanUrls.map((url) => {
-    try {
-      const host = new URL(url).hostname.replace(/^www\./, '');
-      return `- [${host}](${url})`;
-    } catch {
-      return `- ${url}`;
+  for (const r of refs) {
+    if (typeof r === 'string' && /^https?:\/\//i.test(r.trim())) {
+      const url = r.trim();
+      let label = url;
+      try {
+        label = new URL(url).hostname.replace(/^www\./, '');
+      } catch {
+        // keep raw url
+      }
+      items.push({ label, url });
+    } else if (r && typeof r === 'object') {
+      const obj = r as Record<string, unknown>;
+      const url = typeof obj.url === 'string' ? obj.url.trim() : '';
+      if (/^https?:\/\//i.test(url)) {
+        const title =
+          (typeof obj.title === 'string' && obj.title.trim()) ||
+          (typeof obj.name === 'string' && obj.name.trim()) ||
+          url;
+        items.push({ label: title, url });
+      }
     }
-  });
+    if (items.length >= 6) break;
+  }
+
+  if (items.length === 0) return text;
+  const lines = items.map((it) => `- [${it.label}](${it.url})`);
   return `${text}\n\n---\n**Referensi Pencarian Web:**\n${lines.join('\n')}`;
 }
 
@@ -737,7 +777,7 @@ export function buildModelRequests(
   switch (model.id) {
     case 'gemini':
       // 1st: Direct Google Gemini Web RPC Scraper (/api/gemini — 102-slot StreamGenerate)
-      // 2nd+: Instant live Flash-class mirrors (LLM7 Nemotron-3 30B, Synox Gemma AI, Stenly, Nexray)
+      // 2nd+: Instant live Flash-class mirrors (LLM7 Nemotron-3 30B, Synox NovaAI, Stenly, Nexray)
       return [
         {
           targetUrl: '/api/gemini',
@@ -762,16 +802,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.synoxcloud.xyz/ai-chat/gemma-ai',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: inlinePrompt,
-            sessionId: synoxSession,
-            deepSearch: 'false',
-            apikey: 'FREE',
-          }),
-          timeoutMs: 20000,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?text=${q}&apikey=FREE`,
+          timeoutMs: 18000,
           clientFirst: true,
         },
         {
@@ -864,7 +896,7 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?pesan=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: 20000,
           clientFirst: true,
         },
@@ -884,7 +916,7 @@ export function buildModelRequests(
     case 'synox-gpt5nano':
       return [
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?pesan=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: t,
           clientFirst: true,
         },
@@ -938,7 +970,7 @@ export function buildModelRequests(
 
     case 'synox-coder':
       // If user asks conversational/identity questions, prioritize Codestral with full persona;
-      // otherwise run Synox multi-file AI Coder first with Codestral fallback
+      // otherwise run Synox GLM-5 multi-file AI Coder (POST) first with Codestral fallback
       if (/\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu)|nama\s+kamu)\b/i.test(rawPrompt)) {
         return [
           {
@@ -956,7 +988,14 @@ export function buildModelRequests(
       }
       return [
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/ai-coder?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          targetUrl: 'https://api.synoxcloud.xyz/ai-chat/ai-coder?apikey=FREE',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: contextualUserText,
+            session: synoxSession,
+            apikey: 'FREE',
+          }),
           timeoutMs: t,
           clientFirst: true,
         },
@@ -981,12 +1020,14 @@ export function buildModelRequests(
     case 'synox-turboseek':
       return [
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/turboseek-ai?query=${compactQ}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/turboseek-ai?q=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 800)
+          )}&apikey=FREE`,
           timeoutMs: t,
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?prompt=${q}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?text=${contextualUser}&system=${mediumPersona}&apikey=FREE`,
           timeoutMs: 22000,
           clientFirst: true,
         },
@@ -1011,7 +1052,7 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?prompt=${q}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?text=${q}&apikey=FREE`,
           timeoutMs: 20000,
           clientFirst: true,
         },
@@ -1021,29 +1062,21 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?prompt=${q}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?text=${contextualUser}&system=${mediumPersona}&apikey=FREE`,
           timeoutMs: 20000,
           clientFirst: true,
         },
       ];
 
-    case 'synox-gemma':
+    case 'synox-nova':
       return [
         {
-          targetUrl: 'https://api.synoxcloud.xyz/ai-chat/gemma-ai',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: inlinePrompt,
-            sessionId: synoxSession,
-            deepSearch: 'false',
-            apikey: 'FREE',
-          }),
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?text=${q}&apikey=FREE`,
           timeoutMs: t,
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?prompt=${q}&apikey=FREE`,
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/powerbrain-ai?message=${q}&apikey=FREE`,
           timeoutMs: 20000,
           clientFirst: true,
         },

@@ -498,6 +498,7 @@ export function App() {
         createdAt: Date.now(),
         isImageRequest: useImage,
         attachmentName,
+        attachmentText,
       };
 
       const assistantPlaceholder: ChatMessage = {
@@ -653,11 +654,123 @@ export function App() {
         targetChatId: activeConversation.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: historyBeforeUser,
+        attachmentText: precedingUserMsg.attachmentText,
+        attachmentName: precedingUserMsg.attachmentName,
         asImage: regenerateAsImage,
         useDeepThink: deepThink && !regenerateAsImage,
       });
     },
     [activeConversation, isLoading, deepThink, executePrompt]
+  );
+
+  const handleUpdateMessageContent = useCallback(
+    (messageId: string, updatedContent: string) => {
+      const trimmed = updatedContent.trim();
+      if (!activeConversation || !trimmed) return;
+
+      const idx = activeConversation.messages.findIndex((m) => m.id === messageId);
+      if (idx < 0) return;
+
+      const targetMsg = activeConversation.messages[idx];
+      const shouldUpdateTitle = idx === 0 && targetMsg.role === 'user';
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversation.id
+            ? {
+                ...c,
+                title: shouldUpdateTitle ? deriveChatTitle(trimmed) : c.title,
+                updatedAt: Date.now(),
+                messages: c.messages.map((m) =>
+                  m.id === messageId
+                    ? {
+                        ...m,
+                        content: trimmed,
+                        editedAt: Date.now(),
+                      }
+                    : m
+                ),
+              }
+            : c
+        )
+      );
+    },
+    [activeConversation]
+  );
+
+  const handleEditAndResendUserMessage = useCallback(
+    async (userMessageId: string, updatedContent: string) => {
+      const trimmed = updatedContent.trim();
+      if (!activeConversation || !trimmed) return;
+
+      const idx = activeConversation.messages.findIndex((m) => m.id === userMessageId);
+      if (idx < 0) return;
+
+      const targetUserMsg = activeConversation.messages[idx];
+      if (targetUserMsg.role !== 'user') return;
+
+      // Cancel any running stream or network call before re-running from the edited turn
+      if (streamTimerRef.current !== null) {
+        window.clearInterval(streamTimerRef.current);
+        streamTimerRef.current = null;
+      }
+      pendingStreamRef.current = null;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+
+      const intent = targetUserMsg.attachmentText
+        ? { isImageIntent: false, cleanPrompt: trimmed }
+        : parseImagePromptIntent(trimmed);
+      const useImage =
+        !targetUserMsg.attachmentText &&
+        Boolean(targetUserMsg.isImageRequest || imageMode || intent.isImageIntent);
+      const effectivePrompt =
+        useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
+      const useThinking = deepThink && !useImage;
+
+      const priorMessages = activeConversation.messages.slice(0, idx);
+      const updatedUserMsg: ChatMessage = {
+        ...targetUserMsg,
+        content: trimmed,
+        editedAt: Date.now(),
+        isImageRequest: useImage,
+      };
+      const assistantPlaceholder: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        status: 'waiting',
+        isImageRequest: useImage,
+        createdAt: Date.now() + 1,
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversation.id
+            ? {
+                ...c,
+                title: idx === 0 ? deriveChatTitle(trimmed) : c.title,
+                updatedAt: Date.now(),
+                messages: [...priorMessages, updatedUserMsg, assistantPlaceholder],
+              }
+            : c
+        )
+      );
+
+      await executePrompt({
+        promptText: effectivePrompt,
+        targetChatId: activeConversation.id,
+        assistantMsgId: assistantPlaceholder.id,
+        priorMessages,
+        attachmentText: targetUserMsg.attachmentText,
+        attachmentName: targetUserMsg.attachmentName,
+        asImage: useImage,
+        useDeepThink: useThinking,
+      });
+    },
+    [activeConversation, imageMode, deepThink, executePrompt]
   );
 
   const handleDeleteChat = useCallback(
@@ -839,6 +952,8 @@ export function App() {
               elapsedMs={elapsedMs}
               routerStatus={routerStatus}
               onRegenerate={handleRegenerate}
+              onEditMessage={handleUpdateMessageContent}
+              onEditAndResendUserMessage={handleEditAndResendUserMessage}
               onFlushStream={handleFlushStream}
               onOpenImageModelPicker={() => openModelPicker('image')}
             />

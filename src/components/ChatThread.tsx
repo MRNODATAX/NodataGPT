@@ -12,10 +12,13 @@ import {
   FastForward,
   FileText,
   ImageIcon,
+  Pencil,
   RefreshCw,
+  Send,
   Shuffle,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 import type { ChatMessage } from '../types/chat';
 import type { RouterStatusUpdate } from '../services/aiRouter';
@@ -27,6 +30,8 @@ interface ChatThreadProps {
   elapsedMs: number;
   routerStatus: RouterStatusUpdate | null;
   onRegenerate: (assistantMessageId: string) => void;
+  onEditMessage: (messageId: string, updatedContent: string) => void;
+  onEditAndResendUserMessage: (userMessageId: string, updatedContent: string) => void;
   onFlushStream: () => void;
   onOpenImageModelPicker: () => void;
 }
@@ -68,17 +73,47 @@ export function ChatThread({
   elapsedMs,
   routerStatus,
   onRegenerate,
+  onEditMessage,
+  onEditAndResendUserMessage,
   onFlushStream,
   onOpenImageModelPicker,
 }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   const lastMessage = messages[messages.length - 1];
   const lastContentLen = lastMessage?.content?.length ?? 0;
+
+  useEffect(() => {
+    if (editingId && !messages.some((m) => m.id === editingId)) {
+      setEditingId(null);
+      setEditDraft('');
+    }
+  }, [messages, editingId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const el = editTextareaRef.current;
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }, [editingId]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const el = editTextareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 64), 240);
+    el.style.height = `${nextHeight}px`;
+  }, [editingId, editDraft]);
 
   useEffect(() => {
     bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -194,6 +229,38 @@ export function ChatThread({
     document.body.removeChild(link);
   };
 
+  const startEditingMessage = (msg: ChatMessage) => {
+    if (speakingId === msg.id && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+    }
+    setEditingId(msg.id);
+    setEditDraft(msg.content);
+  };
+
+  const cancelEditingMessage = () => {
+    setEditingId(null);
+    setEditDraft('');
+  };
+
+  const handleSaveEditedMessage = (msg: ChatMessage) => {
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+    if (trimmed !== msg.content) {
+      onEditMessage(msg.id, trimmed);
+    }
+    setEditingId(null);
+    setEditDraft('');
+  };
+
+  const handleSaveAndResendUserMessage = (msg: ChatMessage) => {
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+    setEditingId(null);
+    setEditDraft('');
+    onEditAndResendUserMessage(msg.id, trimmed);
+  };
+
   const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window;
   const formattedLiveSeconds = `${(elapsedMs / 1000).toFixed(1)} dtk`;
 
@@ -206,19 +273,135 @@ export function ChatThread({
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 sm:gap-6">
         {messages.map((msg, idx) => {
           if (msg.role === 'user') {
+            const isEditingUserMsg = editingId === msg.id;
+
             return (
-              <div key={msg.id} className="flex justify-end">
-                <div className="nd-user-bubble max-w-[90%] rounded-2xl rounded-tr-sm px-4 py-2.5 text-[#F8FAFC] sm:max-w-[78%] sm:px-4.5 sm:py-3">
-                  {msg.attachmentName && (
-                    <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-black/45 px-2.5 py-1 text-xs text-[#67E8F9]">
-                      <FileText className="h-3.5 w-3.5 shrink-0" />
-                      <span className="max-w-[200px] truncate">{msg.attachmentName}</span>
+              <div key={msg.id} className="group flex flex-col items-end">
+                {isEditingUserMsg ? (
+                  <div className="nd-user-bubble w-full max-w-[96%] rounded-2xl rounded-tr-sm border-[#22D3EE]/55 p-3 text-[#F8FAFC] shadow-[0_0_24px_rgba(34,211,238,0.14)] sm:max-w-[84%] sm:p-4">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 font-display text-xs font-semibold text-[#67E8F9]">
+                        <Pencil className="h-3.5 w-3.5 text-[#22D3EE]" />
+                        <span>Edit Pesan</span>
+                      </span>
+                      {msg.attachmentName && (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-black/45 px-2 py-0.5 text-[11px] text-[#67E8F9]">
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="max-w-[160px] truncate">{msg.attachmentName}</span>
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed sm:text-base">
-                    {msg.content}
-                  </p>
-                </div>
+
+                    <label htmlFor={`edit-user-msg-${msg.id}`} className="sr-only">
+                      Edit pesan pengguna
+                    </label>
+                    <textarea
+                      id={`edit-user-msg-${msg.id}`}
+                      ref={editTextareaRef}
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEditingMessage();
+                        } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveAndResendUserMessage(msg);
+                        }
+                      }}
+                      rows={2}
+                      placeholder="Ubah isi pesan..."
+                      className="nd-composer-textarea block w-full resize-none rounded-xl border-0 bg-black/35 px-3 py-2 text-base leading-relaxed text-[#F8FAFC] caret-[#22D3EE] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none"
+                    />
+
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2.5">
+                      <span className="hidden text-[11px] text-[#94A3B8] sm:inline">
+                        Ctrl+Enter kirim ulang · Esc batal
+                      </span>
+                      <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={cancelEditingMessage}
+                          className="inline-flex min-h-[36px] items-center gap-1 rounded-xl border border-white/12 bg-black/45 px-3 py-1.5 text-xs font-medium text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          <span>Batal</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!editDraft.trim()}
+                          onClick={() => handleSaveEditedMessage(msg)}
+                          className="inline-flex min-h-[36px] items-center gap-1 rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-3 py-1.5 text-xs font-semibold text-[#67E8F9] transition-colors hover:bg-[#22D3EE]/22 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Simpan</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!editDraft.trim()}
+                          onClick={() => handleSaveAndResendUserMessage(msg)}
+                          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-[#0E7490] px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_0_14px_rgba(34,211,238,0.22)] transition-colors hover:bg-[#0891B2] disabled:opacity-40 cursor-pointer"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          <span>Kirim Ulang</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="nd-user-bubble max-w-[90%] rounded-2xl rounded-tr-sm px-4 py-2.5 text-[#F8FAFC] sm:max-w-[78%] sm:px-4.5 sm:py-3">
+                      {msg.attachmentName && (
+                        <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-black/45 px-2.5 py-1 text-xs text-[#67E8F9]">
+                          <FileText className="h-3.5 w-3.5 shrink-0" />
+                          <span className="max-w-[200px] truncate">{msg.attachmentName}</span>
+                        </div>
+                      )}
+                      <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed sm:text-base">
+                        {msg.content}
+                      </p>
+                      {msg.editedAt && (
+                        <div className="mt-1 flex justify-end">
+                          <span className="font-mono-code text-[10px] text-[#67E8F9]/75">
+                            Diedit
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* User Message Action Bar (Mobile & Desktop Accessible: Salin + Edit) */}
+                    <div className="mt-1 flex flex-wrap items-center justify-end gap-1 text-[#94A3B8] transition-opacity sm:opacity-80 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(msg)}
+                        aria-label="Salin pesan pengguna"
+                        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-[#22D3EE]" />
+                            <span className="text-[#22D3EE]">Tersalin</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Salin</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => startEditingMessage(msg)}
+                        aria-label="Edit pesan pengguna"
+                        className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           }
@@ -271,6 +454,12 @@ export function ChatThread({
                     <span className="inline-flex items-center gap-1 rounded-md border border-[#FB923C]/40 bg-[#FB923C]/12 px-2 py-0.5 font-mono-code text-[10px] font-medium text-[#FB923C]">
                       <Shuffle className="h-2.5 w-2.5" />
                       Auto-fallback
+                    </span>
+                  )}
+
+                  {msg.editedAt && !isTypingContent && (
+                    <span className="inline-flex items-center rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono-code text-[10px] text-[#94A3B8]">
+                      Diedit
                     </span>
                   )}
 
@@ -371,6 +560,81 @@ export function ChatThread({
                           <span>Pilih Model Gambar</span>
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(msg)}
+                        aria-label="Salin pesan"
+                        className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-white/12 bg-black/45 px-3 py-1.5 text-xs font-medium text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-[#22D3EE]" />
+                            <span className="text-[#22D3EE]">Tersalin</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Salin</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : editingId === msg.id ? (
+                  <div className="nd-assistant-surface rounded-2xl border border-[#FB923C]/45 px-3.5 py-3 shadow-[0_0_24px_rgba(251,146,60,0.1)] sm:px-4.5 sm:py-3.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 font-display text-xs font-semibold text-[#FDBA74]">
+                        <Pencil className="h-3.5 w-3.5 text-[#FB923C]" />
+                        <span>Edit Pesan Balasan</span>
+                      </span>
+                    </div>
+
+                    <label htmlFor={`edit-assistant-msg-${msg.id}`} className="sr-only">
+                      Edit pesan balasan NodataGPT
+                    </label>
+                    <textarea
+                      id={`edit-assistant-msg-${msg.id}`}
+                      ref={editTextareaRef}
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEditingMessage();
+                        } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveEditedMessage(msg);
+                        }
+                      }}
+                      rows={3}
+                      placeholder="Ubah isi pesan balasan..."
+                      className="nd-composer-textarea block w-full resize-none rounded-xl border-0 bg-black/40 px-3 py-2.5 text-base leading-relaxed text-[#F8FAFC] caret-[#FB923C] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none"
+                    />
+
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2.5">
+                      <span className="hidden text-[11px] text-[#94A3B8] sm:inline">
+                        Ctrl+Enter simpan · Esc batal
+                      </span>
+                      <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={cancelEditingMessage}
+                          className="inline-flex min-h-[36px] items-center gap-1 rounded-xl border border-white/12 bg-black/45 px-3 py-1.5 text-xs font-medium text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          <span>Batal</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!editDraft.trim()}
+                          onClick={() => handleSaveEditedMessage(msg)}
+                          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl bg-[#EA580C] px-3.5 py-1.5 text-xs font-semibold text-white shadow-[0_0_14px_rgba(251,146,60,0.22)] transition-colors hover:bg-[#F97316] disabled:opacity-40 cursor-pointer"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Simpan Perubahan</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -449,6 +713,16 @@ export function ChatThread({
                                 <span>Salin</span>
                               </>
                             )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => startEditingMessage(msg)}
+                            aria-label="Edit jawaban"
+                            className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors hover:bg-white/8 hover:text-white cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>Edit</span>
                           </button>
 
                           {canSpeak && !msg.imageUrl && (

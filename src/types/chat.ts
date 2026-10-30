@@ -8,6 +8,7 @@ export interface ChatMessage {
   content: string;
   thinkingContent?: string;
   createdAt: number;
+  editedAt?: number;
   status?: AssistantMessageStatus;
   durationMs?: number;
   isError?: boolean;
@@ -17,6 +18,7 @@ export interface ChatMessage {
   imageUrl?: string;
   isImageRequest?: boolean;
   attachmentName?: string;
+  attachmentText?: string;
 }
 
 export interface Conversation {

@@ -66,14 +66,21 @@ export function saveConversations(conversations: Conversation[]): void {
       const compacted: Conversation[] = conversations.map((conv) => ({
         ...conv,
         messages: conv.messages.map((msg) => {
-          if (msg.imageUrl && msg.imageUrl.startsWith('data:image/')) {
+          let nextMsg = msg;
+          if (nextMsg.attachmentText && nextMsg.attachmentText.length > 2000) {
+            nextMsg = {
+              ...nextMsg,
+              attachmentText: nextMsg.attachmentText.slice(0, 2000),
+            };
+          }
+          if (nextMsg.imageUrl && nextMsg.imageUrl.startsWith('data:image/')) {
             keptInlineImages += 1;
             if (keptInlineImages > 2) {
-              const { imageUrl: _dropped, ...rest } = msg;
+              const { imageUrl: _dropped, ...rest } = nextMsg;
               return rest;
             }
           }
-          return msg;
+          return nextMsg;
         }),
       }));
       localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(compacted));

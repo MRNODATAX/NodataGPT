@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
   KeyRound,
@@ -22,7 +24,9 @@ import {
   cleanRouterApiKey,
   detectRouterProviderFromKey,
   discoverRouterModels,
+  isLocalOrPrivateRouterUrl,
   normalizeRouterBaseUrl,
+  resolveSmartBaseUrlForKey,
 } from '../services/routerGateway';
 
 interface SettingsModalProps {
@@ -48,6 +52,7 @@ export function SettingsModal({
   const [showRouterKey, setShowRouterKey] = useState(false);
   const [routerTesting, setRouterTesting] = useState(false);
   const [routerModelSearch, setRouterModelSearch] = useState('');
+  const [copiedLocalHint, setCopiedLocalHint] = useState<'cors' | 'tunnel' | null>(null);
   const [routerTestResult, setRouterTestResult] = useState<{
     ok: boolean;
     message: string;
@@ -722,6 +727,92 @@ export function SettingsModal({
                 placeholder={activePreset.defaultBaseUrl}
                 className="h-9 w-full rounded-lg border border-white/12 bg-black/60 px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
               />
+
+              {/* Local Loopback Helper when calling http://localhost from https:// domain */}
+              {typeof window !== 'undefined' &&
+                window.location.protocol === 'https:' &&
+                isLocalOrPrivateRouterUrl(
+                  normalizeRouterBaseUrl(settings.routerBaseUrl, settings.routerPreset)
+                ) && (
+                  <div className="mt-2 space-y-1.5 rounded-xl border border-[#FB923C]/30 bg-[#FB923C]/[0.07] p-2.5 text-[11px] leading-relaxed text-[#E2E8F0]">
+                    <div className="font-semibold text-[#FED7AA]">
+                      Tips Koneksi Lokal (localhost:20128) dari Situs HTTPS:
+                    </div>
+                    <ol className="list-decimal space-y-1 pl-4 text-[#CBD5E1]">
+                      <li>
+                        Di <strong className="text-white">Chrome / Edge</strong>: klik ikon sebelah kiri URL → ubah{' '}
+                        <strong className="text-[#67E8F9]">Akses jaringan lokal (Local network access)</strong> ke{' '}
+                        <strong className="text-white">Izinkan (Allow)</strong>.{' '}
+                        <span className="text-[#94A3B8]">(Brave: matikan Brave Shields di situs ini).</span>
+                      </li>
+                      <li>
+                        Di tab <strong className="text-white">OmniRoute → Security → CORS Allowed Origins</strong>: klik{' '}
+                        <strong className="text-[#FED7AA]">Salin Origin</strong> di bawah lalu tempel &amp; simpan (tanpa restart).
+                      </li>
+                    </ol>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const origins = Array.from(
+                            new Set([
+                              window.location.origin,
+                              'https://www.nodatagpt.web.id',
+                              'https://nodatagpt.web.id',
+                              'https://nodatagpt.vercel.app',
+                            ])
+                          ).join(', ');
+                          try {
+                            await navigator.clipboard.writeText(origins);
+                            setCopiedLocalHint('cors');
+                            window.setTimeout(() => setCopiedLocalHint(null), 2200);
+                          } catch {
+                            // Ignore clipboard error
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#22D3EE]/40 bg-[#22D3EE]/12 px-2 py-1 font-mono-code text-[10px] font-semibold text-[#67E8F9] hover:bg-[#22D3EE]/20 cursor-pointer"
+                      >
+                        {copiedLocalHint === 'cors' ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        <span>
+                          {copiedLocalHint === 'cors'
+                            ? 'Origin Tersalin!'
+                            : 'Salin Origin untuk CORS OmniRoute'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              'npx cloudflared tunnel --url http://localhost:20128'
+                            );
+                            setCopiedLocalHint('tunnel');
+                            window.setTimeout(() => setCopiedLocalHint(null), 2200);
+                          } catch {
+                            // Ignore clipboard error
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-black/45 px-2 py-1 font-mono-code text-[10px] text-[#CBD5E1] hover:border-white/30 hover:text-white cursor-pointer"
+                      >
+                        {copiedLocalHint === 'tunnel' ? (
+                          <Check className="h-3 w-3 text-[#22D3EE]" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        <span>
+                          {copiedLocalHint === 'tunnel'
+                            ? 'Perintah Tunnel Tersalin!'
+                            : 'Salin Tunnel HTTPS (Anti-Blokir / HP)'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Router API Key */}
@@ -760,7 +851,11 @@ export function SettingsModal({
                     }
 
                     const nextPreset = detected.preset || settings.routerPreset;
-                    const nextBaseUrl = detected.baseUrl || settings.routerBaseUrl;
+                    const nextBaseUrl = resolveSmartBaseUrlForKey(
+                      settings.routerBaseUrl,
+                      settings.routerPreset,
+                      detected
+                    );
                     const nextDefaultModel =
                       detected.defaultModel && settings.routerPreset !== nextPreset
                         ? detected.defaultModel

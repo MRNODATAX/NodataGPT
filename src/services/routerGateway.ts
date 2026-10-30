@@ -28,8 +28,9 @@ export const ROUTER_PRESETS: Record<RouterPresetId, RouterPresetOption> = {
     description:
       'Universal AI Router (decolua/9router & 9router-go) kompatibel /v1/models?connected=1 & /v1/chat/completions. Mendukung 9Router Cloud, VPS/tunnel, maupun CLI lokal port 20128.',
     endpointChips: [
+      { label: '9Router Lokal (localhost:20128)', url: 'http://localhost:20128/v1' },
+      { label: 'Loopback (127.0.0.1:20128)', url: 'http://127.0.0.1:20128/v1' },
       { label: '9Router Cloud', url: 'https://9router.com/v1' },
-      { label: '9Router Lokal (:20128)', url: 'http://localhost:20128/v1' },
       { label: '9Router Fork (:20127)', url: 'http://localhost:20127/v1' },
     ],
     cloudFallbackUrls: ['https://9router.com/v1'],
@@ -44,18 +45,18 @@ export const ROUTER_PRESETS: Record<RouterPresetId, RouterPresetOption> = {
   omniroute: {
     id: 'omniroute',
     name: 'OmniRoute',
-    badge: 'Smart Combo auto/*',
-    defaultBaseUrl: 'https://omniroute.dev/v1',
+    badge: 'Local :20128 · auto/*',
+    defaultBaseUrl: 'http://localhost:20128/v1',
     defaultModel: 'auto',
-    keyPlaceholder: 'sk_omniroute... / sk_live_... (bukan oma_live_)',
+    keyPlaceholder: 'sk-c411fa360a62c1e6-... (kunci API OmniRoute)',
     description:
-      'AI Gateway 4-Tier (diegosouzapw/OmniRoute) dengan kombo pintar (auto, auto/coding, auto/fast, auto/smart), /v1/models?connected=1, & /v1/images/generations.',
+      'AI Gateway 4-Tier (diegosouzapw/OmniRoute) lokal port :20128 maupun Cloud/Tunnel dengan sinkronisasi /v1/models?configuredOnly=true&kind=chat & kombo pintar (auto, auto/coding, auto/fast).',
     endpointChips: [
-      { label: 'OmniRoute Cloud', url: 'https://omniroute.dev/v1' },
-      { label: 'OmniRouter Hosted', url: 'https://omnirouter.li/v1' },
-      { label: 'OmniRoute Lokal (:20128)', url: 'http://localhost:20128/v1' },
+      { label: 'Lokal (localhost:20128)', url: 'http://localhost:20128/v1' },
+      { label: 'Loopback (127.0.0.1:20128)', url: 'http://127.0.0.1:20128/v1' },
+      { label: 'OmniRoute Cloud', url: 'http://cloud.omniroute.online/v1' },
     ],
-    cloudFallbackUrls: ['https://omniroute.dev/v1', 'https://omnirouter.li/v1'],
+    cloudFallbackUrls: ['http://cloud.omniroute.online/v1'],
     suggestedModels: [
       'auto',
       'auto/coding',
@@ -275,15 +276,89 @@ export function detectRouterProviderFromKey(rawKey: string): DetectedKeyProvider
     };
   }
 
-  if (/^(?:sk_omni|omniroute_|omni_)/i.test(cleaned)) {
+  // OmniRoute (`diegosouzapw/OmniRoute` `src/shared/utils/apiKey.ts`):
+  // Standard format: `sk-{machineId(16 hex)}-{keyId(6 hex)}-{crc8(8 hex)}` (e.g. `sk-c411fa360a62c1e6-fe7a2b-b4503fe2`)
+  // Legacy format: `sk-{8 alphanumeric}` or explicit `sk_omni` / `omniroute_`
+  if (isOmniRouteGeneratedKey(cleaned)) {
     return {
       detected: true,
-      providerName: 'OmniRoute',
+      providerName: 'OmniRoute Gateway (:20128)',
       preset: 'omniroute',
+      baseUrl: 'http://localhost:20128/v1',
+      defaultModel: 'auto',
     };
   }
 
   return { detected: false };
+}
+
+export function isOmniRouteGeneratedKey(rawKey: string): boolean {
+  const cleaned = cleanRouterApiKey(rawKey);
+  if (!cleaned) return false;
+  return (
+    /^sk-[a-f0-9]{10,24}-[a-f0-9]{4,10}-[a-f0-9]{6,12}$/i.test(cleaned) ||
+    /^sk-[a-z0-9]{8}$/i.test(cleaned) ||
+    /^(?:sk_omni|omniroute_|omni_)/i.test(cleaned)
+  );
+}
+
+export function resolveSmartBaseUrlForKey(
+  currentBaseUrl: string,
+  currentPreset: RouterPresetId,
+  detected: DetectedKeyProviderInfo
+): string {
+  if (!detected.detected || !detected.baseUrl) return currentBaseUrl;
+  const trimmed = (currentBaseUrl || '').trim();
+  if (!trimmed) return detected.baseUrl;
+
+  try {
+    const curNorm = normalizeRouterBaseUrl(trimmed, currentPreset);
+    const expNorm = normalizeRouterBaseUrl(
+      detected.baseUrl,
+      detected.preset || currentPreset
+    );
+    const curHost = new URL(curNorm).hostname.toLowerCase();
+    const expHost = new URL(expNorm).hostname.toLowerCase();
+
+    // For OmniRoute local keys (`expHost === 'localhost'`), preserve explicit user choices like
+    // `127.0.0.1`, LAN IP `192.168.x.x`, `cloud.omniroute.online`, or Cloudflare/ngrok tunnels;
+    // only replace unrelated cloud preset defaults (`9router.com`, `omniroute.dev`, `openrouter.ai`, `api.groq.com`).
+    if (detected.preset === 'omniroute' && expHost === 'localhost') {
+      const unrelatedDefaultHosts = new Set([
+        '9router.com',
+        'www.9router.com',
+        'omniroute.dev',
+        'www.omniroute.dev',
+        'omnirouter.li',
+        'openrouter.ai',
+        'us.openrouter.ai',
+        'eu.openrouter.ai',
+        'api.groq.com',
+      ]);
+      return unrelatedDefaultHosts.has(curHost) ? expNorm : trimmed;
+    }
+
+    const genericPresetDefaultHosts = new Set([
+      'localhost',
+      '127.0.0.1',
+      '9router.com',
+      'www.9router.com',
+      'omniroute.dev',
+      'www.omniroute.dev',
+      'omnirouter.li',
+      'cloud.omniroute.online',
+      'openrouter.ai',
+      'us.openrouter.ai',
+      'eu.openrouter.ai',
+      'api.groq.com',
+    ]);
+    if (curHost !== expHost && genericPresetDefaultHosts.has(curHost)) {
+      return expNorm;
+    }
+    return trimmed;
+  } catch {
+    return detected.baseUrl;
+  }
 }
 
 function defaultPathForHost(hostname: string): string {
@@ -413,15 +488,16 @@ export function appendPathToRouterBase(baseUrl: string, subPath: string): string
 export function isLocalOrPrivateRouterUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl);
-    if (parsed.protocol === 'http:') return true;
     const host = parsed.hostname.toLowerCase();
     return (
       host === 'localhost' ||
-      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
       host === '[::1]' ||
       host === '::1' ||
       host.endsWith('.local') ||
-      host.endsWith('.ts.net') ||
+      host.endsWith('.internal') ||
+      host.endsWith('.localhost') ||
+      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
       /^192\.168\./.test(host) ||
       /^10\./.test(host) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(host)
@@ -429,6 +505,38 @@ export function isLocalOrPrivateRouterUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function buildLocalLoopbackAlternates(baseUrl: string): string[] {
+  const candidates: string[] = [baseUrl];
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname.toLowerCase();
+    const addVariant = (nextHost: string, nextPort?: string) => {
+      const u = new URL(baseUrl);
+      u.hostname = nextHost;
+      if (nextPort) u.port = nextPort;
+      const str = u.toString().replace(/\/+$/, '');
+      if (!candidates.includes(str)) candidates.push(str);
+    };
+
+    if (host === 'localhost') {
+      addVariant('127.0.0.1');
+      if (parsed.port === '20129') {
+        addVariant('localhost', '20128');
+        addVariant('127.0.0.1', '20128');
+      }
+    } else if (host === '127.0.0.1') {
+      addVariant('localhost');
+      if (parsed.port === '20129') {
+        addVariant('127.0.0.1', '20128');
+        addVariant('localhost', '20128');
+      }
+    }
+  } catch {
+    // Keep original baseUrl
+  }
+  return candidates;
 }
 
 export function isRouterConfiguredAndReady(settings: AppSettings): boolean {
@@ -533,6 +641,58 @@ interface RawRouterTransportResult {
   error?: string;
 }
 
+async function diagnoseLocalRouterBlock(targetUrl: string): Promise<string> {
+  if (typeof window === 'undefined') {
+    return `Endpoint lokal (${targetUrl}) hanya dapat diakses langsung dari browser perangkat Anda.`;
+  }
+
+  let localOrigin = targetUrl;
+  try {
+    localOrigin = new URL(targetUrl).origin;
+  } catch {
+    // Keep targetUrl
+  }
+
+  const pageOrigin = window.location.origin;
+  const isHttpsPage = window.location.protocol === 'https:';
+
+  // 1. Check Chrome 142+ / Edge Local Network Access permission state if supported
+  try {
+    if (navigator?.permissions?.query) {
+      const perm = await navigator.permissions.query({
+        name: 'local-network-access' as PermissionName,
+      });
+      if (perm.state === 'denied') {
+        return `Izin "Akses jaringan lokal" (Local network access) di browser Anda masih DIBLOKIR untuk ${pageOrigin}. Klik ikon pengaturan di sebelah kiri alamat URL → ubah "Akses jaringan lokal" ke Izinkan (Allow), lalu klik Tes Koneksi lagi.`;
+      }
+    }
+  } catch {
+    // Permission descriptor not supported on older/non-Chromium browsers
+  }
+
+  // 2. Probe opaque no-cors reachability to distinguish "OmniRoute running, CORS blocked" vs "Browser PNA / Shields / Port closed"
+  const probeCtrl = new AbortController();
+  const probeTimer = window.setTimeout(() => probeCtrl.abort(), 2200);
+  try {
+    await fetch(`${localOrigin}/api/health`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      signal: probeCtrl.signal,
+    });
+    return `Tab OmniRoute / Router lokal Anda di ${localOrigin} terdeteksi MENYALA, tetapi pembacaan respons diblokir aturan CORS browser! Solusi instan (tanpa restart): buka tab OmniRoute Anda → menu Security → kolom CORS Allowed Origins → isi "${pageOrigin}" lalu simpan, kemudian klik Tes Koneksi lagi.`;
+  } catch {
+    // Opaque fetch also failed (loopback blocked by browser PNA/Shields or different device/port)
+  } finally {
+    window.clearTimeout(probeTimer);
+  }
+
+  if (isHttpsPage) {
+    return `Browser memblokir akses dari situs HTTPS (${pageOrigin}) ke router lokal (${localOrigin}). Pastikan: (1) NodataGPT & tab OmniRoute dibuka di perangkat yang SAMA; (2) Di Chrome/Edge klik ikon kiri URL → izinkan "Akses jaringan lokal (Local network access)"; (3) Di Brave matikan Brave Shields di situs ini; atau (4) Jalankan "npx cloudflared tunnel --url ${localOrigin}" untuk koneksi HTTPS bebas blokir.`;
+  }
+
+  return `Tidak dapat menjangkau router lokal di ${localOrigin}. Pastikan server OmniRoute / 9Router sedang menyala di port yang sesuai pada perangkat ini.`;
+}
+
 async function performRouterHttpCall({
   url,
   method,
@@ -550,14 +710,20 @@ async function performRouterHttpCall({
 }): Promise<RawRouterTransportResult> {
   const isLocal = isLocalOrPrivateRouterUrl(url);
   let directFailureResult: RawRouterTransportResult | null = null;
+  let timedOutLocally = false;
 
   // 1. Attempt direct browser fetch first (mandatory for localhost:20128, lowest latency for cloud)
   if (typeof window !== 'undefined') {
     const directAbort = new AbortController();
-    const timer = window.setTimeout(
-      () => directAbort.abort(),
-      isLocal ? Math.min(timeoutMs, 8000) : Math.min(timeoutMs, 22000)
-    );
+    const effectiveDirectTimeout = isLocal
+      ? method === 'GET'
+        ? Math.min(timeoutMs, 20000)
+        : timeoutMs
+      : Math.min(timeoutMs, 22000);
+    const timer = window.setTimeout(() => {
+      timedOutLocally = true;
+      directAbort.abort();
+    }, effectiveDirectTimeout);
     const onParentAbort = () => directAbort.abort();
     signal?.addEventListener('abort', onParentAbort, { once: true });
 
@@ -614,20 +780,18 @@ async function performRouterHttpCall({
       }
 
       if (isLocal) {
-        const isHttpsOrigin =
-          typeof window !== 'undefined' && window.location.protocol === 'https:';
-        const hint = isHttpsOrigin
-          ? 'Pastikan server lokal 9Router / OmniRoute berjalan di perangkat Anda (mis. port 20128) dan izinkan akses jaringan lokal di browser, atau pilih chip Cloud (9Router Cloud / OmniRoute Cloud).'
-          : 'Pastikan server lokal 9Router / OmniRoute sedang berjalan di port yang sesuai.';
+        const detailedError = timedOutLocally
+          ? `Waktu tunggu habis (${Math.round(effectiveDirectTimeout / 1000)} dtk) saat menghubungi router lokal (${url}). Pastikan provider hulu di OmniRoute / 9Router Anda aktif.`
+          : await diagnoseLocalRouterBlock(url);
         return {
           ok: false,
           status: 0,
           body: '',
           usedRelay: false,
-          error: `Tidak dapat menjangkau router lokal (${url}). ${hint}`,
+          error: detailedError,
         };
       }
-      // Public HTTPS endpoint hit CORS or network block in browser -> fall through to /api/proxy relay
+      // Public HTTP/HTTPS endpoint hit CORS or Mixed-Content block in browser -> fall through to /api/proxy relay
     } finally {
       window.clearTimeout(timer);
       signal?.removeEventListener('abort', onParentAbort);
@@ -1019,60 +1183,53 @@ export async function discoverRouterModels({
     effectiveKey = '';
     if (keyInfo.preset) effectivePreset = keyInfo.preset;
   } else if (keyInfo.detected && keyInfo.baseUrl) {
-    // Auto-align Base URL when user pasted a known provider key (e.g. sk-or-v1-, gsk_, AIza, nvapi-, sk-ant-)
-    // while Base URL was still pointing to a different default host
-    const currentNorm = normalizeRouterBaseUrl(baseUrl, preset);
-    const expectedNorm = normalizeRouterBaseUrl(keyInfo.baseUrl, keyInfo.preset || preset);
-    try {
-      const curHost = new URL(currentNorm).hostname.toLowerCase();
-      const expHost = new URL(expectedNorm).hostname.toLowerCase();
-      const isDefaultHost =
-        curHost === 'localhost' ||
-        curHost === '127.0.0.1' ||
-        curHost === '9router.com' ||
-        curHost === 'omniroute.dev' ||
-        curHost === 'omnirouter.li' ||
-        curHost.includes('openrouter.ai') ||
-        curHost === 'api.groq.com';
-      if (curHost !== expHost && isDefaultHost) {
-        effectiveBaseInput = expectedNorm;
-        if (keyInfo.preset) effectivePreset = keyInfo.preset;
-      }
-    } catch {
-      effectiveBaseInput = expectedNorm;
-    }
+    effectiveBaseInput = resolveSmartBaseUrlForKey(baseUrl, preset, keyInfo);
+    if (keyInfo.preset) effectivePreset = keyInfo.preset;
   }
 
   const primaryBaseUrl = normalizeRouterBaseUrl(effectiveBaseInput, effectivePreset);
+  const isOmniKey = isOmniRouteGeneratedKey(effectiveKey);
 
   // Build candidate Base URLs:
-  // If user has a cloud API key but Base URL was left on localhost:20128, automatically include preset cloud URLs!
-  const candidateBaseUrls: string[] = [primaryBaseUrl];
-  if (isLocalOrPrivateRouterUrl(primaryBaseUrl) && effectiveKey.length > 0) {
+  // 1. For local endpoints (`localhost` / `127.0.0.1`), always include loopback IPv4/hostname twins
+  //    so `localhost` (`::1`) vs `127.0.0.1` socket binding differences resolve automatically!
+  // 2. Never send local OmniRoute keys (`sk-<machineId>-<keyId>-<crc>`) to unrelated cloud hosts.
+  const candidateBaseUrls: string[] = isLocalOrPrivateRouterUrl(primaryBaseUrl)
+    ? buildLocalLoopbackAlternates(primaryBaseUrl)
+    : [primaryBaseUrl];
+
+  if (
+    isLocalOrPrivateRouterUrl(primaryBaseUrl) &&
+    effectiveKey.length > 0 &&
+    !isOmniKey &&
+    effectivePreset !== 'omniroute'
+  ) {
     const cloudFallbacks = ROUTER_PRESETS[effectivePreset]?.cloudFallbackUrls || [];
     for (const cf of cloudFallbacks) {
       if (!candidateBaseUrls.includes(cf)) candidateBaseUrls.push(cf);
     }
-    if (effectivePreset === '9router') {
-      candidateBaseUrls.push('https://omniroute.dev/v1');
-    } else if (effectivePreset === 'omniroute') {
-      candidateBaseUrls.push('https://9router.com/v1');
-    }
   }
 
   let lastError = 'Gagal memuat daftar model dari /v1/models.';
+  let primaryLocalError: string | null = null;
   let lastUsedRelay = false;
 
   for (const baseCandidate of candidateBaseUrls) {
+    const isCandidateLocal = isLocalOrPrivateRouterUrl(baseCandidate);
     const isOpenRouter = /openrouter\.ai/i.test(baseCandidate);
-    const is9RouterOrOmni =
-      effectivePreset === '9router' ||
+    const isOmniCandidate =
       effectivePreset === 'omniroute' ||
-      /9router|omnirout|localhost:2012[78]|127\.0\.0\.1:2012[78]/i.test(baseCandidate);
+      isOmniKey ||
+      /omnirout/i.test(baseCandidate);
+    const is9RouterCandidate =
+      !isOmniCandidate &&
+      (effectivePreset === '9router' ||
+        /9router|localhost:2012[78]|127\.0\.0\.1:2012[78]/i.test(baseCandidate));
 
     let zeroCreditFreeOnly = false;
     let preferFreeFirst = false;
     let keyNote: string | undefined;
+    let sawEmptyConfiguredOmni = false;
 
     // 1. OpenRouter strict API key validation (`/auth/key`) so invalid keys never falsely "connect"
     //    and zero-balance free keys automatically surface `:free` models!
@@ -1151,13 +1308,16 @@ export async function discoverRouterModels({
 
     // 2. Build ordered model-discovery endpoints for this baseCandidate:
     //    - OpenRouter: `/models/user` (key-scoped guardrails & allowlist!) -> `/models`
-    //    - 9Router / OmniRoute: `/models?connected=1` (active connections only!) -> `/models`
+    //    - OmniRoute: `/models?configuredOnly=true&kind=chat` (eligible DB connections + chat filter!) -> `/models`
+    //    - 9Router: `/models?connected=1` (active connections only!) -> `/models`
     //    - Standard OpenAI-compatible: `/models`
     const modelPathsToTry: string[] = isOpenRouter
       ? ['/models/user', '/models']
-      : is9RouterOrOmni
-        ? ['/models?connected=1', '/models']
-        : ['/models'];
+      : isOmniCandidate
+        ? ['/models?configuredOnly=true&kind=chat', '/models']
+        : is9RouterCandidate
+          ? ['/models?connected=1', '/models']
+          : ['/models'];
 
     for (const modelSubPath of modelPathsToTry) {
       const targetModelsUrl = appendPathToRouterBase(baseCandidate, modelSubPath);
@@ -1165,7 +1325,7 @@ export async function discoverRouterModels({
         url: targetModelsUrl,
         method: 'GET',
         headers: buildRouterHeaders(effectiveKey, targetModelsUrl),
-        timeoutMs: 18000,
+        timeoutMs: 20000,
         signal,
       });
 
@@ -1185,18 +1345,31 @@ export async function discoverRouterModels({
           });
         }
 
-        // On `?connected=1`, if 0 models came back (e.g. older 9router build before PR #51), try plain `/models` next
+        // On `?configuredOnly=true` or `?connected=1`, if 0 models came back, try plain `/models` next
         if (
-          modelSubPath.includes('connected=1') &&
+          (modelSubPath.includes('configuredOnly=true') ||
+            modelSubPath.includes('connected=1')) &&
           (!parsedList || parsedList.chatModels.length === 0)
         ) {
+          if (modelSubPath.includes('configuredOnly=true')) {
+            sawEmptyConfiguredOmni = true;
+          }
           continue;
         }
 
         if (parsedList) {
+          const finalChatModels =
+            parsedList.chatModels.length > 0
+              ? isOmniCandidate && !parsedList.chatModels.includes('auto')
+                ? ['auto', ...parsedList.chatModels]
+                : parsedList.chatModels
+              : isOmniCandidate
+                ? ['auto']
+                : [];
+
           return {
             ok: true,
-            models: parsedList.chatModels,
+            models: finalChatModels,
             imageModels: parsedList.imageModels,
             detectedPreset: keyInfo.preset || effectivePreset,
             detectedProviderName: keyInfo.providerName,
@@ -1205,17 +1378,31 @@ export async function discoverRouterModels({
             usedRelay: res.usedRelay,
             keyNote:
               keyNote ||
-              (modelSubPath.includes('connected=1')
-                ? 'Hanya menampilkan provider & combo yang benar-benar terhubung pada kunci Anda.'
-                : modelSubPath === '/models/user'
-                  ? 'Daftar model telah disinkronkan khusus sesuai izin API Key Anda (/models/user).'
-                  : undefined),
+              (modelSubPath.includes('configuredOnly=true')
+                ? 'Menampilkan khusus model & combo yang aktif terhubung di OmniRoute Anda.'
+                : sawEmptyConfiguredOmni
+                  ? 'Terhubung ke OmniRoute! Catatan: belum ada Provider aktif (configuredOnly=0) — pastikan minimal 1 Provider sudah Connected di dashboard OmniRoute Anda.'
+                  : modelSubPath.includes('connected=1')
+                    ? 'Hanya menampilkan provider & combo yang benar-benar terhubung pada kunci Anda.'
+                    : modelSubPath === '/models/user'
+                      ? 'Daftar model telah disinkronkan khusus sesuai izin API Key Anda (/models/user).'
+                      : undefined),
           };
         }
       }
 
+      if (isCandidateLocal && res.error && !primaryLocalError) {
+        primaryLocalError = res.error;
+      }
+
       // Hard auth error on this host -> stop trying subpaths on same host
       if (res.status === 401 || res.status === 403) {
+        lastError = res.error || lastError;
+        break;
+      }
+
+      // If network error (`status === 0`) on this host, skip remaining subpaths on this exact host and try next candidate (`127.0.0.1`)
+      if (res.status === 0) {
         lastError = res.error || lastError;
         break;
       }
@@ -1308,7 +1495,7 @@ export async function discoverRouterModels({
     normalizedBaseUrl: primaryBaseUrl,
     latencyMs: Date.now() - startedAt,
     usedRelay: lastUsedRelay,
-    error: lastError,
+    error: primaryLocalError || lastError,
   };
 }
 
@@ -1511,33 +1698,15 @@ export async function executeRouterChatCompletion({
   providerLabel: string;
 }> {
   const keyDetected = detectRouterProviderFromKey(settings.routerApiKey);
-  let activeBaseUrl = normalizeRouterBaseUrl(
+  const alignedRawBase = resolveSmartBaseUrlForKey(
     settings.routerBaseUrl,
-    settings.routerPreset
+    settings.routerPreset,
+    keyDetected
   );
-
-  // Auto-align Base URL if user pasted a known provider key without updating Base URL
-  if (keyDetected.detected && keyDetected.baseUrl) {
-    try {
-      const curHost = new URL(activeBaseUrl).hostname.toLowerCase();
-      const expUrl = normalizeRouterBaseUrl(
-        keyDetected.baseUrl,
-        keyDetected.preset || settings.routerPreset
-      );
-      const expHost = new URL(expUrl).hostname.toLowerCase();
-      if (
-        curHost !== expHost &&
-        (curHost === 'localhost' ||
-          curHost === '127.0.0.1' ||
-          curHost === '9router.com' ||
-          curHost === 'omniroute.dev')
-      ) {
-        activeBaseUrl = expUrl;
-      }
-    } catch {
-      // Keep activeBaseUrl
-    }
-  }
+  let activeBaseUrl = normalizeRouterBaseUrl(
+    alignedRawBase,
+    keyDetected.preset || settings.routerPreset
+  );
 
   let targetModel =
     (modelIdOverride || '').trim() ||
@@ -1689,18 +1858,51 @@ export async function executeRouterChatCompletion({
 
   let firstAttempt = await runChatAgainstBase(activeBaseUrl, targetModel);
 
-  // If Base URL was left on localhost:20128 while user actually pasted a cloud key, auto-failover to cloud URL
+  // If local `localhost` vs `127.0.0.1` (or split-port `:20129` vs `:20128`) failed at transport level,
+  // try loopback twin(s) automatically before giving up!
   if (
     !firstAttempt.ok &&
     firstAttempt.status === 0 &&
-    isLocalOrPrivateRouterUrl(activeBaseUrl) &&
-    cleanRouterApiKey(settings.routerApiKey).length > 0
+    isLocalOrPrivateRouterUrl(activeBaseUrl)
   ) {
-    const cloudUrl =
-      ROUTER_PRESETS[settings.routerPreset]?.cloudFallbackUrls?.[0] ||
-      'https://9router.com/v1';
-    activeBaseUrl = cloudUrl;
-    firstAttempt = await runChatAgainstBase(activeBaseUrl, targetModel);
+    const originalLocalError = firstAttempt.error;
+    const localAlternates = buildLocalLoopbackAlternates(activeBaseUrl).filter(
+      (u) => u !== activeBaseUrl
+    );
+    for (const altLocal of localAlternates) {
+      const altTry = await runChatAgainstBase(altLocal, targetModel);
+      if (altTry.ok && altTry.content) {
+        activeBaseUrl = altLocal;
+        firstAttempt = altTry;
+        break;
+      }
+      if (altTry.status !== 0) {
+        activeBaseUrl = altLocal;
+        firstAttempt = altTry;
+        break;
+      }
+    }
+
+    // Only attempt cloud fallback if key is NOT a local OmniRoute key (`sk-<hex>-<hex>-<crc>`),
+    // and never overwrite `originalLocalError` with a cloud 401!
+    if (
+      !firstAttempt.ok &&
+      firstAttempt.status === 0 &&
+      cleanRouterApiKey(settings.routerApiKey).length > 0 &&
+      !isOmniRouteGeneratedKey(settings.routerApiKey) &&
+      settings.routerPreset !== 'omniroute'
+    ) {
+      const cloudUrl =
+        ROUTER_PRESETS[settings.routerPreset]?.cloudFallbackUrls?.[0] ||
+        'https://9router.com/v1';
+      const cloudTry = await runChatAgainstBase(cloudUrl, targetModel);
+      if (cloudTry.ok && cloudTry.content) {
+        activeBaseUrl = cloudUrl;
+        firstAttempt = cloudTry;
+      } else {
+        firstAttempt = { ...firstAttempt, error: originalLocalError };
+      }
+    }
   }
 
   if (firstAttempt.ok && firstAttempt.content) {

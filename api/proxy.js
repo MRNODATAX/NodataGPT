@@ -59,6 +59,7 @@ const ALLOWED_HOSTS = new Set([
   'api.fireworks.ai',
   'llm.chutes.ai',
   'opencode.ai',
+  'cloud.omniroute.online',
   'www.tikwm.com',
   'tikwm.com',
   'wttr.in',
@@ -140,10 +141,24 @@ function isBlockedInternalHost(hostname) {
 }
 
 function isAllowedCustomRouterUrl(parsedUrl) {
-  if (!parsedUrl || parsedUrl.protocol !== 'https:') return false;
+  if (!parsedUrl) return false;
+  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') return false;
   if (isBlockedInternalHost(parsedUrl.hostname)) return false;
   const cleanPath = String(parsedUrl.pathname || '').replace(/\/+$/, '').toLowerCase();
   return ALLOWED_ROUTER_PATH_SUFFIXES.some((suffix) => cleanPath.endsWith(suffix));
+}
+
+async function resolvesToPrivateAddress(hostname) {
+  const host = String(hostname || '').trim().toLowerCase();
+  if (isBlockedInternalHost(host)) return true;
+  if (ALLOWED_HOSTS.has(host)) return false;
+  try {
+    const records = await dns.promises.lookup(host, { all: true });
+    if (!Array.isArray(records) || records.length === 0) return false;
+    return records.some((rec) => isBlockedInternalHost(rec.address));
+  } catch {
+    return false;
+  }
 }
 
 const DEFAULT_UA =
@@ -332,22 +347,29 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Format targetUrl tidak valid.' });
   }
 
-  const isHostAllowed =
-    parsedUrl.protocol === 'https:' &&
-    (ALLOWED_HOSTS.has(parsedUrl.hostname) ||
-      (routerRelay && isAllowedCustomRouterUrl(parsedUrl)));
+  const isStandardAllowed =
+    parsedUrl.protocol === 'https:' && ALLOWED_HOSTS.has(parsedUrl.hostname);
+  const isCustomRouterAllowed =
+    routerRelay && isAllowedCustomRouterUrl(parsedUrl);
 
-  if (!isHostAllowed) {
-    if (routerRelay && parsedUrl.protocol === 'http:') {
+  if (!isStandardAllowed && !isCustomRouterAllowed) {
+    if (routerRelay && isBlockedInternalHost(parsedUrl.hostname)) {
       return res.status(400).json({
         ok: false,
         error:
-          'Endpoint HTTP lokal (seperti http://localhost:20128/v1) dipanggil langsung oleh browser Anda, bukan melalui server cloud.',
+          'Endpoint jaringan lokal (seperti http://localhost:20128/v1) harus dipanggil langsung dari browser perangkat Anda.',
       });
     }
     return res.status(403).json({
       ok: false,
       error: `Host tidak diizinkan oleh gateway NodataGPT: ${parsedUrl.hostname}`,
+    });
+  }
+
+  if (isCustomRouterAllowed && (await resolvesToPrivateAddress(parsedUrl.hostname))) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Host mengarah ke jaringan privat/lokal dan tidak dapat diproksi dari server cloud.',
     });
   }
 

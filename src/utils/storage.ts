@@ -144,6 +144,44 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
+    const storedRouterKey =
+      typeof parsed?.routerApiKey === 'string' ? parsed.routerApiKey : '';
+    const trimmedKey = storedRouterKey.trim().replace(/^Bearer\s+/i, '');
+    const looksLikeOmniKey =
+      /^sk-[a-f0-9]{10,24}-[a-f0-9]{4,10}-[a-f0-9]{6,12}$/i.test(trimmedKey) ||
+      /^sk-[a-z0-9]{8}$/i.test(trimmedKey) ||
+      /^(?:sk_omni|omniroute_|omni_)/i.test(trimmedKey);
+
+    let resolvedPreset: RouterPresetId = VALID_ROUTER_PRESETS.has(parsed?.routerPreset)
+      ? parsed.routerPreset
+      : DEFAULT_SETTINGS.routerPreset;
+    if (looksLikeOmniKey) {
+      resolvedPreset = 'omniroute';
+    }
+
+    const rawStoredBase =
+      typeof parsed?.routerBaseUrl === 'string' ? parsed.routerBaseUrl.trim() : '';
+    let resolvedBaseUrl = rawStoredBase || DEFAULT_SETTINGS.routerBaseUrl;
+
+    if (
+      resolvedBaseUrl === 'https://omniroute.dev/v1' ||
+      resolvedBaseUrl === 'https://omnirouter.li/v1'
+    ) {
+      resolvedBaseUrl = 'http://localhost:20128/v1';
+    } else if (
+      looksLikeOmniKey &&
+      resolvedBaseUrl === 'https://9router.com/v1'
+    ) {
+      resolvedBaseUrl = 'http://localhost:20128/v1';
+    } else if (
+      !parsed?.routerEnabled &&
+      !trimmedKey &&
+      resolvedPreset !== 'omniroute' &&
+      rawStoredBase === 'http://localhost:20128/v1'
+    ) {
+      resolvedBaseUrl = DEFAULT_SETTINGS.routerBaseUrl;
+    }
+
     return {
       selectedModelId:
         typeof parsed?.selectedModelId === 'string'
@@ -188,19 +226,9 @@ export function loadSettings(): AppSettings {
         typeof parsed?.routerEnabled === 'boolean'
           ? parsed.routerEnabled
           : DEFAULT_SETTINGS.routerEnabled,
-      routerPreset: VALID_ROUTER_PRESETS.has(parsed?.routerPreset)
-        ? parsed.routerPreset
-        : DEFAULT_SETTINGS.routerPreset,
-      routerBaseUrl:
-        typeof parsed?.routerBaseUrl === 'string' && parsed.routerBaseUrl.trim()
-          ? !parsed?.routerEnabled &&
-            !String(parsed?.routerApiKey || '').trim() &&
-            parsed.routerBaseUrl.trim() === 'http://localhost:20128/v1'
-            ? DEFAULT_SETTINGS.routerBaseUrl
-            : parsed.routerBaseUrl.trim()
-          : DEFAULT_SETTINGS.routerBaseUrl,
-      routerApiKey:
-        typeof parsed?.routerApiKey === 'string' ? parsed.routerApiKey : '',
+      routerPreset: resolvedPreset,
+      routerBaseUrl: resolvedBaseUrl,
+      routerApiKey: storedRouterKey,
       routerModel:
         typeof parsed?.routerModel === 'string' && parsed.routerModel.trim()
           ? parsed.routerModel.trim()

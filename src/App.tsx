@@ -3,7 +3,6 @@ import {
   ChevronDown,
   Download,
   Menu,
-  Plus,
   Settings,
   Shuffle,
 } from 'lucide-react';
@@ -973,7 +972,7 @@ export function App() {
                   <span className="text-[#FB923C]">GPT</span>
                 </span>
                 <span
-                  className={`max-w-[108px] truncate rounded-md border px-1.5 py-0.5 font-mono-code text-[11px] font-medium sm:max-w-[172px] ${
+                  className={`max-w-[94px] truncate rounded-md border px-1.5 py-0.5 font-mono-code text-[11px] font-medium sm:max-w-[172px] ${
                     imageMode
                       ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA]'
                       : 'border-white/10 bg-white/[0.06] text-[#F8FAFC]'
@@ -1002,21 +1001,10 @@ export function App() {
               onClick={() => setToolsStudioOpen(true)}
               aria-label="Buka Web Tools Studio"
               title="Web Tools Studio (Downloader, Video AI, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
-              className="hidden h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/45 hover:text-white sm:inline-flex cursor-pointer"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.05] px-2.5 text-xs font-semibold text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/10 hover:text-white sm:px-3 cursor-pointer"
             >
-              <ToolsIcon className="h-4 w-4 text-[#22D3EE]" />
+              <ToolsIcon className="h-[18px] w-[18px] shrink-0 text-[#22D3EE] sm:h-4 sm:w-4" />
               <span>Tools</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNewChat}
-              aria-label="Mulai percakapan baru"
-              title="Percakapan Baru (Ctrl+K)"
-              className="flex h-11 w-11 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white sm:w-auto sm:gap-1.5 sm:border sm:border-white/10 sm:bg-white/[0.04] sm:px-3 sm:text-xs sm:font-medium cursor-pointer"
-            >
-              <Plus className="h-5 w-5 text-[#22D3EE] sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Chat Baru</span>
             </button>
 
             {!isInstalled && (

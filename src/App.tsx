@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Blocks,
   ChevronDown,
   Download,
   Menu,
@@ -8,6 +7,7 @@ import {
   Settings,
   Shuffle,
 } from 'lucide-react';
+import { ToolsIcon } from './components/ToolsIcon';
 import { StarfieldBackground } from './components/StarfieldBackground';
 import { SplashScreen } from './components/SplashScreen';
 import { Sidebar } from './components/Sidebar';
@@ -603,19 +603,22 @@ export function App() {
       const clean = commandText.trim();
       if (!clean || isLoading) return;
 
+      const isWebTool = Boolean(detectWebToolCommand(clean));
+      const useImage = !isWebTool && parseImagePromptIntent(clean).isImageIntent;
+
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
         content: clean,
         createdAt: Date.now(),
-        isImageRequest: false,
+        isImageRequest: useImage,
       };
       const assistantPlaceholder: ChatMessage = {
         id: generateId(),
         role: 'assistant',
         content: '',
         status: 'waiting',
-        isImageRequest: false,
+        isImageRequest: useImage,
         createdAt: Date.now() + 1,
       };
 
@@ -653,7 +656,7 @@ export function App() {
         targetChatId: chatId,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: existingMessages,
-        asImage: false,
+        asImage: useImage,
         useDeepThink: false,
       });
     },
@@ -998,10 +1001,10 @@ export function App() {
               type="button"
               onClick={() => setToolsStudioOpen(true)}
               aria-label="Buka Web Tools Studio"
-              title="Web Tools Studio (Downloader, Video AI, TTS, BMKG, Berita)"
+              title="Web Tools Studio (Downloader, Video AI, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
               className="hidden h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-medium text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/45 hover:text-white sm:inline-flex cursor-pointer"
             >
-              <Blocks className="h-4 w-4 text-[#22D3EE]" />
+              <ToolsIcon className="h-4 w-4 text-[#22D3EE]" />
               <span>Tools</span>
             </button>
 

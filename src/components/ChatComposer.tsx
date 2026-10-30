@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUp,
-  Blocks,
   BrainCircuit,
   ChevronDown,
   FileText,
@@ -13,6 +12,7 @@ import {
   Square,
   X,
 } from 'lucide-react';
+import { ToolsIcon } from './ToolsIcon';
 import type { AIModelDefinition } from '../types/chat';
 import {
   AI_MODELS,
@@ -311,10 +311,10 @@ export function ChatComposer({
               <button
                 type="button"
                 onClick={onOpenToolsStudio}
-                title="Buka Web Tools Studio (TikTok, YouTube, Spotify, Text2Video, TTS, BMKG, Berita)"
+                title="Buka Web Tools Studio (TikTok, YouTube, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
                 className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-[#CBD5E1] transition-all hover:border-[#22D3EE]/50 hover:text-white cursor-pointer"
               >
-                <Blocks className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+                <ToolsIcon className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
                 <span>Tools</span>
               </button>
 

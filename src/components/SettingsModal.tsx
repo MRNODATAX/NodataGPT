@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Eye,
@@ -8,6 +8,7 @@ import {
   Network,
   Play,
   RefreshCw,
+  Search,
   Sparkles,
   Trash2,
   X,
@@ -15,8 +16,11 @@ import {
 import type { AppSettings, RouterPresetId } from '../types/chat';
 import { AI_MODELS } from '../services/modelCatalog';
 import {
+  ROUTER_MODEL_PREFIX,
   ROUTER_PRESETS,
   ROUTER_PRIMARY_MODEL_ID,
+  cleanRouterApiKey,
+  detectRouterProviderFromKey,
   discoverRouterModels,
   normalizeRouterBaseUrl,
 } from '../services/routerGateway';
@@ -43,15 +47,21 @@ export function SettingsModal({
   const [confirmClear, setConfirmClear] = useState(false);
   const [showRouterKey, setShowRouterKey] = useState(false);
   const [routerTesting, setRouterTesting] = useState(false);
+  const [routerModelSearch, setRouterModelSearch] = useState('');
   const [routerTestResult, setRouterTestResult] = useState<{
     ok: boolean;
     message: string;
   } | null>(null);
 
+  const latestSettingsRef = useRef(settings);
+  latestSettingsRef.current = settings;
+  const lastAutoSyncedSigRef = useRef('');
+
   useEffect(() => {
     if (!isOpen) {
       setConfirmClear(false);
       setRouterTestResult(null);
+      setRouterModelSearch('');
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,24 +71,148 @@ export function SettingsModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  // Automatic debounced model sync whenever user pastes/changes a router API key (`>= 12` chars)
+  useEffect(() => {
+    if (!isOpen) return;
+    const cleanKey = cleanRouterApiKey(settings.routerApiKey);
+    if (cleanKey.length < 12) return;
+
+    const keyCheck = detectRouterProviderFromKey(cleanKey);
+    if (keyCheck.warning) {
+      setRouterTestResult({ ok: false, message: keyCheck.warning });
+      return;
+    }
+
+    const sig = `${settings.routerPreset}|${settings.routerBaseUrl.trim()}|${cleanKey}`;
+    if (
+      lastAutoSyncedSigRef.current === sig &&
+      settings.routerDiscoveredModels.length > 0
+    ) {
+      return;
+    }
+
+    const abortCtrl = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setRouterTesting(true);
+      try {
+        const cur = latestSettingsRef.current;
+        const res = await discoverRouterModels({
+          baseUrl: cur.routerBaseUrl,
+          apiKey: cur.routerApiKey,
+          preset: cur.routerPreset,
+          signal: abortCtrl.signal,
+        });
+        if (abortCtrl.signal.aborted) return;
+        lastAutoSyncedSigRef.current = `${res.detectedPreset || cur.routerPreset}|${res.normalizedBaseUrl}|${cleanRouterApiKey(cur.routerApiKey)}`;
+
+        if (res.ok) {
+          const latest = latestSettingsRef.current;
+          const curModel = latest.routerModel.trim();
+          const nextModel =
+            res.models.length > 0
+              ? curModel && res.models.includes(curModel)
+                ? curModel
+                : res.models[0]
+              : curModel || ROUTER_PRESETS[latest.routerPreset].defaultModel;
+          const nextImgModel =
+            res.imageModels &&
+            res.imageModels.length > 0 &&
+            (!latest.routerImageModel.trim() ||
+              !res.imageModels.includes(latest.routerImageModel.trim()))
+              ? res.imageModels[0]
+              : latest.routerImageModel;
+
+          const staleRouterSel =
+            latest.selectedModelId.startsWith(ROUTER_MODEL_PREFIX) &&
+            res.models.length > 0 &&
+            !res.models.includes(
+              latest.selectedModelId.slice(ROUTER_MODEL_PREFIX.length)
+            );
+
+          onUpdateSettings({
+            ...latest,
+            routerEnabled: true,
+            routerPreset: res.detectedPreset || latest.routerPreset,
+            routerBaseUrl: res.normalizedBaseUrl,
+            routerModel: nextModel,
+            routerImageModel: nextImgModel,
+            routerDiscoveredModels: res.models,
+            selectedModelId:
+              latest.selectedModelId === 'auto' || staleRouterSel
+                ? ROUTER_PRIMARY_MODEL_ID
+                : latest.selectedModelId,
+          });
+          setRouterTestResult({
+            ok: true,
+            message: [
+              res.models.length > 0
+                ? `Terhubung ke ${res.detectedProviderName || res.normalizedBaseUrl} (${res.latencyMs} ms · ${res.usedRelay ? 'Cloud Relay' : 'Langsung Browser'}). Tersinkron ${res.models.length} model sesuai kunci Anda (aktif: ${nextModel}).`
+                : `Terhubung ke ${res.normalizedBaseUrl} (${res.latencyMs} ms).`,
+              res.keyNote || '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+          });
+        } else {
+          setRouterTestResult({
+            ok: false,
+            message: res.error || 'Gagal menyinkronkan model dari kunci API ini.',
+          });
+        }
+      } catch {
+        // Ignore aborted background sync
+      } finally {
+        if (!abortCtrl.signal.aborted) {
+          setRouterTesting(false);
+        }
+      }
+    }, 850);
+
+    return () => {
+      window.clearTimeout(timer);
+      abortCtrl.abort();
+    };
+  }, [
+    isOpen,
+    settings.routerApiKey,
+    settings.routerBaseUrl,
+    settings.routerPreset,
+    settings.routerDiscoveredModels.length,
+    onUpdateSettings,
+  ]);
 
   const activePreset = ROUTER_PRESETS[settings.routerPreset] || ROUTER_PRESETS['9router'];
-  const combinedModelChips = Array.from(
-    new Set([
-      ...(settings.routerDiscoveredModels || []).slice(0, 16),
-      ...activePreset.suggestedModels,
-    ])
-  ).slice(0, 18);
+  const discoveredCount = settings.routerDiscoveredModels.length;
+
+  const combinedModelChips = useMemo(() => {
+    const sourceList =
+      discoveredCount > 0
+        ? settings.routerDiscoveredModels
+        : activePreset.suggestedModels;
+    const q = routerModelSearch.trim().toLowerCase();
+    const filtered = q
+      ? sourceList.filter((m) => m.toLowerCase().includes(q))
+      : sourceList;
+    return filtered.slice(0, 80);
+  }, [
+    discoveredCount,
+    settings.routerDiscoveredModels,
+    activePreset.suggestedModels,
+    routerModelSearch,
+  ]);
+
+  if (!isOpen) return null;
 
   const handleSelectRouterPreset = (presetId: RouterPresetId) => {
     const preset = ROUTER_PRESETS[presetId];
     setRouterTestResult(null);
+    setRouterModelSearch('');
     onUpdateSettings({
       ...settings,
       routerPreset: presetId,
       routerBaseUrl: preset.defaultBaseUrl,
       routerModel: preset.defaultModel,
+      routerDiscoveredModels: [],
     });
   };
 
@@ -93,27 +227,53 @@ export function SettingsModal({
       });
 
       if (res.ok) {
+        const curModel = settings.routerModel.trim();
         const nextModel =
-          settings.routerModel.trim() ||
-          res.models[0] ||
-          activePreset.defaultModel;
+          res.models.length > 0
+            ? curModel && res.models.includes(curModel)
+              ? curModel
+              : res.models[0]
+            : curModel || activePreset.defaultModel;
+        const nextImgModel =
+          res.imageModels &&
+          res.imageModels.length > 0 &&
+          (!settings.routerImageModel.trim() ||
+            !res.imageModels.includes(settings.routerImageModel.trim()))
+            ? res.imageModels[0]
+            : settings.routerImageModel;
+
+        const staleRouterSel =
+          settings.selectedModelId.startsWith(ROUTER_MODEL_PREFIX) &&
+          res.models.length > 0 &&
+          !res.models.includes(
+            settings.selectedModelId.slice(ROUTER_MODEL_PREFIX.length)
+          );
+
+        lastAutoSyncedSigRef.current = `${res.detectedPreset || settings.routerPreset}|${res.normalizedBaseUrl}|${cleanRouterApiKey(settings.routerApiKey)}`;
+
         onUpdateSettings({
           ...settings,
           routerEnabled: true,
+          routerPreset: res.detectedPreset || settings.routerPreset,
           routerBaseUrl: res.normalizedBaseUrl,
           routerModel: nextModel,
+          routerImageModel: nextImgModel,
           routerDiscoveredModels: res.models,
           selectedModelId:
-            settings.selectedModelId === 'auto'
+            settings.selectedModelId === 'auto' || staleRouterSel
               ? ROUTER_PRIMARY_MODEL_ID
               : settings.selectedModelId,
         });
         setRouterTestResult({
           ok: true,
-          message:
+          message: [
             res.models.length > 0
-              ? `Terhubung (${res.latencyMs} ms · ${res.usedRelay ? 'Cloud Relay' : 'Langsung Browser'}). Ditemukan ${res.models.length} model/combo aktif!`
+              ? `Terhubung ke ${res.detectedProviderName || res.normalizedBaseUrl} (${res.latencyMs} ms · ${res.usedRelay ? 'Cloud Relay' : 'Langsung Browser'}). Ditemukan ${res.models.length} model sesuai kunci Anda!`
               : `Terhubung ke ${res.normalizedBaseUrl} (${res.latencyMs} ms). Gateway siap digunakan.`,
+            res.keyNote || '',
+          ]
+            .filter(Boolean)
+            .join(' '),
         });
       } else {
         setRouterTestResult({
@@ -515,6 +675,7 @@ export function SettingsModal({
                       onUpdateSettings({
                         ...settings,
                         routerBaseUrl: chip.url,
+                        routerDiscoveredModels: [],
                       });
                     }}
                     className={`rounded-lg border px-2 py-1 font-mono-code text-[10.5px] transition-colors cursor-pointer ${
@@ -541,12 +702,14 @@ export function SettingsModal({
                 id="router-base-url-input"
                 type="url"
                 value={settings.routerBaseUrl}
-                onChange={(e) =>
+                onChange={(e) => {
+                  setRouterTestResult(null);
                   onUpdateSettings({
                     ...settings,
                     routerBaseUrl: e.target.value,
-                  })
-                }
+                    routerDiscoveredModels: [],
+                  });
+                }}
                 onBlur={() =>
                   onUpdateSettings({
                     ...settings,
@@ -567,7 +730,7 @@ export function SettingsModal({
                 htmlFor="router-api-key-input"
                 className="mb-1 block text-xs font-medium text-[#CBD5E1]"
               >
-                API Key {activePreset.name} (Bearer Token)
+                API Key {activePreset.name} (Auto-Deteksi Penyedia &amp; Sinkron Model)
               </label>
               <div className="relative">
                 <input
@@ -575,13 +738,53 @@ export function SettingsModal({
                   type={showRouterKey ? 'text' : 'password'}
                   value={settings.routerApiKey}
                   onChange={(e) => {
-                    const nextKey = e.target.value;
+                    const rawNextKey = e.target.value;
+                    const detected = detectRouterProviderFromKey(rawNextKey);
+                    setRouterTestResult(
+                      detected.warning
+                        ? { ok: false, message: detected.warning }
+                        : null
+                    );
+
+                    // If user pasted a tokenized URL straight into the key box
+                    if (detected.detected && detected.extractedKey === '' && detected.baseUrl) {
+                      onUpdateSettings({
+                        ...settings,
+                        routerPreset: detected.preset || settings.routerPreset,
+                        routerBaseUrl: detected.baseUrl,
+                        routerApiKey: '',
+                        routerEnabled: true,
+                        routerDiscoveredModels: [],
+                      });
+                      return;
+                    }
+
+                    const nextPreset = detected.preset || settings.routerPreset;
+                    const nextBaseUrl = detected.baseUrl || settings.routerBaseUrl;
+                    const nextDefaultModel =
+                      detected.defaultModel && settings.routerPreset !== nextPreset
+                        ? detected.defaultModel
+                        : settings.routerModel;
+
                     onUpdateSettings({
                       ...settings,
-                      routerApiKey: nextKey,
+                      routerPreset: nextPreset,
+                      routerBaseUrl: nextBaseUrl,
+                      routerModel: nextDefaultModel,
+                      routerApiKey: rawNextKey,
+                      routerDiscoveredModels: [],
                       routerEnabled:
-                        nextKey.trim().length > 0 ? true : settings.routerEnabled,
+                        rawNextKey.trim().length > 0 ? true : settings.routerEnabled,
                     });
+                  }}
+                  onBlur={() => {
+                    const cleaned = cleanRouterApiKey(settings.routerApiKey);
+                    if (cleaned !== settings.routerApiKey) {
+                      onUpdateSettings({
+                        ...settings,
+                        routerApiKey: cleaned,
+                      });
+                    }
                   }}
                   placeholder={activePreset.keyPlaceholder}
                   className="h-9 w-full rounded-lg border border-white/12 bg-black/60 pr-10 pl-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
@@ -603,12 +806,19 @@ export function SettingsModal({
 
             {/* Active Router Chat Model / Combo */}
             <div>
-              <label
-                htmlFor="router-model-input"
-                className="mb-1 block text-xs font-medium text-[#CBD5E1]"
-              >
-                Model / Combo Utama (contoh: <code className="font-mono-code text-[#67E8F9]">auto</code>, <code className="font-mono-code text-[#67E8F9]">auto/coding</code>, <code className="font-mono-code text-[#FDBA74]">cc/claude-opus-4-7</code>)
-              </label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label
+                  htmlFor="router-model-input"
+                  className="block text-xs font-medium text-[#CBD5E1]"
+                >
+                  Model / Combo Aktif ({discoveredCount > 0 ? `${discoveredCount} dari API Key Anda` : 'Contoh Preset'})
+                </label>
+                {discoveredCount > 0 && (
+                  <span className="font-mono-code text-[10px] text-[#67E8F9]">
+                    100% Sesuai API Key
+                  </span>
+                )}
+              </div>
               <input
                 id="router-model-input"
                 type="text"
@@ -623,9 +833,23 @@ export function SettingsModal({
                 className="h-9 w-full rounded-lg border border-white/12 bg-black/60 px-3 font-mono-code text-xs text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
               />
 
-              {/* Suggested + Discovered Model Chips */}
+              {/* Instant Search Filter when API Key has > 8 models */}
+              {discoveredCount > 8 && (
+                <div className="relative mt-2">
+                  <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[#94A3B8]" />
+                  <input
+                    type="search"
+                    value={routerModelSearch}
+                    onChange={(e) => setRouterModelSearch(e.target.value)}
+                    placeholder={`Cari dari ${discoveredCount} model yang tersedia di API Key Anda...`}
+                    className="h-8 w-full rounded-lg border border-white/10 bg-black/50 pr-2.5 pl-8 font-mono-code text-[11px] text-white placeholder-[#64748B] focus:border-[#22D3EE] focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Strictly Key-Scoped Discovered Model Chips (or examples only before sync) */}
               {combinedModelChips.length > 0 && (
-                <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+                <div className="mt-2 flex max-h-32 flex-wrap gap-1 overflow-y-auto">
                   {combinedModelChips.map((modelId) => {
                     const selected = settings.routerModel.trim() === modelId;
                     return (

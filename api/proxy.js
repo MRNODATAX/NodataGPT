@@ -41,13 +41,50 @@ const ALLOWED_HOSTS = new Set([
   'www.omniroute.dev',
   'omnirouter.li',
   'openrouter.ai',
+  'us.openrouter.ai',
+  'eu.openrouter.ai',
   'api.deepseek.com',
   'generativelanguage.googleapis.com',
+  'api.groq.com',
+  'integrate.api.nvidia.com',
+  'api.cerebras.ai',
+  'api.anthropic.com',
+  'api.openai.com',
+  'api.x.ai',
+  'api.perplexity.ai',
+  'api.mistral.ai',
+  'api.together.xyz',
+  'api.siliconflow.cn',
+  'api.siliconflow.com',
+  'api.fireworks.ai',
+  'llm.chutes.ai',
+  'opencode.ai',
+  'www.tikwm.com',
+  'tikwm.com',
+  'wttr.in',
+  'api.myquran.com',
+  'open.er-api.com',
+  'api.gold-api.com',
+  'api.coingecko.com',
+  'query1.finance.yahoo.com',
+  'query2.finance.yahoo.com',
+  'zenquotes.io',
+  'starlabs.biz.id',
+  'uguu.se',
+  'h.uguu.se',
+  'litterbox.catbox.moe',
+  'files.catbox.moe',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [
   '/models',
+  '/models/user',
+  '/models/web',
+  '/model/info',
+  '/auth/key',
+  '/key',
   '/chat/completions',
+  '/completions',
   '/responses',
   '/messages',
   '/images/generations',
@@ -196,6 +233,83 @@ export default async function handler(req, res) {
     } catch {
       return res.status(400).json({ ok: false, error: 'Payload JSON tidak valid.' });
     }
+  }
+
+  if (payload?.action === 'uploadImage') {
+    const rawBase64 = typeof payload.base64 === 'string' ? payload.base64.trim() : '';
+    const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '');
+    if (!cleanBase64 || cleanBase64.length < 32) {
+      return res.status(400).json({ ok: false, error: 'Data gambar base64 tidak valid.' });
+    }
+    const buf = Buffer.from(cleanBase64, 'base64');
+    if (buf.byteLength < 64 || buf.byteLength > 4 * 1024 * 1024) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Ukuran gambar maksimal 4 MB untuk unggahan sementara.',
+      });
+    }
+
+    const mimeType =
+      typeof payload.mimeType === 'string' && /^image\/(png|jpe?g|webp|gif)$/i.test(payload.mimeType)
+        ? payload.mimeType.toLowerCase()
+        : 'image/jpeg';
+    const ext = mimeType.includes('png')
+      ? 'png'
+      : mimeType.includes('webp')
+        ? 'webp'
+        : mimeType.includes('gif')
+          ? 'gif'
+          : 'jpg';
+    const safeName = `nodatagpt-${Date.now()}.${ext}`;
+    const blob = new Blob([buf], { type: mimeType });
+
+    // Primary uploader: uguu.se (verified temporary public URL)
+    try {
+      const fd1 = new FormData();
+      fd1.append('files[]', blob, safeName);
+      const up1 = await fetch('https://uguu.se/upload?output=text', {
+        method: 'POST',
+        headers: { 'User-Agent': DEFAULT_UA },
+        body: fd1,
+        signal: AbortSignal.timeout(22000),
+      });
+      if (up1.ok) {
+        const txt1 = (await up1.text()).trim();
+        const firstLine = txt1.split(/\s+/)[0] || '';
+        if (/^https:\/\/\S+/i.test(firstLine)) {
+          return res.status(200).json({ ok: true, url: firstLine, provider: 'uguu.se' });
+        }
+      }
+    } catch {
+      // Fall through to Litterbox backup
+    }
+
+    // Fallback uploader: Litterbox 1h temporary storage
+    try {
+      const fd2 = new FormData();
+      fd2.append('reqtype', 'fileupload');
+      fd2.append('time', '1h');
+      fd2.append('fileToUpload', blob, safeName);
+      const up2 = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+        method: 'POST',
+        headers: { 'User-Agent': DEFAULT_UA },
+        body: fd2,
+        signal: AbortSignal.timeout(22000),
+      });
+      if (up2.ok) {
+        const txt2 = (await up2.text()).trim();
+        if (/^https:\/\/\S+/i.test(txt2)) {
+          return res.status(200).json({ ok: true, url: txt2, provider: 'litterbox' });
+        }
+      }
+    } catch {
+      // Fall through
+    }
+
+    return res.status(502).json({
+      ok: false,
+      error: 'Gagal mengunggah gambar sementara ke server publik. Coba gunakan tautan gambar langsung.',
+    });
   }
 
   const targetUrl = typeof payload?.targetUrl === 'string' ? payload.targetUrl.trim() : '';

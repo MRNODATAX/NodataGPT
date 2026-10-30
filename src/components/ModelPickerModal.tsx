@@ -87,12 +87,14 @@ export function ModelPickerModal({
   const [activeImageCategory, setActiveImageCategory] = useState<
     'all' | ImageModelCategory
   >('all');
+  const [showAllModels, setShowAllModels] = useState(false);
   const [, setRefreshTick] = useState(0);
 
   useEffect(() => {
     if (!isOpen) return;
     setActiveTab(initialTab);
     setQuery('');
+    setShowAllModels(false);
   }, [isOpen, initialTab]);
 
   useEffect(() => {
@@ -179,6 +181,13 @@ export function ModelPickerModal({
     return true;
   };
 
+  const totalChatModelCount =
+    AI_MODELS.length + (settings.routerEnabled ? dynamicRouterModels.length : 0);
+  const visibleChatModels =
+    showAllModels || query.trim().length > 0
+      ? filteredChatModels
+      : filteredChatModels.slice(0, 100);
+
   return (
     <div
       role="dialog"
@@ -202,12 +211,14 @@ export function ModelPickerModal({
               className="font-display text-base font-bold text-white sm:text-lg"
             >
               {activeTab === 'chat'
-                ? `Pilih Model Chat AI (${AI_MODELS.length} Jalur)`
+                ? `Pilih Model Chat AI (${totalChatModelCount} Jalur)`
                 : `Pilih Model Gambar AI (${IMAGE_MODELS.length} Jalur)`}
             </h2>
             <p className="text-xs text-[#94A3B8]">
               {activeTab === 'chat'
-                ? 'Pilih spesifik atau gunakan router pintar otomatis'
+                ? settings.routerEnabled && settings.routerDiscoveredModels.length > 0
+                  ? `${settings.routerDiscoveredModels.length} model kunci AI Router Anda aktif + ${AI_MODELS.length - 2} model bawaan`
+                  : 'Pilih spesifik atau gunakan router pintar otomatis'
                 : 'Pilih mesin gambar favorit dengan Auto-Fallback ke mesin lain bila sibuk'}
             </p>
           </div>
@@ -243,7 +254,7 @@ export function ModelPickerModal({
               }`}
             >
               <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Model Chat ({AI_MODELS.length - 1})</span>
+              <span className="truncate">Model Chat ({totalChatModelCount - 1})</span>
             </button>
 
             <button
@@ -425,7 +436,9 @@ export function ModelPickerModal({
         {/* Scrollable Model List */}
         <div className="pb-safe flex-1 space-y-1.5 overflow-y-auto p-3 sm:p-4">
           {activeTab === 'chat'
-            ? filteredChatModels.map((model) => {
+            ? (
+              <>
+                {visibleChatModels.map((model) => {
                 const isSelected = settings.selectedModelId === model.id;
                 const cooling = isModelCoolingDown(model.id);
                 const remainSec = cooling ? getModelCooldownRemainingSec(model.id) : 0;
@@ -491,7 +504,21 @@ export function ModelPickerModal({
                     </div>
                   </button>
                 );
-              })
+              })}
+              {!showAllModels &&
+                query.trim().length === 0 &&
+                filteredChatModels.length > visibleChatModels.length && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllModels(true)}
+                    className="mt-1 flex w-full items-center justify-center rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/10 py-2.5 text-xs font-semibold text-[#67E8F9] hover:bg-[#22D3EE]/20 cursor-pointer"
+                  >
+                    Tampilkan semua {filteredChatModels.length} model (+
+                    {filteredChatModels.length - visibleChatModels.length} lainnya)
+                  </button>
+                )}
+              </>
+            )
             : filteredImageModels.map((imgModel) => {
                 const isSelected = settings.selectedImageModelId === imgModel.id;
                 const cooling = isImageEngineCoolingDown(imgModel.id);

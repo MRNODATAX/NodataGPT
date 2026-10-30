@@ -290,10 +290,10 @@ export const AI_MODELS: AIModelDefinition[] = [
     id: 'llm7',
     name: 'GPT-4o / Codestral Router',
     shortName: 'LLM7 Fast',
-    provider: 'LLM7 OpenAI API',
-    priority: 1,
+    provider: 'Multi-Mirror OpenAI Router',
+    priority: 9,
     category: 'utama',
-    description: 'Endpoint OpenAI-compatible latensi ~1.5 dtk tanpa kunci untuk diskusi dan kode.',
+    description: 'Jalur OpenAI-compatible multi-mirror dengan auto-fallback otomatis ke Snow & Synox GPT-4o.',
     maxPromptChars: 4500,
     timeoutMs: 26000,
     accent: 'cyan',
@@ -579,21 +579,22 @@ export const AI_MODELS: AIModelDefinition[] = [
 ];
 
 export const DEFAULT_FALLBACK_ORDER: string[] = [
-  'llm7',
   'snow-openai',
-  'snow-gpt54-mini',
   'synox-gpt4o',
+  'snow-gpt54-mini',
   'synox-qwen80b',
+  'bintang-llama4',
+  'synox-llama4',
+  'nexray-overchat',
+  'snow-claude-haiku',
   'snow-aicode',
   'snow-mistral-2603',
-  'bintang-llama4',
-  'snow-claude-haiku',
   'snow-gpt54-nano',
-  'claude',
-  'nexray-overchat',
-  'synox-llama4',
-  'synox-gpt5nano',
+  'stenly',
   'varhad-unlimited',
+  'varhad-deepai',
+  'claude',
+  'synox-gpt5nano',
   'varhad-claude',
   'gemini',
   'chatgpt',
@@ -601,21 +602,21 @@ export const DEFAULT_FALLBACK_ORDER: string[] = [
   'deepseek',
   'snow-felo',
   'synox-unlimited',
+  'synox-nova',
   'gpt5',
-  'varhad-deepai',
   'qwen3',
   'llama4',
+  'comiku-overchat',
+  'comiku-deepai',
+  'honcho',
+  'wormgpt',
+  'rin-aicostum',
   'rin-chatgpt',
   'rin-qwen',
-  'rin-aicostum',
-  'comiku-overchat',
-  'honcho',
-  'stenly',
-  'wormgpt',
   'rin-claude',
   'bintang-deepv4',
   'bintang-deepv3',
-  'comiku-deepai',
+  'llm7',
 ];
 
 export interface ImageEngineDefinition {
@@ -661,7 +662,58 @@ function resolveStableDiffDimensions(ratio = '1:1'): { width: number; height: nu
   }
 }
 
+function resolvePollinationsDimensions(ratio = '1:1'): { width: number; height: number } {
+  switch (ratio) {
+    case '16:9':
+    case '21:9':
+      return { width: 1280, height: 720 };
+    case '9:16':
+      return { width: 720, height: 1280 };
+    case '4:5':
+    case '2:3':
+      return { width: 832, height: 1088 };
+    case '3:2':
+      return { width: 1088, height: 832 };
+    default:
+      return { width: 1024, height: 1024 };
+  }
+}
+
+function mapGrokRatio(ratio = '1:1'): string {
+  switch (ratio) {
+    case '16:9':
+    case '21:9':
+      return '16:9';
+    case '9:16':
+      return '9:16';
+    case '4:5':
+    case '2:3':
+      return '3:4';
+    case '3:2':
+      return '4:3';
+    default:
+      return '1:1';
+  }
+}
+
 export const IMAGE_ENGINES: ImageEngineDefinition[] = [
+  {
+    id: 'pollinations-flux',
+    name: 'Pollinations Flux Instant',
+    shortName: 'Pollinations Flux',
+    provider: 'Pollinations AI',
+    category: 'cepat',
+    badge: 'Instan ~0.6s',
+    description:
+      'Mesin Flux berkecepatan super tinggi (~0.6 dtk) bebas watermark dengan dukungan multi-rasio otomatis.',
+    delivery: 'gateway',
+    buildUrl: (prompt, ratio = '1:1') => {
+      const dims = resolvePollinationsDimensions(ratio);
+      const seed = Math.floor(Math.random() * 900000) + 100000;
+      return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${dims.width}&height=${dims.height}&nologo=true&seed=${seed}`;
+    },
+    timeoutMs: 26000,
+  },
   {
     id: 'nexray-magicstudio',
     name: 'MagicStudio HD · Nexray',
@@ -674,6 +726,36 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
     buildUrl: (prompt) =>
       `https://api.nexray.eu.cc/ai/magicstudio?prompt=${encodeURIComponent(prompt)}`,
     timeoutMs: 28000,
+  },
+  {
+    id: 'bintang-grok',
+    name: 'Grok Imagine 2K · Bintang',
+    shortName: 'Bintang Grok 2K',
+    provider: 'BintangAPI',
+    category: 'desain',
+    badge: '2K + Multi-Rasio',
+    description:
+      'Mesin RenderForest Grok Text-to-Image resolusi 2K tajam dengan dukungan rasio 1:1, 16:9, 9:16, 4:3, & 3:4.',
+    delivery: 'hybrid-json',
+    buildUrl: (prompt, ratio = '1:1') => {
+      const grokRatio = mapGrokRatio(ratio);
+      return `https://bintangapi.my.id/api/aiimg/grok?prompt=${encodeURIComponent(prompt)}&ratio=${encodeURIComponent(grokRatio)}&resolution=2K`;
+    },
+    timeoutMs: 42000,
+  },
+  {
+    id: 'bintang-zimage',
+    name: 'Z-Image Photoreal · Bintang',
+    shortName: 'Bintang Z-Image',
+    provider: 'BintangAPI',
+    category: 'artistik',
+    badge: 'Fotorealistik HD',
+    description:
+      'Mesin Z-Image berdetail tinggi untuk potret realistis, lanskap sinematik, dan konsep karakter.',
+    delivery: 'hybrid-json',
+    buildUrl: (prompt) =>
+      `https://bintangapi.my.id/api/aiimg/zimage?prompt=${encodeURIComponent(prompt)}`,
+    timeoutMs: 44000,
   },
   {
     id: 'nexray-flux-v1',
@@ -856,6 +938,8 @@ export function buildDynamicRouterModelDefinitions(
   settings: AppSettings
 ): AIModelDefinition[] {
   const providerLabel = getRouterDisplayLabel(settings);
+  const discoveredList = settings.routerDiscoveredModels || [];
+  const hasDiscovered = discoveredList.length > 0;
   const presetSuggestions =
     ROUTER_PRESETS[settings.routerPreset]?.suggestedModels || [];
 
@@ -869,22 +953,36 @@ export function buildDynamicRouterModelDefinitions(
     uniqueModelNames.push(clean);
   };
 
-  if (settings.routerModel?.trim()) {
-    pushUnique(settings.routerModel);
-  }
-  for (const m of settings.routerDiscoveredModels || []) {
-    pushUnique(m);
-  }
-  for (const s of presetSuggestions) {
-    pushUnique(s);
+  if (hasDiscovered) {
+    // Strictly show ONLY the real models discovered from the user's API key
+    // (plus `routerModel` only if the user manually entered a custom alias that isn't a stale preset default)
+    const configured = (settings.routerModel || '').trim();
+    const stalePresetDefaults = new Set([
+      'cc/claude-opus-4-7',
+      'openrouter/auto',
+      'auto',
+      'gpt-4o-mini',
+      'llama-3.3-70b-versatile',
+    ]);
+    if (configured && (discoveredList.includes(configured) || !stalePresetDefaults.has(configured))) {
+      pushUnique(configured);
+    }
+    for (const m of discoveredList) {
+      pushUnique(m);
+    }
+  } else {
+    if (settings.routerModel?.trim()) {
+      pushUnique(settings.routerModel);
+    }
+    for (const s of presetSuggestions) {
+      pushUnique(s);
+    }
   }
 
-  return uniqueModelNames.slice(0, 60).map((modelId) => {
+  return uniqueModelNames.slice(0, 500).map((modelId) => {
     const shortLabel =
-      modelId.length > 20 ? `${modelId.slice(0, 19)}…` : modelId;
-    const isFromDiscovery = (settings.routerDiscoveredModels || []).includes(
-      modelId
-    );
+      modelId.length > 22 ? `${modelId.slice(0, 21)}…` : modelId;
+    const isFromDiscovery = discoveredList.includes(modelId);
     return {
       id: `${ROUTER_MODEL_PREFIX}${modelId}`,
       name: `${modelId} (${providerLabel})`,
@@ -893,12 +991,12 @@ export function buildDynamicRouterModelDefinitions(
       priority: 0,
       category: 'router',
       description: isFromDiscovery
-        ? `Model / kombo aktif yang ditemukan langsung dari endpoint /v1/models pada ${providerLabel}.`
-        : `Preset model / kombo pintar ${providerLabel} melalui /v1/chat/completions.`,
+        ? `Model aktif terverifikasi langsung dari API Key Anda pada ${providerLabel}.`
+        : `Contoh model / combo ${providerLabel} (klik Tes Koneksi di Pengaturan untuk memuat daftar model asli kunci Anda).`,
       maxPromptChars: 12000,
       timeoutMs: 42000,
       requiresKey: 'router',
-      accent: modelId.startsWith('auto') ? 'dual' : 'cyan',
+      accent: modelId.startsWith('auto') || modelId.endsWith(':free') ? 'dual' : 'cyan',
     };
   });
 }

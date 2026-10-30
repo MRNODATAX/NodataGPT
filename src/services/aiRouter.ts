@@ -63,13 +63,13 @@ const DEEPTHINK_ORDER = [
   'varhad-claude',
   'snow-aicode',
   'claude',
-  'llm7',
-  'honcho',
-  'qwen3',
-  'rin-qwen',
   'bintang-llama4',
   'nexray-overchat',
   'stenly',
+  'honcho',
+  'qwen3',
+  'rin-qwen',
+  'llm7',
 ];
 
 interface CircuitEntry {
@@ -845,7 +845,6 @@ export function buildModelRequests(
     buildContextualUserText(rawPrompt, history, settings, 2200)
   );
   const fullSystemPersona = buildSystemPersona(settings, 'full');
-  const llm7Messages = buildChatMessagesPayload(rawPrompt, history, settings, 4500);
   const synoxSession = 'nodatagpt-web';
 
   switch (model.id) {
@@ -865,15 +864,8 @@ export function buildModelRequests(
           timeoutMs: 16000,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?text=${q}&apikey=FREE`,
@@ -916,20 +908,12 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: `https://apiii-xrina.my.id/ai/chatgpt?text=${q}`,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
           timeoutMs: 18000,
-          clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -995,15 +979,8 @@ export function buildModelRequests(
           timeoutMs: t,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'mistral-Nemo-Instruct-2407',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
 
@@ -1038,13 +1015,7 @@ export function buildModelRequests(
           timeoutMs: t,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'codestral-latest',
-            messages: llm7Messages,
-          }),
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: 22000,
           clientFirst: true,
         },
@@ -1067,14 +1038,8 @@ export function buildModelRequests(
             timeoutMs: 18000,
           },
           {
-            targetUrl: 'https://api.llm7.io/v1/chat/completions',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'default',
-              messages: llm7Messages,
-            }),
-            timeoutMs: 20000,
+            targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+            timeoutMs: 19000,
             clientFirst: true,
           },
         ];
@@ -1094,15 +1059,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -1124,15 +1082,8 @@ export function buildModelRequests(
           timeoutMs: 16000,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -1182,15 +1133,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -1250,18 +1194,16 @@ export function buildModelRequests(
       ];
 
     case 'synox-coder':
-      // If user asks conversational/identity questions, prioritize Codestral with full persona;
-      // otherwise run Synox GLM-5 multi-file AI Coder (POST) first with Codestral fallback
+      // If user asks conversational/identity questions, prioritize AI Code / Qwen3 with full persona;
+      // otherwise run Synox GLM-5 multi-file AI Coder (POST) first with Qwen3 Coder fallback
       if (/\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu)|nama\s+kamu)\b/i.test(rawPrompt)) {
         return [
           {
-            targetUrl: 'https://api.llm7.io/v1/chat/completions',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'codestral-latest',
-              messages: llm7Messages,
-            }),
+            targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+            timeoutMs: 20000,
+          },
+          {
+            targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
             timeoutMs: 22000,
             clientFirst: true,
           },
@@ -1281,15 +1223,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'codestral-latest',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: 20000,
         },
         {
           targetUrl: `https://www.stenly.org/api/ai/qwen3?text=${q}`,
@@ -1310,14 +1245,8 @@ export function buildModelRequests(
             timeoutMs: 18000,
           },
           {
-            targetUrl: 'https://api.llm7.io/v1/chat/completions',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'default',
-              messages: llm7Messages,
-            }),
-            timeoutMs: 20000,
+            targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+            timeoutMs: 19000,
             clientFirst: true,
           },
         ];
@@ -1339,17 +1268,6 @@ export function buildModelRequests(
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/algolia?text=${contextualUser}&system=${mediumPersona}&apikey=FREE`,
           timeoutMs: 22000,
-          clientFirst: true,
-        },
-        {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
           clientFirst: true,
         },
       ];
@@ -1391,15 +1309,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -1416,58 +1327,25 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
     case 'llm7': {
-      const messages = buildChatMessagesPayload(
-        rawPrompt,
-        history,
-        settings,
-        model.maxPromptChars
-      );
       return [
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages,
-          }),
-          timeoutMs: t,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 19000,
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
-        },
-        {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'mistral-Nemo-Instruct-2407',
-            messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 19000,
         },
       ];
     }
@@ -1528,20 +1406,13 @@ export function buildModelRequests(
           timeoutMs: t,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages: llm7Messages,
-          }),
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: 22000,
           clientFirst: true,
         },
         {
-          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
-          timeoutMs: 22000,
-          clientFirst: true,
+          targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
+          timeoutMs: 20000,
         },
       ];
 
@@ -1584,15 +1455,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'codestral-latest',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: 20000,
         },
       ];
 
@@ -1617,15 +1481,8 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 20000,
-          clientFirst: true,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
         },
       ];
 
@@ -1736,19 +1593,13 @@ export function buildModelRequests(
           timeoutMs: 9000,
         },
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'nemotron-3-nano:30b',
-            messages: llm7Messages,
-          }),
-          timeoutMs: 22000,
-          clientFirst: true,
-        },
-        {
           targetUrl: `https://api-xemoz-official.my.id/api/ai/deepseek-v3.2-thinking.php?pesan=${compactQ}`,
           timeoutMs: 22000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
         },
       ];
 
@@ -1841,14 +1692,13 @@ export function buildModelRequests(
     default:
       return [
         {
-          targetUrl: 'https://api.llm7.io/v1/chat/completions',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'default',
-            messages: buildChatMessagesPayload(rawPrompt, history, settings, 4000),
-          }),
-          timeoutMs: 22000,
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
         },
       ];
   }
@@ -2355,6 +2205,11 @@ export function detectSpecializedImageTool(rawPrompt: string): SpecializedImageT
           url: `https://api.snowping.cfd/api/imagehd/removebghd?url=${encodeURIComponent(imgUrl)}`,
         },
         {
+          id: 'nexray-removebg',
+          name: 'Nexray RemoveBG PNG',
+          url: `https://api.nexray.eu.cc/tools/removebg?url=${encodeURIComponent(imgUrl)}`,
+        },
+        {
           id: 'snow-removebg',
           name: 'Snow RemoveBG AI',
           url: `https://api.snowping.cfd/api/tools/removebg?url=${encodeURIComponent(imgUrl)}`,
@@ -2721,6 +2576,8 @@ function orderImageEnginesForPrompt(
 
   if (ratio && ratio !== '1:1') {
     return pick([
+      'pollinations-flux',
+      'bintang-grok',
       'nexray-writecream',
       'nexray-magicstudio',
       'nexray-flux-v1',
@@ -2734,6 +2591,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-ideogram',
       'nexray-sologo',
+      'bintang-grok',
+      'pollinations-flux',
       'nexray-magicstudio',
       'nexray-flux-v1',
       'nexray-writecream',
@@ -2744,6 +2603,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-flux-v1',
       'comiku-sdxl',
+      'pollinations-flux',
+      'bintang-zimage',
       'nexray-magicstudio',
       'nexray-ideogram',
       'varhad-img',
@@ -2753,14 +2614,26 @@ function orderImageEnginesForPrompt(
   if (/\b(?:ideogram|poster|banner|tipografi|typography|tulisan|teks)\b/i.test(prompt)) {
     return pick([
       'nexray-ideogram',
+      'bintang-grok',
+      'pollinations-flux',
       'nexray-magicstudio',
       'nexray-flux-v1',
       'nexray-writecream',
     ]);
   }
 
+  if (/\bgrok\b/i.test(prompt)) {
+    return pick([
+      'bintang-grok',
+      'pollinations-flux',
+      'nexray-magicstudio',
+      'nexray-flux-v1',
+    ]);
+  }
+
   if (/\bflux\b/i.test(prompt)) {
     return pick([
+      'pollinations-flux',
       'nexray-flux-v1',
       'rin-flux',
       'nexray-magicstudio',

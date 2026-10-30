@@ -1,6 +1,5 @@
 import {
   ArrowUpRight,
-  Blocks,
   BrainCircuit,
   Calculator,
   Code2,
@@ -8,6 +7,7 @@ import {
   Layers,
   Sparkles,
 } from 'lucide-react';
+import { ToolsIcon } from './ToolsIcon';
 import type { AIModelDefinition } from '../types/chat';
 import { IMAGE_ENGINES } from '../services/modelCatalog';
 
@@ -184,7 +184,7 @@ export function WelcomeScreen({
             onClick={onOpenToolsStudio}
             className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-[#22D3EE]/35 bg-[#22D3EE]/10 px-3 py-1 text-xs font-medium text-[#CFFAFE] backdrop-blur-md transition-all hover:border-[#22D3EE]/65 hover:text-white cursor-pointer"
           >
-            <Blocks className="h-3.5 w-3.5 text-[#22D3EE]" />
+            <ToolsIcon className="h-3.5 w-3.5 text-[#22D3EE]" />
             <span>Tools Studio</span>
           </button>
 

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import {
-  Blocks,
   Download,
   FileDown,
   MessageSquare,
@@ -13,6 +12,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { ToolsIcon } from './ToolsIcon';
 import type { Conversation } from '../types/chat';
 
 interface SidebarProps {
@@ -288,7 +288,7 @@ export function Sidebar({
               showExpanded ? 'px-3 py-2' : 'justify-center p-2'
             }`}
           >
-            <Blocks className="h-4 w-4 shrink-0 text-[#22D3EE]" />
+            <ToolsIcon className="h-4 w-4 shrink-0 text-[#22D3EE]" />
             {showExpanded && <span>Web Tools Studio</span>}
           </button>
 

@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deepseekApiKey: '',
   routerEnabled: false,
   routerPreset: '9router',
-  routerBaseUrl: 'http://localhost:20128/v1',
+  routerBaseUrl: 'https://9router.com/v1',
   routerApiKey: '',
   routerModel: 'auto',
   routerImageModel: '',
@@ -193,7 +193,11 @@ export function loadSettings(): AppSettings {
         : DEFAULT_SETTINGS.routerPreset,
       routerBaseUrl:
         typeof parsed?.routerBaseUrl === 'string' && parsed.routerBaseUrl.trim()
-          ? parsed.routerBaseUrl.trim()
+          ? !parsed?.routerEnabled &&
+            !String(parsed?.routerApiKey || '').trim() &&
+            parsed.routerBaseUrl.trim() === 'http://localhost:20128/v1'
+            ? DEFAULT_SETTINGS.routerBaseUrl
+            : parsed.routerBaseUrl.trim()
           : DEFAULT_SETTINGS.routerBaseUrl,
       routerApiKey:
         typeof parsed?.routerApiKey === 'string' ? parsed.routerApiKey : '',
@@ -208,7 +212,7 @@ export function loadSettings(): AppSettings {
       routerDiscoveredModels: Array.isArray(parsed?.routerDiscoveredModels)
         ? parsed.routerDiscoveredModels
             .filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0)
-            .slice(0, 120)
+            .slice(0, 500)
         : [],
     };
   } catch {

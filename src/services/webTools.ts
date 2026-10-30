@@ -1,6 +1,6 @@
 import type { MediaDownloadItem } from '../types/chat';
 
-export type WebToolCategoryId = 'A' | 'B' | 'D';
+export type WebToolCategoryId = 'A' | 'B' | 'D' | 'E';
 
 export interface WebToolDefinition {
   id: string;
@@ -14,6 +14,7 @@ export interface WebToolDefinition {
   placeholder: string;
   exampleInput: string;
   requiresInput: boolean;
+  acceptsImageUpload?: boolean;
   secondarySelect?: {
     label: string;
     defaultValue: string;
@@ -304,7 +305,205 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     exampleInput: 'NodataGPT',
     requiresInput: true,
   },
+  {
+    id: 'removebg-tool',
+    category: 'D',
+    categoryLabel: 'Kreatif, Riset & Info ID',
+    name: 'Hapus Latar Gambar (RemoveBG HD)',
+    shortName: 'RemoveBG HD',
+    slashCommand: '/removebg',
+    badge: 'PNG Transparan + Upload',
+    description:
+      'Hapus background foto menjadi PNG transparan HD (bisa tempel URL gambar atau unggah foto langsung dari HP/PC).',
+    placeholder: 'Tempel tautan gambar atau klik tombol Upload Foto...',
+    exampleInput: 'https://www.nodatagpt.web.id/logo.png',
+    requiresInput: true,
+    acceptsImageUpload: true,
+  },
+  {
+    id: 'hd-tool',
+    category: 'D',
+    categoryLabel: 'Kreatif, Riset & Info ID',
+    name: 'Jernihkan Foto & Upscale (Remini HD)',
+    shortName: 'Remini HD',
+    slashCommand: '/hd',
+    badge: 'AI Upscale + Upload',
+    description:
+      'Pertajam detail wajah dan resolusi foto buram menggunakan multi-server Remini & AI Upscale.',
+    placeholder: 'Tempel tautan foto atau klik tombol Upload Foto...',
+    exampleInput: 'https://www.nodatagpt.web.id/logo.png',
+    requiresInput: true,
+    acceptsImageUpload: true,
+  },
+
+  // === CATEGORY E: OFFICIAL WEATHER, PRAYER, CURRENCY, GOLD, CRYPTO & IDX STOCKS ===
+  {
+    id: 'cuaca',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Prakiraan Cuaca Real-Time',
+    shortName: 'Cek Cuaca',
+    slashCommand: '/cuaca',
+    badge: 'Suhu + Prakiraan 3 Hari',
+    description:
+      'Pantau kondisi cuaca terkini berbahasa Indonesia (suhu, kelembapan, angin, UV, & prakiraan 3 hari) untuk kota mana pun.',
+    placeholder: 'Ketik nama kota (contoh: Jakarta, Bandung, Surabaya, Tokyo)...',
+    exampleInput: 'Jakarta',
+    requiresInput: false,
+  },
+  {
+    id: 'sholat',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Jadwal Sholat Resmi Kemenag RI',
+    shortName: 'Jadwal Sholat',
+    slashCommand: '/sholat',
+    badge: 'Imsak s/d Isya Hari Ini',
+    description:
+      'Jadwal waktu sholat harian resmi Kementerian Agama RI (Imsak, Subuh, Terbit, Dhuha, Dzuhur, Ashar, Maghrib, Isya) seluruh Indonesia.',
+    placeholder: 'Ketik kota/kabupaten di Indonesia (contoh: Jakarta, Bandung, Medan)...',
+    exampleInput: 'Bandung',
+    requiresInput: false,
+  },
+  {
+    id: 'kurs',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Kurs Valuta Asing & Konverter Rupiah',
+    shortName: 'Kurs Mata Uang',
+    slashCommand: '/kurs',
+    badge: 'USD · EUR · SGD · JPY · SAR',
+    description:
+      'Cek nilai tukar mata uang dunia ke Rupiah secara real-time atau hitung konversi nominal (mis. 150 USD, 500 SGD, 1000 MYR).',
+    placeholder: 'Opsional: ketik nominal & kode mata uang (mis. 100 USD atau EUR)...',
+    exampleInput: '100 USD',
+    requiresInput: false,
+  },
+  {
+    id: 'emas',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Harga Spot Emas Dunia (XAU & IDR/gr)',
+    shortName: 'Harga Emas',
+    slashCommand: '/emas',
+    badge: 'Spot XAU/USD + Rupiah/Gram',
+    description:
+      'Pantau harga emas murni pasar dunia (XAU/USD per troy oz) lengkap dengan konversi otomatis Rupiah per gram.',
+    placeholder: 'Opsional: ketik berat gram untuk simulasi nilai (contoh: 5 atau 10)...',
+    exampleInput: '5',
+    requiresInput: false,
+  },
+  {
+    id: 'crypto',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Harga Pasar Crypto Live (CoinGecko)',
+    shortName: 'Pasar Crypto',
+    slashCommand: '/crypto',
+    badge: 'BTC · ETH · SOL + IDR',
+    description:
+      'Pantau harga koin kripto teratas atau cari koin spesifik lengkap dengan harga USD & Rupiah, perubahan 24 jam, dan kapitalisasi pasar.',
+    placeholder: 'Kosongkan untuk Top Crypto, atau ketik simbol/nama koin (mis. BTC, SOL, PEPE)...',
+    exampleInput: '',
+    requiresInput: false,
+  },
+  {
+    id: 'saham',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Indeks IHSG & Saham BEI / Global',
+    shortName: 'IHSG & Saham',
+    slashCommand: '/saham',
+    badge: 'IHSG · BBCA · BBRI · NVDA',
+    description:
+      'Pantau pergerakan Indeks IHSG (^JKSE), saham Bursa Efek Indonesia (BBCA, BBRI, TLKM, BMRI), maupun saham global (NVDA, AAPL).',
+    placeholder: 'Kosongkan untuk IHSG, atau ketik kode saham (mis. BBCA, TLKM, NVDA)...',
+    exampleInput: 'BBCA',
+    requiresInput: false,
+  },
+  {
+    id: 'quote',
+    category: 'E',
+    categoryLabel: 'Cuaca, Sholat & Finansial',
+    name: 'Kutipan Motivasi & Tokoh Dunia',
+    shortName: 'Kutipan Inspirasi',
+    slashCommand: '/quote',
+    badge: 'ZenQuotes Random',
+    description:
+      'Dapatkan kutipan inspiratif dan pemikiran bijak tokoh dunia secara instan.',
+    placeholder: 'Klik Jalankan untuk memuat kutipan baru...',
+    exampleInput: '',
+    requiresInput: false,
+  },
 ];
+
+export async function uploadImageToTempPublicUrl(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Pilih berkas gambar yang valid (PNG, JPG, atau WEBP).');
+  }
+
+  const readAsDataUrl = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () =>
+        typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error('Gagal membaca berkas gambar.'));
+      reader.onerror = () => reject(new Error('Gagal membaca berkas gambar.'));
+      reader.readAsDataURL(blob);
+    });
+
+  let dataUrl = await readAsDataUrl(file);
+  let mimeType = file.type || 'image/jpeg';
+
+  // Compress large camera photos (> 2.2 MB) cleanly in browser canvas before upload
+  if (file.size > 2.2 * 1024 * 1024 && typeof document !== 'undefined') {
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Gagal memuat gambar.'));
+        el.src = dataUrl;
+      });
+      const maxSide = 1920;
+      const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        mimeType = 'image/jpeg';
+      }
+    } catch {
+      // Fall back to original dataUrl if under 4 MB
+    }
+  }
+
+  const res = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      action: 'uploadImage',
+      base64: dataUrl,
+      mimeType,
+      fileName: file.name,
+    }),
+  });
+
+  const json = (await res.json()) as {
+    ok?: boolean;
+    url?: string;
+    error?: string;
+  };
+
+  if (!res.ok || !json.ok || !json.url) {
+    throw new Error(json.error || 'Gagal mengunggah foto ke server sementara.');
+  }
+
+  return json.url;
+}
 
 interface ToolHttpResult {
   ok: boolean;
@@ -504,6 +703,37 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'berita':
     case 'antara':
       return { toolId: 'berita', arg: rest };
+    case 'cuaca':
+    case 'weather':
+    case 'cekcuaca':
+      return { toolId: 'cuaca', arg: rest };
+    case 'sholat':
+    case 'jadwalsholat':
+    case 'imsak':
+      return { toolId: 'sholat', arg: rest };
+    case 'kurs':
+    case 'valas':
+    case 'currency':
+      return { toolId: 'kurs', arg: rest };
+    case 'emas':
+    case 'gold':
+    case 'xau':
+      return { toolId: 'emas', arg: rest };
+    case 'crypto':
+    case 'koin':
+    case 'btc':
+      return { toolId: 'crypto', arg: cmd === 'btc' && !rest ? 'bitcoin' : rest };
+    case 'saham':
+    case 'stock':
+    case 'idx':
+      return { toolId: 'saham', arg: rest };
+    case 'ihsg':
+      return { toolId: 'saham', arg: rest || '^JKSE' };
+    case 'quote':
+    case 'quotes':
+    case 'kutipan':
+    case 'motivasi':
+      return { toolId: 'quote', arg: rest };
     default:
       return null;
   }
@@ -725,6 +955,117 @@ export async function executeWebToolCommand({
       };
     }
 
+    // Fallback 4: TikWM Official HD (0.7s No-Watermark + Audio + Carousel)
+    onStatus?.({
+      toolName: 'TikTok HD Downloader',
+      mirrorName: 'TikWM Official HD',
+      attempt: 4,
+      isFallback: true,
+    });
+    const r4 = await fetchToolEndpoint(
+      `https://www.tikwm.com/api/?url=${encodeURIComponent(arg)}&hd=1`,
+      24000,
+      signal
+    );
+    const j4 = safeParseJson(r4.body);
+    const res4 = j4?.data as Record<string, unknown> | undefined;
+    if (
+      r4.ok &&
+      Number(j4?.code) === 0 &&
+      res4 &&
+      (typeof res4.play === 'string' ||
+        typeof res4.hdplay === 'string' ||
+        Array.isArray(res4.images))
+    ) {
+      const hdPlay =
+        typeof res4.hdplay === 'string' && res4.hdplay.startsWith('http')
+          ? res4.hdplay
+          : '';
+      const stdPlay =
+        typeof res4.play === 'string' && res4.play.startsWith('http')
+          ? res4.play
+          : '';
+      const musicUrl =
+        typeof res4.music === 'string' && res4.music.startsWith('http')
+          ? res4.music
+          : '';
+      const images = Array.isArray(res4.images)
+        ? res4.images.filter(
+            (u): u is string => typeof u === 'string' && u.startsWith('http')
+          )
+        : [];
+      const authorObj = (res4.author as Record<string, unknown> | undefined) || {};
+      const authorName = String(
+        authorObj.nickname || authorObj.unique_id || 'TikTok Creator'
+      );
+      const downloads: MediaDownloadItem[] = [];
+      if (hdPlay) downloads.push({ label: 'Unduh MP4 HD (No WM)', url: hdPlay, kind: 'video' });
+      if (stdPlay && stdPlay !== hdPlay) {
+        downloads.push({ label: 'Unduh MP4 (No WM)', url: stdPlay, kind: 'video' });
+      }
+      if (musicUrl) {
+        downloads.push({ label: 'Unduh Audio MP3', url: musicUrl, kind: 'audio' });
+      }
+
+      return {
+        content: [
+          `### 🎬 TikTok berhasil dimuat *(Auto-Fallback TikWM HD)*`,
+          `**Kreator:** ${authorName}`,
+          `**Deskripsi:** ${String(res4.title || 'Video TikTok')}`,
+        ].join('\n\n'),
+        answeredById: 'tikwm-official',
+        answeredByName: 'TikTok HD · TikWM',
+        usedFallback: true,
+        videoUrl: images.length === 0 ? hdPlay || stdPlay || undefined : undefined,
+        audioUrl: images.length > 0 && musicUrl ? musicUrl : undefined,
+        galleryUrls: images.length > 0 ? images.slice(0, 12) : undefined,
+        downloadItems: downloads,
+      };
+    }
+
+    // Fallback 5: BintangAPI TikTok
+    onStatus?.({
+      toolName: 'TikTok HD Downloader',
+      mirrorName: 'Bintang TikTok Engine',
+      attempt: 5,
+      isFallback: true,
+    });
+    const r5 = await fetchToolEndpoint(
+      `https://bintangapi.my.id/api/downloader/tiktok?url=${encodeURIComponent(arg)}`,
+      26000,
+      signal
+    );
+    const j5 = safeParseJson(r5.body);
+    const res5 = (j5?.data || j5?.result) as Record<string, unknown> | undefined;
+    if (r5.ok && res5) {
+      const videoObj = (res5.video as Record<string, unknown> | undefined) || {};
+      const musicObj = (res5.music as Record<string, unknown> | undefined) || {};
+      const playUrl = String(
+        videoObj.no_watermark_hd ||
+          videoObj.no_watermark ||
+          res5.play ||
+          res5.url ||
+          ''
+      );
+      const musicUrl = String(musicObj.url || res5.music || '');
+      if (playUrl.startsWith('http')) {
+        const downloads: MediaDownloadItem[] = [
+          { label: 'Unduh Video HD (No WM)', url: playUrl, kind: 'video' },
+        ];
+        if (musicUrl.startsWith('http')) {
+          downloads.push({ label: 'Unduh Audio MP3', url: musicUrl, kind: 'audio' });
+        }
+        return {
+          content: `### 🎬 TikTok berhasil dimuat *(Auto-Fallback BintangAPI)*\n\n**Deskripsi:** ${String(res5.title || res5.caption || 'Video TikTok')}`,
+          answeredById: 'bintang-tiktok',
+          answeredByName: 'TikTok HD · BintangAPI',
+          usedFallback: true,
+          videoUrl: playUrl,
+          downloadItems: downloads,
+        };
+      }
+    }
+
     throw new Error('Gagal mengunduh tautan TikTok tersebut. Pastikan video bersifat publik.');
   }
 
@@ -857,6 +1198,42 @@ export async function executeWebToolCommand({
               label: isAudio ? 'Unduh Audio' : 'Unduh Video',
               url: u,
               kind: isAudio ? 'audio' : 'video',
+            },
+          ],
+        };
+      }
+    }
+
+    // Fallback 4 (Audio MP3): Varhad YTMP3 v2 (200 OK verified)
+    if (isAudio) {
+      onStatus?.({
+        toolName: 'YouTube MP3',
+        mirrorName: 'Varhad YTMP3 v2',
+        attempt: 4,
+        isFallback: true,
+      });
+      const r4 = await fetchToolEndpoint(
+        `https://v2.api-varhad.my.id/download/ytmp3?url=${encodeURIComponent(arg)}`,
+        30000,
+        signal
+      );
+      const j4 = safeParseJson(r4.body);
+      const res4 = j4?.result as Record<string, unknown> | undefined;
+      const dl4 = typeof res4?.download === 'string' ? res4.download : '';
+      if (r4.ok && dl4.startsWith('http')) {
+        const title4 = String(res4?.title || 'Audio YouTube MP3');
+        return {
+          content: `### ▶️ YouTube Audio MP3 Siap *(Auto-Fallback Varhad v2)*\n\n**Judul:** ${title4}`,
+          answeredById: 'varhad-ytmp3',
+          answeredByName: 'YouTube MP3 · Varhad v2',
+          usedFallback: true,
+          audioUrl: dl4,
+          audioTitle: title4,
+          downloadItems: [
+            {
+              label: 'Unduh Audio MP3',
+              url: dl4,
+              kind: 'audio',
             },
           ],
         };
@@ -1793,6 +2170,64 @@ export async function executeWebToolCommand({
       };
     }
 
+    // Fallback 3: BintangAPI Pinterest HD (48 Original HD Pins)
+    onStatus?.({
+      toolName: 'Pinterest HD Search',
+      mirrorName: 'Bintang Pinterest HD',
+      attempt: 3,
+      isFallback: true,
+    });
+    const r3 = await fetchToolEndpoint(
+      `https://bintangapi.my.id/api/search/pinterest?q=${encodeURIComponent(arg)}`,
+      24000,
+      signal
+    );
+    const j3 = safeParseJson(r3.body);
+    if (r3.ok && Array.isArray(j3?.data)) {
+      const urls3 = (j3.data as Array<Record<string, unknown>>)
+        .map((rec) => String(rec.image || rec.thumbnail || ''))
+        .filter((u) => /^https?:\/\//i.test(u))
+        .slice(0, 12);
+      if (urls3.length > 0) {
+        return {
+          content: `### 📌 Galeri Visual Pinterest — *"${arg}"* (${urls3.length} Pin HD · BintangAPI)`,
+          answeredById: 'bintang-pinterest',
+          answeredByName: 'Pinterest HD · BintangAPI',
+          usedFallback: true,
+          galleryUrls: urls3,
+        };
+      }
+    }
+
+    // Fallback 4: Varhad Pinterest v2
+    onStatus?.({
+      toolName: 'Pinterest HD Search',
+      mirrorName: 'Varhad Pinterest v2',
+      attempt: 4,
+      isFallback: true,
+    });
+    const r4 = await fetchToolEndpoint(
+      `https://v2.api-varhad.my.id/search/pinterest?query=${encodeURIComponent(arg)}`,
+      22000,
+      signal
+    );
+    const j4 = safeParseJson(r4.body);
+    if (r4.ok && Array.isArray(j4?.result)) {
+      const urls4 = (j4.result as unknown[])
+        .map((u) => (typeof u === 'string' ? u : ''))
+        .filter((u) => /^https?:\/\//i.test(u))
+        .slice(0, 12);
+      if (urls4.length > 0) {
+        return {
+          content: `### 📌 Galeri Visual Pinterest — *"${arg}"* *(Auto-Fallback Varhad v2)*`,
+          answeredById: 'varhad-pinterest',
+          answeredByName: 'Pinterest · Varhad v2',
+          usedFallback: true,
+          galleryUrls: urls4,
+        };
+      }
+    }
+
     throw new Error(`Tidak ditemukan pin visual untuk kata kunci "${arg}".`);
   }
 
@@ -1989,6 +2424,642 @@ export async function executeWebToolCommand({
     }
 
     throw new Error('Gagal memuat daftar berita terkini dari Antara News.');
+  }
+
+  // === 17. CUACA REAL-TIME (WTTR.IN + COMIKU FALLBACK) ===
+  if (toolId === 'cuaca') {
+    const city = (arg || 'Jakarta').trim();
+    onStatus?.({
+      toolName: 'Prakiraan Cuaca',
+      mirrorName: 'wttr.in Global Weather',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const r1 = await fetchToolEndpoint(
+      `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=id`,
+      20000,
+      signal
+    );
+    const j1 = safeParseJson(r1.body);
+    const curArr = Array.isArray(j1?.current_condition)
+      ? (j1.current_condition as Array<Record<string, unknown>>)
+      : [];
+
+    if (r1.ok && curArr.length > 0) {
+      const cur = curArr[0];
+      const areaArr = Array.isArray(j1?.nearest_area)
+        ? (j1.nearest_area as Array<Record<string, unknown>>)
+        : [];
+      const areaObj = areaArr[0] || {};
+      const areaName =
+        (Array.isArray(areaObj.areaName) &&
+          String((areaObj.areaName[0] as Record<string, unknown>)?.value || '')) ||
+        city;
+      const countryName =
+        (Array.isArray(areaObj.country) &&
+          String((areaObj.country[0] as Record<string, unknown>)?.value || '')) ||
+        '';
+      const descId =
+        (Array.isArray(cur.lang_id) &&
+          String((cur.lang_id[0] as Record<string, unknown>)?.value || '')) ||
+        (Array.isArray(cur.weatherDesc) &&
+          String((cur.weatherDesc[0] as Record<string, unknown>)?.value || '')) ||
+        'Cerah Berawan';
+
+      const forecastArr = Array.isArray(j1?.weather)
+        ? (j1.weather as Array<Record<string, unknown>>).slice(0, 3)
+        : [];
+      const forecastRows = forecastArr
+        .map((day) => {
+          const dt = String(day.date || '-');
+          const minT = String(day.mintempC || '-');
+          const maxT = String(day.maxtempC || '-');
+          const avgT = String(day.avgtempC || '-');
+          const astro = Array.isArray(day.astronomy)
+            ? (day.astronomy[0] as Record<string, unknown>)
+            : undefined;
+          const sun = astro
+            ? `${String(astro.sunrise || '')} – ${String(astro.sunset || '')}`
+            : '-';
+          return `| ${dt} | **${minT}°C – ${maxT}°C** (rata² ${avgT}°C) | ${sun} |`;
+        })
+        .join('\n');
+
+      return {
+        content: [
+          `### 🌤️ Cuaca Terkini — ${areaName}${countryName ? `, ${countryName}` : ''}`,
+          `| Parameter | Kondisi Saat Ini |`,
+          `| :--- | :--- |`,
+          `| **Kondisi Langit** | **${descId}** |`,
+          `| **Suhu Udara** | **${String(cur.temp_C || '-')} °C** *(terasa seperti ${String(cur.FeelsLikeC || '-')} °C)* |`,
+          `| **Kelembapan** | ${String(cur.humidity || '-')} % |`,
+          `| **Kecepatan Angin** | ${String(cur.windspeedKmph || '-')} km/jam (${String(cur.winddir16Point || '-')}) |`,
+          `| **Indeks UV / Jarak Pandang** | UV ${String(cur.uvIndex || '-')} · ${String(cur.visibility || '-')} km |`,
+          forecastRows
+            ? `\n#### 📅 Prakiraan 3 Hari ke Depan\n| Tanggal | Rentang Suhu | Matahari Terbit – Terbenam |\n| :--- | :--- | :--- |\n${forecastRows}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        answeredById: 'wttr-cuaca',
+        answeredByName: 'Weather Live · wttr.in',
+        usedFallback: false,
+      };
+    }
+
+    // Fallback: Comiku CekCuaca
+    onStatus?.({
+      toolName: 'Prakiraan Cuaca',
+      mirrorName: 'Comiku Weather',
+      attempt: 2,
+      isFallback: true,
+    });
+    const r2 = await fetchToolEndpoint(
+      `https://comiku.my.id/tools/cekcuaca?kota=${encodeURIComponent(city)}`,
+      18000,
+      signal
+    );
+    const j2 = safeParseJson(r2.body);
+    const d2 = (j2?.result || j2?.data) as Record<string, unknown> | undefined;
+    if (r2.ok && d2) {
+      return {
+        content: `### 🌤️ Cuaca Terkini — ${city}\n\n\`\`\`json\n${JSON.stringify(d2, null, 2)}\n\`\`\``,
+        answeredById: 'comiku-cuaca',
+        answeredByName: 'Cuaca · Comiku',
+        usedFallback: true,
+      };
+    }
+
+    throw new Error(`Gagal memuat data cuaca untuk kota "${city}".`);
+  }
+
+  // === 18. JADWAL SHOLAT RESMI KEMENAG RI ===
+  if (toolId === 'sholat') {
+    const cityKeyword = (arg || 'Jakarta').trim();
+    onStatus?.({
+      toolName: 'Jadwal Sholat Kemenag',
+      mirrorName: 'MyQuran Kemenag API',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    let kotaId = '1301'; // Default: Kota Jakarta
+    let lokasiLabel = 'KOTA JAKARTA';
+
+    if (cityKeyword.toLowerCase() !== 'jakarta') {
+      const searchRes = await fetchToolEndpoint(
+        `https://api.myquran.com/v2/sholat/kota/cari/${encodeURIComponent(cityKeyword)}`,
+        16000,
+        signal
+      );
+      const searchJson = safeParseJson(searchRes.body);
+      const kotaList = Array.isArray(searchJson?.data)
+        ? (searchJson.data as Array<Record<string, unknown>>)
+        : [];
+      if (kotaList.length === 0) {
+        throw new Error(
+          `Kota/kabupaten "${cityKeyword}" tidak ditemukan pada database Kemenag RI. Coba nama kota seperti Bandung, Surabaya, Medan, atau Yogyakarta.`
+        );
+      }
+      kotaId = String(kotaList[0].id || '1301');
+      lokasiLabel = String(kotaList[0].lokasi || cityKeyword);
+    }
+
+    // Format today's date in Asia/Jakarta (WIB)
+    const wibParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .format(new Date())
+      .split('-');
+    const [yyyy, mm, dd] =
+      wibParts.length === 3 ? wibParts : ['2026', '10', '31'];
+
+    const jadwalRes = await fetchToolEndpoint(
+      `https://api.myquran.com/v2/sholat/jadwal/${encodeURIComponent(kotaId)}/${yyyy}/${mm}/${dd}`,
+      18000,
+      signal
+    );
+    const jadwalJson = safeParseJson(jadwalRes.body);
+    const dataObj = jadwalJson?.data as Record<string, unknown> | undefined;
+    const jadwal = dataObj?.jadwal as Record<string, unknown> | undefined;
+
+    if (jadwalRes.ok && jadwal && jadwal.subuh) {
+      const lokasi = String(dataObj?.lokasi || lokasiLabel);
+      const daerah = String(dataObj?.daerah || 'INDONESIA');
+      const tanggal = String(jadwal.tanggal || `${dd}/${mm}/${yyyy}`);
+
+      return {
+        content: [
+          `### 🕌 Jadwal Sholat Resmi Kemenag RI — ${lokasi} (${daerah})`,
+          `**Tanggal:** ${tanggal}`,
+          ``,
+          `| Waktu Ibadah | Jam Lokal |`,
+          `| :--- | :--- |`,
+          `| **Imsak** | \`${String(jadwal.imsak || '-')}\` |`,
+          `| **Subuh** | **\`${String(jadwal.subuh || '-')}\`** |`,
+          `| **Terbit** | \`${String(jadwal.terbit || '-')}\` |`,
+          `| **Dhuha** | \`${String(jadwal.dhuha || '-')}\` |`,
+          `| **Dzuhur** | **\`${String(jadwal.dzuhur || '-')}\`** |`,
+          `| **Ashar** | **\`${String(jadwal.ashar || '-')}\`** |`,
+          `| **Maghrib** | **\`${String(jadwal.maghrib || '-')}\`** |`,
+          `| **Isya** | **\`${String(jadwal.isya || '-')}\`** |`,
+        ].join('\n'),
+        answeredById: 'myquran-kemenag',
+        answeredByName: 'Jadwal Sholat · MyQuran Kemenag',
+        usedFallback: false,
+      };
+    }
+
+    throw new Error(`Gagal memuat jadwal sholat untuk wilayah "${cityKeyword}".`);
+  }
+
+  // === 19. KURS VALUTA ASING & KONVERTER RUPIAH ===
+  if (toolId === 'kurs') {
+    const fmtIdr = (n: number) =>
+      new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        maximumFractionDigits: n >= 100 ? 0 : 2,
+      }).format(n);
+    const fmtNum = (n: number) =>
+      new Intl.NumberFormat('id-ID', { maximumFractionDigits: 4 }).format(n);
+
+    // Parse optional input like "100 USD", "250 SGD ke IDR", "EUR", "1000000 IDR ke USD"
+    const cleanArg = arg.trim();
+    const convMatch = cleanArg.match(
+      /^([\d.,]+)?\s*([A-Za-z]{3})(?:\s+(?:ke|to|in)\s+([A-Za-z]{3}))?$/i
+    );
+
+    const amount = convMatch?.[1]
+      ? Number(convMatch[1].replace(/,/g, '')) || 1
+      : 1;
+    const baseCurrency = convMatch?.[2]
+      ? convMatch[2].toUpperCase()
+      : 'USD';
+    const targetCurrency = convMatch?.[3]
+      ? convMatch[3].toUpperCase()
+      : 'IDR';
+
+    onStatus?.({
+      toolName: 'Kurs Valuta Asing',
+      mirrorName: 'ExchangeRate-API Live',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const r1 = await fetchToolEndpoint(
+      `https://open.er-api.com/v6/latest/${encodeURIComponent(baseCurrency)}`,
+      18000,
+      signal
+    );
+    const j1 = safeParseJson(r1.body);
+    const rates = j1?.rates as Record<string, number> | undefined;
+
+    if (r1.ok && rates && typeof rates === 'object') {
+      if (convMatch) {
+        const rate = rates[targetCurrency];
+        if (typeof rate !== 'number') {
+          throw new Error(
+            `Kode mata uang "${targetCurrency}" tidak ditemukan. Contoh: \`/kurs 100 USD\` atau \`/kurs 500 SGD ke IDR\`.`
+          );
+        }
+        const total = amount * rate;
+        const formattedTotal =
+          targetCurrency === 'IDR'
+            ? fmtIdr(total)
+            : `${fmtNum(total)} ${targetCurrency}`;
+        const formattedUnit =
+          targetCurrency === 'IDR'
+            ? fmtIdr(rate)
+            : `${fmtNum(rate)} ${targetCurrency}`;
+
+        return {
+          content: [
+            `### 💱 Konversi Kurs Mata Uang Real-Time`,
+            `- **Nominal:** **${fmtNum(amount)} ${baseCurrency}** = **${formattedTotal}**`,
+            `- **Kurs Satuan:** 1 ${baseCurrency} = ${formattedUnit}`,
+            `- **Pembaruan Pasar:** ${String(j1?.time_last_update_utc || 'Terbaru')}`,
+          ].join('\n'),
+          answeredById: 'er-api-kurs',
+          answeredByName: 'Kurs Live · ExchangeRate-API',
+          usedFallback: false,
+        };
+      }
+
+      // Default `/kurs`: show major global currencies in IDR!
+      const idrPerUsd = Number(rates.IDR || 0);
+      const majorCodes: Array<{ code: string; label: string }> = [
+        { code: 'USD', label: '🇺🇸 Dolar Amerika Serikat' },
+        { code: 'SGD', label: '🇸🇬 Dolar Singapura' },
+        { code: 'EUR', label: '🇪🇺 Euro Eropa' },
+        { code: 'MYR', label: '🇲🇾 Ringgit Malaysia' },
+        { code: 'SAR', label: '🇸🇦 Riyal Arab Saudi' },
+        { code: 'JPY', label: '🇯🇵 Yen Jepang (per 1 JPY)' },
+        { code: 'GBP', label: '🇬🇧 Poundsterling Inggris' },
+        { code: 'AUD', label: '🇦🇺 Dolar Australia' },
+        { code: 'CNY', label: '🇨🇳 Yuan Tiongkok' },
+      ];
+
+      const rows = majorCodes
+        .map(({ code, label }) => {
+          const perUsd = Number(rates[code] || 0);
+          if (!perUsd || !idrPerUsd) return '';
+          const inIdr = code === 'USD' ? idrPerUsd : idrPerUsd / perUsd;
+          return `| **1 ${code}** | ${label} | **${fmtIdr(inIdr)}** |`;
+        })
+        .filter(Boolean)
+        .join('\n');
+
+      return {
+        content: [
+          `### 💱 Tabel Kurs Valuta Asing terhadap Rupiah (IDR)`,
+          `| Kode | Mata Uang | Nilai Tukar (IDR) |`,
+          `| :--- | :--- | :--- |`,
+          rows,
+          `\n*Tips: Ketik \`/kurs 150 USD\` atau \`/kurs 1000 SAR\` untuk menghitung konversi nominal otomatis.*`,
+        ].join('\n'),
+        answeredById: 'er-api-kurs',
+        answeredByName: 'Kurs Live · ExchangeRate-API',
+        usedFallback: false,
+      };
+    }
+
+    throw new Error('Gagal memuat data kurs mata uang terbaru.');
+  }
+
+  // === 20. HARGA SPOT EMAS DUNIA (XAU/USD + IDR/GRAM) ===
+  if (toolId === 'emas') {
+    onStatus?.({
+      toolName: 'Harga Spot Emas',
+      mirrorName: 'Gold-API Spot XAU',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const [goldRes, fxRes] = await Promise.all([
+      fetchToolEndpoint('https://api.gold-api.com/price/XAU', 18000, signal),
+      fetchToolEndpoint('https://open.er-api.com/v6/latest/USD', 18000, signal),
+    ]);
+
+    const goldJson = safeParseJson(goldRes.body);
+    const fxJson = safeParseJson(fxRes.body);
+    const spotUsdOz = Number(goldJson?.price || 0);
+    const idrRate = Number(
+      (fxJson?.rates as Record<string, unknown> | undefined)?.IDR || 16500
+    );
+
+    if (goldRes.ok && spotUsdOz > 0) {
+      const TROY_OZ_GRAMS = 31.1034768;
+      const usdPerGram = spotUsdOz / TROY_OZ_GRAMS;
+      const idrPerGram = usdPerGram * idrRate;
+      const idrPerOz = spotUsdOz * idrRate;
+
+      const fmtUsd = (n: number) =>
+        new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          maximumFractionDigits: 2,
+        }).format(n);
+      const fmtIdr = (n: number) =>
+        new Intl.NumberFormat('id-ID', {
+          style: 'currency',
+          currency: 'IDR',
+          maximumFractionDigits: 0,
+        }).format(n);
+
+      const gramMatch = arg.trim().match(/^([\d.,]+)/);
+      const customGrams = gramMatch
+        ? Number(gramMatch[1].replace(/,/g, '')) || 0
+        : 0;
+
+      return {
+        content: [
+          `### 🪙 Harga Spot Emas Dunia (XAU) & Estimasi Rupiah`,
+          `| Satuan Ukuran | Harga Pasar Spot (24K) |`,
+          `| :--- | :--- |`,
+          `| **1 Troy Ounce (31,10 gr)** | **${fmtUsd(spotUsdOz)}** *(${fmtIdr(idrPerOz)})* |`,
+          `| **1 Gram Emas Murni** | **${fmtIdr(idrPerGram)}** *(${fmtUsd(usdPerGram)})* |`,
+          `| **5 Gram Emas Murni** | **${fmtIdr(idrPerGram * 5)}** |`,
+          `| **10 Gram Emas Murni** | **${fmtIdr(idrPerGram * 10)}** |`,
+          customGrams > 0 && customGrams !== 1 && customGrams !== 5 && customGrams !== 10
+            ? `| **Simulasi ${customGrams} Gram** | **${fmtIdr(idrPerGram * customGrams)}** |`
+            : '',
+          `\n*Kurs acuan: 1 USD = ${fmtIdr(idrRate)} · Diperbarui: ${String(goldJson?.updatedAt || 'Real-time')}*`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        answeredById: 'gold-api-xau',
+        answeredByName: 'Spot Gold XAU · Gold-API',
+        usedFallback: false,
+      };
+    }
+
+    throw new Error('Gagal memuat harga spot emas dunia saat ini.');
+  }
+
+  // === 21. HARGA PASAR CRYPTO LIVE (COINGECKO) ===
+  if (toolId === 'crypto') {
+    onStatus?.({
+      toolName: 'Pasar Crypto Live',
+      mirrorName: 'CoinGecko Market API',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const queryCoin = arg.trim();
+    let targetIds = '';
+
+    if (queryCoin) {
+      const searchRes = await fetchToolEndpoint(
+        `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(queryCoin)}`,
+        18000,
+        signal
+      );
+      const searchJson = safeParseJson(searchRes.body);
+      const coinsFound = Array.isArray(searchJson?.coins)
+        ? (searchJson.coins as Array<Record<string, unknown>>)
+        : [];
+      if (coinsFound.length > 0) {
+        targetIds = coinsFound
+          .slice(0, 5)
+          .map((c) => String(c.id || ''))
+          .filter(Boolean)
+          .join(',');
+      }
+    }
+
+    const marketUrl = targetIds
+      ? `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(targetIds)}&order=market_cap_desc`
+      : 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=8&page=1';
+
+    const [mktRes, fxRes] = await Promise.all([
+      fetchToolEndpoint(marketUrl, 20000, signal),
+      fetchToolEndpoint('https://open.er-api.com/v6/latest/USD', 16000, signal),
+    ]);
+
+    const idrRate = Number(
+      (safeParseJson(fxRes.body)?.rates as Record<string, unknown> | undefined)
+        ?.IDR || 16500
+    );
+
+    let list: Array<Record<string, unknown>> = [];
+    if (mktRes.ok && mktRes.body) {
+      try {
+        const parsed = JSON.parse(mktRes.body.trim());
+        if (Array.isArray(parsed)) {
+          list = parsed as Array<Record<string, unknown>>;
+        }
+      } catch {
+        // Ignore parse error
+      }
+    }
+
+    if (list.length > 0) {
+      const fmtUsd = (n: number) =>
+        new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          maximumFractionDigits: n >= 1 ? 2 : 6,
+        }).format(n);
+      const fmtIdr = (n: number) =>
+        new Intl.NumberFormat('id-ID', {
+          style: 'currency',
+          currency: 'IDR',
+          maximumFractionDigits: n >= 100 ? 0 : 2,
+        }).format(n);
+
+      const rows = list
+        .map((c) => {
+          const sym = String(c.symbol || '').toUpperCase();
+          const name = String(c.name || sym);
+          const priceUsd = Number(c.current_price || 0);
+          const chg = Number(c.price_change_percentage_24h || 0);
+          const badge = chg >= 0 ? `🟢 +${chg.toFixed(2)}%` : `🔴 ${chg.toFixed(2)}%`;
+          return `| **${name}** (\`${sym}\`) | **${fmtUsd(priceUsd)}** | ${fmtIdr(priceUsd * idrRate)} | ${badge} |`;
+        })
+        .join('\n');
+
+      const topImg =
+        queryCoin && typeof list[0]?.image === 'string' && list[0].image.startsWith('http')
+          ? list[0].image
+          : undefined;
+
+      return {
+        content: [
+          `### ₿ Pasar Aset Kripto Real-Time${queryCoin ? ` — *"${queryCoin}"*` : ' (Top Market Cap)'}`,
+          `| Aset Kripto | Harga (USD) | Estimasi (IDR) | 24 Jam |`,
+          `| :--- | :--- | :--- | :--- |`,
+          rows,
+        ].join('\n'),
+        answeredById: 'coingecko-live',
+        answeredByName: 'Crypto Market · CoinGecko',
+        usedFallback: false,
+        imageUrl: topImg,
+      };
+    }
+
+    throw new Error(
+      `Data koin kripto${queryCoin ? ` untuk "${queryCoin}"` : ''} tidak dapat dimuat saat ini.`
+    );
+  }
+
+  // === 22. INDEKS IHSG & SAHAM BEI / GLOBAL (YAHOO FINANCE) ===
+  if (toolId === 'saham') {
+    const rawTicker = (arg || '^JKSE').trim().toUpperCase();
+    const knownGlobalTickers = new Set([
+      'AAPL',
+      'MSFT',
+      'NVDA',
+      'TSLA',
+      'AMZN',
+      'GOOG',
+      'GOOGL',
+      'META',
+      'NFLX',
+      'AMD',
+      'INTC',
+      'COIN',
+      'PLTR',
+      'ORCL',
+      'UBER',
+      'BABA',
+      'DIS',
+      'SPY',
+      'QQQ',
+    ]);
+
+    const tickerCandidates: string[] = [];
+    if (rawTicker === 'IHSG' || rawTicker === 'JKSE' || rawTicker === '^JKSE') {
+      tickerCandidates.push('^JKSE');
+    } else if (rawTicker.includes('.') || rawTicker.startsWith('^')) {
+      tickerCandidates.push(rawTicker);
+    } else if (/^[A-Z]{4}$/.test(rawTicker) && !knownGlobalTickers.has(rawTicker)) {
+      tickerCandidates.push(`${rawTicker}.JK`, rawTicker);
+    } else {
+      tickerCandidates.push(rawTicker, `${rawTicker}.JK`);
+    }
+
+    onStatus?.({
+      toolName: 'Indeks IHSG & Saham',
+      mirrorName: 'Yahoo Finance Live Chart',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    for (const sym of tickerCandidates) {
+      const urls = [
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`,
+        `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`,
+      ];
+
+      for (const u of urls) {
+        const res = await fetchToolEndpoint(u, 18000, signal);
+        const json = safeParseJson(res.body);
+        const chart = json?.chart as Record<string, unknown> | undefined;
+        const resultArr = Array.isArray(chart?.result)
+          ? (chart.result as Array<Record<string, unknown>>)
+          : [];
+        const meta = resultArr[0]?.meta as Record<string, unknown> | undefined;
+
+        if (res.ok && meta && typeof meta.regularMarketPrice === 'number') {
+          const price = Number(meta.regularMarketPrice);
+          const prevClose = Number(
+            meta.chartPreviousClose ?? meta.previousClose ?? price
+          );
+          const diff = price - prevClose;
+          const pct = prevClose > 0 ? (diff / prevClose) * 100 : 0;
+          const currency = String(meta.currency || 'IDR');
+          const name = String(meta.longName || meta.shortName || sym);
+          const dayHigh =
+            typeof meta.regularMarketDayHigh === 'number'
+              ? meta.regularMarketDayHigh
+              : null;
+          const dayLow =
+            typeof meta.regularMarketDayLow === 'number'
+              ? meta.regularMarketDayLow
+              : null;
+          const w52High =
+            typeof meta.fiftyTwoWeekHigh === 'number'
+              ? meta.fiftyTwoWeekHigh
+              : null;
+          const w52Low =
+            typeof meta.fiftyTwoWeekLow === 'number'
+              ? meta.fiftyTwoWeekLow
+              : null;
+
+          const fmtVal = (v: number) =>
+            new Intl.NumberFormat(currency === 'IDR' ? 'id-ID' : 'en-US', {
+              maximumFractionDigits: 2,
+            }).format(v);
+
+          const trendBadge =
+            diff >= 0
+              ? `🟢 +${fmtVal(diff)} (+${pct.toFixed(2)}%)`
+              : `🔴 ${fmtVal(diff)} (${pct.toFixed(2)}%)`;
+
+          return {
+            content: [
+              `### 📈 Data Pasar Saham / Indeks — ${name} (\`${String(meta.symbol || sym)}\`)`,
+              `| Indikator Pasar | Nilai Terkini |`,
+              `| :--- | :--- |`,
+              `| **Harga Pasar** | **${fmtVal(price)} ${currency}** |`,
+              `| **Perubahan Harian** | **${trendBadge}** *(Prev Close: ${fmtVal(prevClose)})* |`,
+              dayLow !== null && dayHigh !== null
+                ? `| **Rentang Hari Ini** | ${fmtVal(dayLow)} – ${fmtVal(dayHigh)} ${currency} |`
+                : '',
+              w52Low !== null && w52High !== null
+                ? `| **Rentang 52 Minggu** | ${fmtVal(w52Low)} – ${fmtVal(w52High)} ${currency} |`
+                : '',
+              `| **Bursa** | ${String(meta.fullExchangeName || meta.exchangeName || '-')} |`,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            answeredById: 'yahoo-finance',
+            answeredByName: 'Market Data · Yahoo Finance',
+            usedFallback: false,
+          };
+        }
+      }
+    }
+
+    throw new Error(
+      `Kode saham/indeks "${rawTicker}" tidak ditemukan. Contoh: \`/ihsg\`, \`/saham BBCA\`, \`/saham TLKM\`, atau \`/saham NVDA\`.`
+    );
+  }
+
+  // === 23. KUTIPAN MOTIVASI & INSPIRASI (ZENQUOTES) ===
+  if (toolId === 'quote') {
+    onStatus?.({
+      toolName: 'Kutipan Inspirasi',
+      mirrorName: 'ZenQuotes Live',
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const r1 = await fetchToolEndpoint('https://zenquotes.io/api/random', 16000, signal);
+    if (r1.ok && r1.body) {
+      try {
+        const arr = JSON.parse(r1.body.trim()) as Array<Record<string, unknown>>;
+        if (Array.isArray(arr) && arr[0]?.q) {
+          const quoteText = String(arr[0].q).trim();
+          const author = String(arr[0].a || 'Anonim').trim();
+          return {
+            content: `### 💬 Kutipan Inspirasi Hari Ini\n\n> *"${quoteText}"*\n>\n> — **${author}**`,
+            answeredById: 'zenquotes',
+            answeredByName: 'Inspirasi · ZenQuotes',
+            usedFallback: false,
+          };
+        }
+      } catch {
+        // Ignore parse error
+      }
+    }
+
+    throw new Error('Gagal memuat kutipan inspirasi saat ini.');
   }
 
   throw new Error(`Perintah tool "${toolId}" tidak dikenali.`);

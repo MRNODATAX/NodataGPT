@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Blocks,
+  CloudSun,
   Download,
   Film,
+  ImagePlus,
+  Loader2,
   Play,
   Search,
   Sparkles,
@@ -14,7 +16,9 @@ import {
   type WebToolCategoryId,
   type WebToolDefinition,
   buildSlashCommandFromTool,
+  uploadImageToTempPublicUrl,
 } from '../services/webTools';
+import { ToolsIcon } from './ToolsIcon';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -40,6 +44,10 @@ const CATEGORY_TABS: Array<{
     id: 'D',
     label: `D · Kreatif & Info ID (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'D').length})`,
   },
+  {
+    id: 'E',
+    label: `E · Cuaca, Sholat & Finansial (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'E').length})`,
+  },
 ];
 
 export function ToolsStudioModal({
@@ -57,12 +65,19 @@ export function ToolsStudioModal({
   );
   const [inputValue, setInputValue] = useState('');
   const [subOption, setSubOption] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setSelectedTool(null);
       setInputValue('');
       setSearchQuery('');
+      setUploadingPhoto(false);
+      setUploadError('');
+      setUploadedPreviewUrl('');
       return;
     }
     const onKey = (e: KeyboardEvent) => {
@@ -95,10 +110,32 @@ export function ToolsStudioModal({
     setSelectedTool(tool);
     setInputValue('');
     setSubOption(tool.secondarySelect?.defaultValue || '');
+    setUploadError('');
+    setUploadedPreviewUrl('');
+  };
+
+  const handlePhotoUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingPhoto(true);
+    setUploadError('');
+    try {
+      const publicUrl = await uploadImageToTempPublicUrl(file);
+      setInputValue(publicUrl);
+      setUploadedPreviewUrl(publicUrl);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : 'Gagal mengunggah berkas foto.'
+      );
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleExecuteSelected = () => {
-    if (!selectedTool) return;
+    if (!selectedTool || uploadingPhoto) return;
     if (selectedTool.requiresInput && !inputValue.trim()) return;
     const cmd = buildSlashCommandFromTool(selectedTool, inputValue, subOption);
     onClose();
@@ -108,6 +145,7 @@ export function ToolsStudioModal({
   const getCategoryIcon = (cat: WebToolCategoryId) => {
     if (cat === 'A') return Download;
     if (cat === 'B') return Film;
+    if (cat === 'E') return CloudSun;
     return Sparkles;
   };
 
@@ -131,7 +169,7 @@ export function ToolsStudioModal({
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 sm:py-4">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE]">
-              <Blocks className="h-4.5 w-4.5" />
+              <ToolsIcon className="h-4.5 w-4.5" />
             </span>
             <div>
               <h2
@@ -141,7 +179,7 @@ export function ToolsStudioModal({
                 NodataGPT Web Tools Studio
               </h2>
               <p className="text-xs text-[#94A3B8]">
-                16 fitur aktif (Downloader Media, Audio/Video AI, Kreatif &amp; Info Indonesia) dengan Auto-Fallback
+                {WEB_TOOLS_CATALOG.length} fitur aktif (Downloader, Audio/Video AI, Cuaca, Sholat, Kurs, Emas, Crypto &amp; Saham) dengan Auto-Fallback
               </p>
             </div>
           </div>
@@ -164,7 +202,7 @@ export function ToolsStudioModal({
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari TikTok, YouTube, Spotify, Text2Video, TTS, Gempa BMKG, Berita..."
+              placeholder="Cari TikTok, YouTube, Cuaca, Sholat, Kurs, Emas, Crypto, IHSG, RemoveBG..."
               className="h-10 w-full rounded-xl border border-white/10 bg-black/50 pr-3 pl-9 text-sm text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
             />
           </div>
@@ -245,6 +283,50 @@ export function ToolsStudioModal({
                 </div>
               )}
 
+              {selectedTool.acceptsImageUpload && (
+                <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/10 bg-black/45 p-2.5">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => void handlePhotoUpload(e.target.files?.[0])}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingPhoto}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#FB923C]/45 bg-[#FB923C]/15 px-3 text-xs font-semibold text-[#FED7AA] transition-colors hover:bg-[#FB923C]/25 disabled:opacity-50 cursor-pointer"
+                  >
+                    {uploadingPhoto ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#FB923C]" />
+                    ) : (
+                      <ImagePlus className="h-3.5 w-3.5 text-[#FB923C]" />
+                    )}
+                    <span>
+                      {uploadingPhoto
+                        ? 'Mengunggah Foto...'
+                        : 'Upload Foto dari Perangkat'}
+                    </span>
+                  </button>
+
+                  {uploadedPreviewUrl && (
+                    <div className="flex items-center gap-2 text-[11px] text-emerald-300">
+                      <img
+                        src={uploadedPreviewUrl}
+                        alt="Pratinjau foto"
+                        className="h-8 w-8 rounded-md border border-white/15 object-cover"
+                      />
+                      <span>Foto siap diproses — klik Jalankan!</span>
+                    </div>
+                  )}
+
+                  {uploadError && (
+                    <span className="text-[11px] text-rose-300">{uploadError}</span>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="text"
@@ -274,7 +356,10 @@ export function ToolsStudioModal({
 
                   <button
                     type="button"
-                    disabled={selectedTool.requiresInput && !inputValue.trim()}
+                    disabled={
+                      uploadingPhoto ||
+                      (selectedTool.requiresInput && !inputValue.trim())
+                    }
                     onClick={() => {
                       const cmd = buildSlashCommandFromTool(
                         selectedTool,
@@ -291,7 +376,10 @@ export function ToolsStudioModal({
 
                   <button
                     type="button"
-                    disabled={selectedTool.requiresInput && !inputValue.trim()}
+                    disabled={
+                      uploadingPhoto ||
+                      (selectedTool.requiresInput && !inputValue.trim())
+                    }
                     onClick={handleExecuteSelected}
                     className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#0E7490] px-4 text-xs font-bold text-white shadow-[0_0_16px_rgba(34,211,238,0.25)] hover:bg-[#0891B2] disabled:opacity-45 cursor-pointer"
                   >
@@ -310,7 +398,7 @@ export function ToolsStudioModal({
             {filteredTools.map((tool) => {
               const Icon = getCategoryIcon(tool.category);
               const isChosen = selectedTool?.id === tool.id;
-              const isOrange = tool.category === 'B';
+              const isOrange = tool.category === 'B' || tool.category === 'E';
 
               return (
                 <button
@@ -354,7 +442,9 @@ export function ToolsStudioModal({
                           ? 'bg-[#22D3EE]/12 text-[#67E8F9]'
                           : tool.category === 'B'
                             ? 'bg-[#FB923C]/14 text-[#FDBA74]'
-                            : 'bg-white/10 text-[#E2E8F0]'
+                            : tool.category === 'E'
+                              ? 'bg-emerald-500/14 text-emerald-300'
+                              : 'bg-white/10 text-[#E2E8F0]'
                       }`}
                     >
                       {tool.badge}

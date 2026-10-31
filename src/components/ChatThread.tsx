@@ -316,61 +316,83 @@ function DataSaverAudioCard({
 
 function DataSaverGalleryGrid({
   urls,
+  downloadUrls,
   msgId,
 }: {
   urls: string[];
+  downloadUrls?: string[];
   msgId: string;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxState, setLightboxState] = useState<{
+    previewUrl: string;
+    downloadUrl: string;
+    index: number;
+  } | null>(null);
 
-  const visibleUrls = showAll ? urls : urls.slice(0, 6);
+  const visibleUrls = showAll ? urls : urls.slice(0, 30);
   const hiddenCount = urls.length - visibleUrls.length;
 
   return (
     <div className="mb-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {visibleUrls.map((gUrl, gIdx) => (
-          <div
-            key={`${msgId}-gal-${gIdx}`}
-            className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/75"
-          >
-            <button
-              type="button"
-              onClick={() => setLightboxUrl(gUrl)}
-              aria-label={`Pratinjau gambar ${gIdx + 1}`}
-              className="h-full w-full cursor-pointer"
+        {visibleUrls.map((gUrl, gIdx) => {
+          const fullDlUrl = downloadUrls?.[gIdx] || gUrl;
+          return (
+            <div
+              key={`${msgId}-gal-${gIdx}`}
+              className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/75"
             >
-              <img
-                src={gUrl}
-                alt={`Galeri ${gIdx + 1}`}
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              <button
+                type="button"
+                onClick={() =>
+                  setLightboxState({
+                    previewUrl: gUrl,
+                    downloadUrl: fullDlUrl,
+                    index: gIdx + 1,
+                  })
+                }
+                aria-label={`Pratinjau gambar ${gIdx + 1}`}
+                className="h-full w-full cursor-pointer"
+              >
+                <img
+                  src={gUrl}
+                  alt={`Galeri ${gIdx + 1}`}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setLightboxState({
+                    previewUrl: gUrl,
+                    downloadUrl: fullDlUrl,
+                    index: gIdx + 1,
+                  })
+                }
+                aria-label="Perbesar gambar"
+                className="absolute top-1.5 left-1.5 inline-flex h-7 items-center gap-1 rounded-lg bg-black/75 px-1.5 text-[10.5px] font-semibold text-[#E2E8F0] opacity-90 backdrop-blur-xs transition-colors hover:bg-black/95 hover:text-white cursor-pointer"
+              >
+                <Maximize2 className="h-3 w-3 text-[#22D3EE]" />
+                <span>#{gIdx + 1}</span>
+              </button>
+
+              <DirectDownloadButton
+                url={fullDlUrl}
+                label="Unduh"
+                kind="image"
+                fallbackId={`${msgId}-${gIdx + 1}`}
+                compact
+                iconSizeClass="h-3 w-3"
+                className="absolute right-1.5 bottom-1.5 inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-[#22D3EE]/45 bg-black/80 px-2 py-1 text-[10.5px] font-semibold text-[#CFFAFE] shadow-md backdrop-blur-xs transition-colors hover:bg-[#0E7490] hover:text-white"
               />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setLightboxUrl(gUrl)}
-              aria-label="Perbesar gambar"
-              className="absolute top-1.5 left-1.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-black/70 text-[#CBD5E1] opacity-85 backdrop-blur-xs transition-colors hover:bg-black/90 hover:text-white cursor-pointer"
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-            </button>
-
-            <DirectDownloadButton
-              url={gUrl}
-              label={`Unduh`}
-              kind="image"
-              fallbackId={`${msgId}-${gIdx + 1}`}
-              compact
-              iconSizeClass="h-3 w-3"
-              className="absolute right-1.5 bottom-1.5 inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-[#22D3EE]/45 bg-black/80 px-2 py-1 text-[10.5px] font-semibold text-[#CFFAFE] shadow-md backdrop-blur-xs transition-colors hover:bg-[#0E7490] hover:text-white"
-            />
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {hiddenCount > 0 && (
@@ -383,12 +405,12 @@ function DataSaverGalleryGrid({
         </button>
       )}
 
-      {lightboxUrl && (
+      {lightboxState && (
         <div
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightboxState(null)}
         >
           <div
             className="relative flex max-h-[88dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#060B14] shadow-2xl"
@@ -396,19 +418,19 @@ function DataSaverGalleryGrid({
           >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
               <span className="font-display text-xs font-semibold text-[#CBD5E1]">
-                Pratinjau Gambar HD
+                Pratinjau Gambar HD #{lightboxState.index}
               </span>
               <div className="flex items-center gap-2">
                 <DirectDownloadButton
-                  url={lightboxUrl}
+                  url={lightboxState.downloadUrl}
                   label="Unduh Gambar HD"
                   kind="image"
-                  fallbackId={msgId}
+                  fallbackId={`${msgId}-${lightboxState.index}`}
                   className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl bg-[#0E7490] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0891B2]"
                 />
                 <button
                   type="button"
-                  onClick={() => setLightboxUrl(null)}
+                  onClick={() => setLightboxState(null)}
                   aria-label="Tutup pratinjau"
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer"
                 >
@@ -418,7 +440,7 @@ function DataSaverGalleryGrid({
             </div>
             <div className="flex flex-1 items-center justify-center overflow-auto bg-black p-2">
               <img
-                src={lightboxUrl}
+                src={lightboxState.previewUrl}
                 alt="Pratinjau penuh"
                 decoding="async"
                 referrerPolicy="no-referrer"
@@ -1011,7 +1033,11 @@ export function ChatThread({
                     )}
 
                     {msg.galleryUrls && msg.galleryUrls.length > 0 && (
-                      <DataSaverGalleryGrid urls={msg.galleryUrls} msgId={msg.id} />
+                      <DataSaverGalleryGrid
+                        urls={msg.galleryUrls}
+                        downloadUrls={msg.galleryDownloadUrls}
+                        msgId={msg.id}
+                      />
                     )}
 
                     <MarkdownRenderer

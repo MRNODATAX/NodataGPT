@@ -34,6 +34,7 @@ export interface ChatMessage {
   audioUrl?: string;
   audioTitle?: string;
   galleryUrls?: string[];
+  galleryDownloadUrls?: string[];
   downloadItems?: MediaDownloadItem[];
   summarizeTranscript?: string;
   isImageRequest?: boolean;

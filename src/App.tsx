@@ -412,6 +412,7 @@ export function App() {
                     audioUrl: result.audioUrl,
                     audioTitle: result.audioTitle,
                     galleryUrls: result.galleryUrls,
+                    galleryDownloadUrls: result.galleryDownloadUrls,
                     downloadItems: result.downloadItems,
                     summarizeTranscript: result.summarizeTranscript,
                     status: 'done',

@@ -169,9 +169,82 @@ export function ChatComposer({
 
   const canSend = Boolean(value.trim() || attachment);
 
+  const isRandomImageCmd = /^\s*\/(?:random|randomimg|randomimage|wallpaper|wall)\b/i.test(
+    value
+  );
+  const isPinterestCmd = /^\s*\/(?:pinterest|pin)\b/i.test(value);
+
+  const applyQuickCountToInput = (n: number) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const withoutTrailingCount = trimmed
+      .replace(/\s*,\s*\d{1,3}\s*$/, '')
+      .replace(/^\/random(?:\s+image|\s+img)?(?=\s|$)/i, '/randomimage')
+      .trim();
+    onChange(`${withoutTrailingCount} ,${n}`);
+    textareaRef.current?.focus();
+  };
+
   return (
     <div className="pb-safe w-full shrink-0 bg-gradient-to-t from-[#03050B]/95 via-[#03050B]/70 to-transparent px-3 pt-1.5 sm:px-6 sm:pt-2">
       <div className="mx-auto w-full max-w-3xl">
+        {(isRandomImageCmd || isPinterestCmd) && (
+          <div className="mb-2 rounded-2xl border border-[#22D3EE]/30 bg-[#07111E]/92 px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-md">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span className="font-semibold text-[#67E8F9]">
+                📌 Pemberitahuan Command &amp; Cara Pakai{' '}
+                <code className="font-mono-code text-white">
+                  {isRandomImageCmd ? '/randomimage' : '/pinterest'}
+                </code>
+              </span>
+              <code className="rounded border border-[#FB923C]/35 bg-[#FB923C]/12 px-1.5 py-0.5 font-mono-code text-[10px] text-[#FDBA74]">
+                {isRandomImageCmd
+                  ? '/randomimage [mode / tema] ,<jumlah 1–30>'
+                  : '/pinterest <kata kunci> ,<jumlah 1–30>'}
+              </code>
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-[#CBD5E1]">
+              {isRandomImageCmd
+                ? 'Pilih mode (anime, cyberpunk, nature, space, city, minimal, portrait, mockup) atau ketik tema bebas, lalu akhiri dengan ,jumlah (contoh: /randomimage anime ,10).'
+                : 'Ketik kata kunci pencarian lalu akhiri dengan ,jumlah (1–30) untuk mengatur banyak pin (contoh: /pinterest alya kujou ,10).'}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-[#94A3B8]">
+                Atur jumlah cepat:
+              </span>
+              {[4, 8, 10, 15, 20, 30].map((cnt) => (
+                <button
+                  key={cnt}
+                  type="button"
+                  onClick={() => applyQuickCountToInput(cnt)}
+                  className="rounded-md border border-[#22D3EE]/30 bg-[#22D3EE]/12 px-1.5 py-0.5 font-mono-code text-[10px] font-semibold text-[#A5F3FC] transition-colors hover:bg-[#22D3EE]/25 hover:text-white cursor-pointer"
+                >
+                  ,{cnt}
+                </button>
+              ))}
+              <span className="ml-1 text-[10px] font-semibold text-[#94A3B8]">
+                Contoh:
+              </span>
+              {(isRandomImageCmd
+                ? ['/randomimage anime ,10', '/randomimage cyberpunk ,8']
+                : ['/pinterest alya kujou ,10', '/pinterest anime aesthetic ,15']
+              ).map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => {
+                    onChange(ex);
+                    textareaRef.current?.focus();
+                  }}
+                  className="rounded-md border border-white/12 bg-white/[0.05] px-2 py-0.5 font-mono-code text-[10px] text-[#E2E8F0] transition-colors hover:border-[#FB923C]/45 hover:bg-[#FB923C]/15 hover:text-white cursor-pointer"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {fileError && (
           <div className="mb-1.5 flex items-center justify-between rounded-xl border border-[#FB923C]/40 bg-[#1B120E]/90 px-3 py-1.5 text-xs text-[#FED7AA] backdrop-blur-md">
             <span>{fileError}</span>

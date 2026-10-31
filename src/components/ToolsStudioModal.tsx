@@ -66,6 +66,7 @@ export function ToolsStudioModal({
   );
   const [inputValue, setInputValue] = useState('');
   const [subOption, setSubOption] = useState('');
+  const [countValue, setCountValue] = useState<number>(8);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
@@ -113,6 +114,7 @@ export function ToolsStudioModal({
     setSelectedTool(tool);
     setInputValue('');
     setSubOption(tool.secondarySelect?.defaultValue || '');
+    setCountValue(tool.countSelector?.defaultCount || 8);
     setUploadError('');
     setUploadedPreviewUrl('');
     setLocatingGps(false);
@@ -168,7 +170,12 @@ export function ToolsStudioModal({
   const handleExecuteSelected = () => {
     if (!selectedTool || uploadingPhoto) return;
     if (selectedTool.requiresInput && !inputValue.trim()) return;
-    const cmd = buildSlashCommandFromTool(selectedTool, inputValue, subOption);
+    const cmd = buildSlashCommandFromTool(
+      selectedTool,
+      inputValue,
+      subOption,
+      selectedTool.countSelector ? countValue : undefined
+    );
     onClose();
     onRunCommand(cmd);
   };
@@ -261,7 +268,7 @@ export function ToolsStudioModal({
 
         {/* Selected Tool Inline Launcher */}
         {selectedTool && (
-          <div className="border-b border-[#22D3EE]/30 bg-gradient-to-r from-[#071525]/95 via-[#091220]/95 to-[#1A1008]/90 px-4 py-3.5 sm:px-5">
+          <div className="max-h-[54dvh] overflow-y-auto border-b border-[#22D3EE]/30 bg-gradient-to-r from-[#071525]/95 via-[#091220]/95 to-[#1A1008]/90 px-4 py-3.5 sm:max-h-[58dvh] sm:px-5">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -287,6 +294,41 @@ export function ToolsStudioModal({
             </div>
 
             <div className="mt-3 space-y-2.5">
+              {selectedTool.usageNotice && (
+                <div className="rounded-xl border border-[#22D3EE]/25 bg-black/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <span className="text-[11px] font-bold text-[#67E8F9]">
+                      📌 {selectedTool.usageNotice.title}
+                    </span>
+                    <code className="rounded border border-[#FB923C]/35 bg-[#FB923C]/12 px-1.5 py-0.5 font-mono-code text-[10px] text-[#FDBA74]">
+                      {selectedTool.usageNotice.syntax}
+                    </code>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[#CBD5E1]">
+                    {selectedTool.usageNotice.notes}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-[#94A3B8]">
+                      Klik contoh:
+                    </span>
+                    {selectedTool.usageNotice.examples.map((exCmd) => (
+                      <button
+                        key={exCmd}
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onInsertCommand(exCmd);
+                        }}
+                        title="Masukkan contoh command ini ke kolom chat"
+                        className="rounded-md border border-white/12 bg-white/[0.05] px-2 py-0.5 font-mono-code text-[10px] text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/45 hover:bg-[#22D3EE]/14 hover:text-white cursor-pointer"
+                      >
+                        {exCmd}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedTool.secondarySelect && (
                 <div>
                   <label className="mb-1 block text-[11px] font-medium text-[#CBD5E1]">
@@ -310,6 +352,66 @@ export function ToolsStudioModal({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {selectedTool.countSelector && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-medium text-[#CBD5E1]">
+                      {selectedTool.countSelector.label}
+                    </label>
+                    <code className="font-mono-code text-[10px] text-[#67E8F9]">
+                      Command:{' '}
+                      {buildSlashCommandFromTool(
+                        selectedTool,
+                        inputValue || (selectedTool.requiresInput ? selectedTool.exampleInput : ''),
+                        subOption,
+                        countValue
+                      )}
+                    </code>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selectedTool.countSelector.presets.map((preset) => {
+                      const isPicked = countValue === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setCountValue(preset)}
+                          className={`rounded-lg border px-2.5 py-1 font-mono-code text-xs font-semibold transition-colors cursor-pointer ${
+                            isPicked
+                              ? 'border-[#22D3EE] bg-[#22D3EE]/22 text-white shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+                              : 'border-white/12 bg-black/50 text-[#CBD5E1] hover:border-white/25 hover:text-white'
+                          }`}
+                        >
+                          ,{preset}
+                        </button>
+                      );
+                    })}
+                    <div className="flex items-center gap-1 rounded-lg border border-white/15 bg-black/60 px-2 py-0.5">
+                      <span className="text-[10px] text-[#94A3B8]">Custom:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={selectedTool.countSelector.maxCount}
+                        value={countValue}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (!Number.isNaN(v)) {
+                            setCountValue(
+                              Math.min(
+                                Math.max(v, 1),
+                                selectedTool.countSelector?.maxCount || 30
+                              )
+                            );
+                          }
+                        }}
+                        aria-label="Jumlah gambar custom"
+                        className="w-11 bg-transparent text-center font-mono-code text-xs font-bold text-[#FDBA74] focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -421,7 +523,8 @@ export function ToolsStudioModal({
                       const cmd = buildSlashCommandFromTool(
                         selectedTool,
                         inputValue,
-                        subOption
+                        subOption,
+                        selectedTool.countSelector ? countValue : undefined
                       );
                       onClose();
                       onInsertCommand(cmd);

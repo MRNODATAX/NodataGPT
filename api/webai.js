@@ -986,27 +986,24 @@ async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
 }
 
 // ============================================================================
-// UNIFIED PROVIDER DIRECTORY & DISPATCHER (16 Distinct Verified Websites)
+// UNIFIED PROVIDER DIRECTORY & DISPATCHER (14 Distinct Verified Websites)
 // ============================================================================
 export const WEBAI_SCRAPER_DIRECTORY = [
-  { id: 'gemma4-12b', site: 'huggingface-projects-gemma-4-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 4 12B IT (Official Space)' },
-  { id: 'gemma4-thinking', site: 'huggingface-projects-gemma-4-12b-it.hf.space', kind: 'reasoning', name: 'Google Gemma 4 12B Thinking (Reasoning)' },
-  { id: 'gemma3-12b', site: 'huggingface-projects-gemma-3-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 3 12B IT (Official Space)' },
-  { id: 'qwen3-coder-webdev', site: 'qwen-qwen3-coder-webdev.hf.space', kind: 'coding', name: 'Alibaba Qwen3 Coder WebDev (Official Space)' },
-  { id: 'qwen-cpu-chat', site: 'vml12-qwen-ai-chatbot.hf.space', kind: 'chat', name: 'Qwen AI Chatbot Stateless Space' },
-  { id: 'aitopia-direct', site: 'extensions.aitopia.ai', kind: 'chat', name: 'Aitopia AI Extension Direct' },
-  { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Direct Hash Scraper' },
   { id: 'deepai-online', site: 'deepai.org', kind: 'search', name: 'DeepAI Live Online Search' },
-  { id: 'kilo-nemotron', site: 'kilo.ai', kind: 'reasoning', name: 'Kilo Gateway · NVIDIA Nemotron 3.5 Super 120B' },
-  { id: 'kilo-beam', site: 'kilo.ai', kind: 'coding', name: 'Kilo Gateway · Reflection Beam 1M Coder' },
+  { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Direct Hash Scraper' },
   { id: 'cohere-command-a', site: 'coherelabs-c4ai-command.hf.space', kind: 'chat', name: 'Cohere Labs Official · Command-A 2025' },
+  { id: 'kilo-beam', site: 'kilo.ai', kind: 'coding', name: 'Kilo Gateway · Reflection Beam 1M Coder' },
+  { id: 'kilo-nemotron', site: 'kilo.ai', kind: 'reasoning', name: 'Kilo Gateway · NVIDIA Nemotron 3.5 Super 120B' },
   { id: 'llm7-direct', site: 'api.llm7.io', kind: 'coding', name: 'LLM7.io · Mistral Codestral Direct' },
+  { id: 'aitopia-direct', site: 'extensions.aitopia.ai', kind: 'chat', name: 'Aitopia AI Extension Direct' },
   { id: 'yqcloud', site: 'chat9.yqcloud.top', kind: 'search', name: 'YQCloud Live Web GPT Stream' },
+  { id: 'gemma4-12b', site: 'huggingface-projects-gemma-4-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 4 12B IT (Official Space)' },
+  { id: 'gemma3-12b', site: 'huggingface-projects-gemma-3-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 3 12B IT (Official Space)' },
+  { id: 'gemma3n-e4b', site: 'huggingface-projects-gemma-3n-e4b-it.hf.space', kind: 'chat', name: 'Google Gemma 3n E4B IT (Official Space)' },
+  { id: 'qwen-cpu-chat', site: 'vml12-qwen-ai-chatbot.hf.space', kind: 'chat', name: 'Qwen AI Stateless CPU Space' },
   { id: 'bfl-flux-schnell', site: 'black-forest-labs-flux-1-schnell.hf.space', kind: 'image', name: 'Black Forest Labs · FLUX.1-Schnell 1024px' },
-  { id: 'bfl-flux2-klein', site: 'black-forest-labs-flux-2-klein-9b.hf.space', kind: 'image', name: 'Black Forest Labs · FLUX.2 Klein 9B (4-Step)' },
   { id: 'evalstate-flux', site: 'evalstate-flux1-schnell.hf.space', kind: 'image', name: 'Evalstate · FLUX.1-Schnell Fast ZeroGPU' },
   { id: 'qwen-image-fast', site: 'mcp-tools-qwen-image-fast.hf.space', kind: 'image', name: 'Alibaba · Qwen-Image-Fast Lightning' },
-  { id: 'tongyi-zimage', site: 'tongyi-mai-z-image-turbo.hf.space', kind: 'image', name: 'Alibaba Tongyi-MAI · Z-Image-Turbo Official' },
   { id: 'neural-voice', site: 'tiktok-tts.weilnet.workers.dev', kind: 'audio', name: 'Neural AI Voice (Indo & Multi-Voice MP3)' },
 ];
 
@@ -1027,70 +1024,60 @@ async function dispatchWebAiProvider({
   switch (id) {
     case 'gemma4':
     case 'gemma4-12b':
-      return scrapeGradioTextSpace({
-        spaceSlug: 'huggingface-projects/gemma-4-12b-it',
-        spaceHost: 'huggingface-projects-gemma-4-12b-it.hf.space',
-        modelLabel: 'google/gemma-4-12b-it',
-        endpoint: '/chat',
-        data: [
-          inputText,
-          null,
-          null,
-          false,
-          1500,
-          280,
-          sysPrompt,
-          0.8,
-          0.95,
-          64,
-          1.0,
-        ],
-        timeoutMs: 32000,
-      });
-
-    case 'gemma4-thinking':
-      return scrapeGradioTextSpace({
-        spaceSlug: 'huggingface-projects/gemma-4-12b-it',
-        spaceHost: 'huggingface-projects-gemma-4-12b-it.hf.space',
-        modelLabel: 'google/gemma-4-12b-it (thinking)',
-        endpoint: '/chat',
-        data: [
-          inputText,
-          null,
-          null,
-          true,
-          1800,
-          280,
-          sysPrompt,
-          0.8,
-          0.95,
-          64,
-          1.0,
-        ],
-        timeoutMs: 34000,
-      });
+      try {
+        return await scrapeGradioTextSpace({
+          spaceSlug: 'huggingface-projects/gemma-4-12b-it',
+          spaceHost: 'huggingface-projects-gemma-4-12b-it.hf.space',
+          modelLabel: 'google/gemma-4-12b-it',
+          endpoint: '/chat',
+          data: [
+            inputText,
+            null,
+            null,
+            false,
+            1200,
+            280,
+            sysPrompt,
+            0.8,
+            0.95,
+            64,
+            1.0,
+          ],
+          timeoutMs: 30000,
+        });
+      } catch {
+        return scrapeCohereCommand({ text: inputText, system: sysPrompt });
+      }
 
     case 'gemma3':
     case 'gemma3-12b':
-      return scrapeGradioTextSpace({
-        spaceSlug: 'huggingface-projects/gemma-3-12b-it',
-        spaceHost: 'huggingface-projects-gemma-3-12b-it.hf.space',
-        modelLabel: 'google/gemma-3-12b-it',
-        endpoint: '/run',
-        data: [{ text: inputText, files: [] }, sysPrompt, 1000],
-        timeoutMs: 30000,
-      });
+      try {
+        return await scrapeGradioTextSpace({
+          spaceSlug: 'huggingface-projects/gemma-3-12b-it',
+          spaceHost: 'huggingface-projects-gemma-3-12b-it.hf.space',
+          modelLabel: 'google/gemma-3-12b-it',
+          endpoint: '/run',
+          data: [{ text: inputText, files: [] }, sysPrompt, 900],
+          timeoutMs: 28000,
+        });
+      } catch {
+        return scrapeCohereCommand({ text: inputText, system: sysPrompt });
+      }
 
-    case 'qwen3-coder':
-    case 'qwen3-coder-webdev':
-      return scrapeGradioTextSpace({
-        spaceSlug: 'Qwen/Qwen3-Coder-WebDev',
-        spaceHost: 'qwen-qwen3-coder-webdev.hf.space',
-        modelLabel: 'Qwen/Qwen3-Coder-WebDev',
-        endpoint: '/generate_code',
-        data: [inputText, sysPrompt],
-        timeoutMs: 34000,
-      });
+    case 'gemma3n':
+    case 'gemma3n-e4b':
+      try {
+        return await scrapeGradioTextSpace({
+          spaceSlug: 'huggingface-projects/gemma-3n-E4B-it',
+          spaceHost: 'huggingface-projects-gemma-3n-e4b-it.hf.space',
+          modelLabel: 'google/gemma-3n-E4B-it',
+          endpoint: '/generate',
+          data: [{ text: inputText, files: [] }, sysPrompt, 900],
+          timeoutMs: 28000,
+        });
+      } catch {
+        return scrapeCohereCommand({ text: inputText, system: sysPrompt });
+      }
 
     case 'qwen-cpu-chat':
       return scrapeGradioTextSpace({
@@ -1210,28 +1197,6 @@ async function dispatchWebAiProvider({
       }
     }
 
-    case 'bfl-flux2-klein': {
-      const seed = Math.floor(Math.random() * 1000000);
-      return callGradioImageSpace({
-        spaceSlug: 'black-forest-labs/FLUX.2-klein-9B',
-        spaceHost: 'black-forest-labs-flux-2-klein-9b.hf.space',
-        endpoint: '/generate',
-        data: [
-          inputText,
-          [],
-          'Distilled (4 steps)',
-          seed,
-          true,
-          dims.width,
-          dims.height,
-          4,
-          1.0,
-          false,
-        ],
-        timeoutMs: 36000,
-      });
-    }
-
     case 'evalstate-flux': {
       const seed = Math.floor(Math.random() * 1000000);
       try {
@@ -1254,22 +1219,24 @@ async function dispatchWebAiProvider({
     }
 
     case 'qwen-image-fast':
-      return callGradioImageSpace({
-        spaceSlug: 'mcp-tools/Qwen-Image-Fast',
-        spaceHost: 'mcp-tools-qwen-image-fast.hf.space',
-        endpoint: '/generate_image',
-        data: [inputText, 0, true, dims.aspect, 1.0, 8],
-        timeoutMs: 36000,
-      });
-
-    case 'tongyi-zimage':
-      return callGradioImageSpace({
-        spaceSlug: 'Tongyi-MAI/Z-Image-Turbo',
-        spaceHost: 'tongyi-mai-z-image-turbo.hf.space',
-        endpoint: '/generate',
-        data: [inputText, dims.zRes, 42, 8, 3.0, true, []],
-        timeoutMs: 36000,
-      });
+      try {
+        return await callGradioImageSpace({
+          spaceSlug: 'mcp-tools/Qwen-Image-Fast',
+          spaceHost: 'mcp-tools-qwen-image-fast.hf.space',
+          endpoint: '/generate_image',
+          data: [inputText, 0, true, dims.aspect, 1.0, 8],
+          timeoutMs: 36000,
+        });
+      } catch {
+        const seed = Math.floor(Math.random() * 1000000);
+        return callGradioImageSpace({
+          spaceSlug: 'black-forest-labs/FLUX.1-schnell',
+          spaceHost: 'black-forest-labs-flux-1-schnell.hf.space',
+          endpoint: '/infer',
+          data: [inputText, seed, true, dims.width, dims.height, 4],
+          timeoutMs: 34000,
+        });
+      }
 
     case 'openai-fm':
     case 'neural-voice': {
@@ -1370,13 +1337,9 @@ export default async function handler(req, res) {
   const system = String(body.system || query.system || NODATAGPT_DEFAULT_SYSTEM).trim();
 
   const isImageProvider =
-    [
-      'bfl-flux-schnell',
-      'bfl-flux2-klein',
-      'evalstate-flux',
-      'qwen-image-fast',
-      'tongyi-zimage',
-    ].includes(provider.toLowerCase()) || mode === 'image';
+    ['bfl-flux-schnell', 'evalstate-flux', 'qwen-image-fast'].includes(
+      provider.toLowerCase()
+    ) || mode === 'image';
 
   const defaultProbeText = isImageProvider
     ? 'futuristic neon cyan and orange glowing cybernetic fox emblem on dark obsidian background, ultra sharp digital art'

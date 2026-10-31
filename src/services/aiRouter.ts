@@ -950,9 +950,8 @@ export function buildModelRequests(
       ];
 
     case 'webai-gemma4-12b':
-    case 'webai-gemma4-thinking':
     case 'webai-gemma3-12b':
-    case 'webai-qwen3-coder':
+    case 'webai-gemma3n-e4b':
     case 'webai-qwen-cpu':
     case 'webai-aitopia':
     case 'webai-deepai-chat':
@@ -964,16 +963,15 @@ export function buildModelRequests(
     case 'webai-yqcloud': {
       const webAiProviderChains: Record<string, string[]> = {
         'webai-gemma4-12b': ['gemma4-12b', 'gemma3-12b', 'cohere-command-a'],
-        'webai-gemma4-thinking': ['gemma4-thinking', 'kilo-nemotron', 'gemma4-12b'],
-        'webai-gemma3-12b': ['gemma3-12b', 'gemma4-12b', 'cohere-command-a'],
-        'webai-qwen3-coder': ['qwen3-coder-webdev', 'kilo-beam', 'llm7-direct'],
+        'webai-gemma3-12b': ['gemma3-12b', 'gemma3n-e4b', 'cohere-command-a'],
+        'webai-gemma3n-e4b': ['gemma3n-e4b', 'gemma3-12b', 'cohere-command-a'],
         'webai-qwen-cpu': ['qwen-cpu-chat', 'cohere-command-a', 'aitopia-direct'],
         'webai-aitopia': ['aitopia-direct', 'cohere-command-a', 'deepai-chat'],
         'webai-deepai-chat': ['deepai-chat', 'aitopia-direct', 'cohere-command-a'],
         'webai-deepai-online': ['deepai-online', 'yqcloud', 'deepai-chat'],
         'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'aitopia-direct'],
         'webai-kilo-nemotron': ['kilo-nemotron', 'kilo-auto', 'cohere-command-a'],
-        'webai-kilo-beam': ['kilo-beam', 'llm7-direct', 'qwen3-coder-webdev'],
+        'webai-kilo-beam': ['kilo-beam', 'llm7-direct', 'cohere-command-a'],
         'webai-llm7-codestral': ['llm7-direct', 'kilo-beam', 'cohere-command-a'],
         'webai-yqcloud': ['yqcloud', 'deepai-online', 'aitopia-direct'],
       };
@@ -2873,10 +2871,9 @@ function orderImageEnginesForPrompt(
     return pick([
       'pollinations-flux',
       'zelai-zimage-turbo',
-      'webai-tongyi-zimage',
       'webai-qwen-image',
       'webai-bfl-flux-schnell',
-      'webai-bfl-flux2-klein',
+      'webai-evalstate-flux',
       'bintang-grok',
       'nexray-writecream',
       'nexray-magicstudio',
@@ -2892,7 +2889,6 @@ function orderImageEnginesForPrompt(
       'nexray-ideogram',
       'nexray-sologo',
       'webai-qwen-image',
-      'webai-bfl-flux2-klein',
       'webai-bfl-flux-schnell',
       'bintang-grok',
       'pollinations-flux',
@@ -2907,8 +2903,6 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-flux-v1',
       'zelai-zimage-turbo',
-      'webai-tongyi-zimage',
-      'webai-bfl-flux2-klein',
       'webai-bfl-flux-schnell',
       'webai-evalstate-flux',
       'comiku-sdxl',
@@ -2924,7 +2918,6 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-ideogram',
       'webai-qwen-image',
-      'webai-bfl-flux2-klein',
       'webai-bfl-flux-schnell',
       'bintang-grok',
       'pollinations-flux',
@@ -2945,7 +2938,6 @@ function orderImageEnginesForPrompt(
 
   if (/\bflux\b/i.test(prompt)) {
     return pick([
-      'webai-bfl-flux2-klein',
       'webai-bfl-flux-schnell',
       'webai-evalstate-flux',
       'pollinations-flux',

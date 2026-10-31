@@ -4,7 +4,6 @@ import {
   Calculator,
   Code2,
   ImageIcon,
-  Layers,
   Sparkles,
 } from 'lucide-react';
 import { ToolsIcon } from './ToolsIcon';
@@ -91,50 +90,19 @@ const STARTERS: StarterItem[] = [
 ];
 
 export function WelcomeScreen({
-  activeModel,
-  autoFallback,
-  healthyCount,
   deepThink,
   imageMode,
   onToggleDeepThink,
   onToggleImageMode,
   onSelectModelDirect,
   onSelectStarter,
-  onOpenModelPicker,
   onOpenToolsStudio,
 }: WelcomeScreenProps) {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-4 sm:px-6 sm:py-9">
-      {/* Hero Greeting Stage (Gemini + DeepSeek Cosmic Synthesis) */}
-      <div className="mb-4 flex flex-col items-center text-center sm:mb-7 sm:items-start sm:text-left">
-        {/* Live Cosmic Status Pill */}
-        <div className="mb-3.5 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/12 bg-black/75 p-1.5 shadow-lg backdrop-blur-md sm:h-12 sm:w-12">
-            <img
-              src="/logo-transparent.png"
-              alt="Ikon NodataGPT"
-              width={40}
-              height={40}
-              className="h-8 w-8 object-contain sm:h-9 sm:w-9"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={onOpenModelPicker}
-            className="nd-glass-card inline-flex min-h-[38px] items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium text-[#CBD5E1] hover:text-white cursor-pointer"
-          >
-            <span className="h-2 w-2 rounded-full bg-[#22D3EE] shadow-[0_0_8px_#22D3EE]" />
-            <Layers className="h-3.5 w-3.5 text-[#22D3EE]" />
-            <span className="font-semibold text-white">{activeModel.shortName}</span>
-            <span className="text-white/20">•</span>
-            <span className={autoFallback ? 'text-[#FB923C]' : 'text-[#94A3B8]'}>
-              {autoFallback ? `${healthyCount} server siaga` : 'Mode tunggal'}
-            </span>
-          </button>
-        </div>
-
-        <h1 className="font-display text-[25px] font-bold leading-[1.18] tracking-tight text-white sm:text-[38px]">
+      {/* Minimalist Hero Greeting Stage */}
+      <div className="mb-5 flex flex-col items-center text-center sm:mb-7 sm:items-start sm:text-left">
+        <h1 className="font-display text-[26px] font-bold leading-[1.2] tracking-tight text-white sm:text-[38px]">
           <span className="nd-hero-gradient">Jelajahi ide tanpa batas</span>{' '}
           <span className="block sm:inline">
             di <span className="text-[#22D3EE]">Nodata</span>
@@ -142,14 +110,14 @@ export function WelcomeScreen({
           </span>
         </h1>
 
-        <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-[#CBD5E1] sm:mt-2.5 sm:text-[15px]">
+        <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-[#CBD5E1] sm:mt-2.5 sm:text-[15px]">
           Ruang percakapan multi-model dengan penalaran DeepThink, pratinjau kode live, dan pengalihan server otomatis.
         </p>
 
-        {/* Qwen.ai-inspired Quick Capability Mode Pills */}
+        {/* Quick Capability Mode Pills (Scrollbar hidden for sleek minimalist look) */}
         <div
           aria-label="Mode kemampuan cepat"
-          className="mt-3.5 flex max-w-full items-center gap-1.5 overflow-x-auto pb-0.5"
+          className="mt-4 flex max-w-full items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <button
             type="button"

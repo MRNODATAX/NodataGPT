@@ -949,6 +949,60 @@ export function buildModelRequests(
         },
       ];
 
+    case 'webai-gptoss-120b':
+    case 'webai-gpt5-nano':
+    case 'webai-quillbot':
+    case 'webai-quillbot-search':
+    case 'webai-brave-ask':
+    case 'webai-opera-aria':
+    case 'webai-opera-reasoning':
+    case 'webai-deepai-chat':
+    case 'webai-deepai-online':
+    case 'webai-cohere-command':
+    case 'webai-phind-coder':
+    case 'webai-kilo-nemotron':
+    case 'webai-kilo-beam':
+    case 'webai-orcarouter':
+    case 'webai-teach-anything':
+    case 'webai-yqcloud': {
+      const webAiProviderChains: Record<string, string[]> = {
+        'webai-gptoss-120b': ['chatgptoss-120b', 'kilo-nemotron', 'orcarouter'],
+        'webai-gpt5-nano': ['chatgptoss-nano', 'chatgptoss-120b', 'orcarouter'],
+        'webai-quillbot': ['quillbot-chat', 'deepai-chat', 'chatgptoss-120b'],
+        'webai-quillbot-search': ['quillbot-search', 'brave-ask', 'deepai-online'],
+        'webai-brave-ask': ['brave-ask', 'quillbot-search', 'deepai-online'],
+        'webai-opera-aria': ['opera-aria', 'quillbot-chat', 'orcarouter'],
+        'webai-opera-reasoning': ['opera-aria-reasoning', 'kilo-nemotron', 'chatgptoss-120b'],
+        'webai-deepai-chat': ['deepai-chat', 'quillbot-chat', 'orcarouter'],
+        'webai-deepai-online': ['deepai-online', 'quillbot-search', 'brave-ask'],
+        'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'chatgptoss-120b'],
+        'webai-phind-coder': ['phindai', 'kilo-beam', 'chatgptoss-120b'],
+        'webai-kilo-nemotron': ['kilo-nemotron', 'kilo-auto', 'orcarouter'],
+        'webai-kilo-beam': ['kilo-beam', 'kilo-nemotron', 'phindai'],
+        'webai-orcarouter': ['orcarouter', 'kilo-auto', 'chatgptoss-120b'],
+        'webai-teach-anything': ['teach-anything', 'quillbot-chat', 'deepai-chat'],
+        'webai-yqcloud': ['yqcloud', 'deepai-chat', 'orcarouter'],
+      };
+      const providers = webAiProviderChains[model.id] || ['chatgptoss-120b'];
+      return [
+        ...providers.map((prov, idx) => ({
+          targetUrl: '/api/webai',
+          method: 'POST' as const,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: prov,
+            text: contextualUserText,
+            system: fullSystemPersona,
+          }),
+          timeoutMs: idx === 0 ? t : 24000,
+        })),
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/gptoss120b?prompt=${q}`,
+          timeoutMs: 20000,
+        },
+      ];
+    }
+
     case 'zelai-mimo-flash':
     case 'zelai-deepseek-v41':
     case 'zelai-nemotron-550b':
@@ -2825,6 +2879,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'pollinations-flux',
       'zelai-zimage-turbo',
+      'webai-qwen-image',
+      'webai-bfl-flux-schnell',
       'bintang-grok',
       'nexray-writecream',
       'nexray-magicstudio',
@@ -2839,6 +2895,7 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-ideogram',
       'nexray-sologo',
+      'webai-sd35-large',
       'bintang-grok',
       'pollinations-flux',
       'zelai-zimage-turbo',
@@ -2852,6 +2909,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-flux-v1',
       'zelai-zimage-turbo',
+      'webai-zimage-turbo',
+      'webai-bfl-flux-schnell',
       'comiku-sdxl',
       'pollinations-flux',
       'bintang-zimage',
@@ -2864,6 +2923,8 @@ function orderImageEnginesForPrompt(
   if (/\b(?:ideogram|poster|banner|tipografi|typography|tulisan|teks)\b/i.test(prompt)) {
     return pick([
       'nexray-ideogram',
+      'webai-qwen-image',
+      'webai-sd35-large',
       'bintang-grok',
       'pollinations-flux',
       'nexray-magicstudio',
@@ -2883,6 +2944,8 @@ function orderImageEnginesForPrompt(
 
   if (/\bflux\b/i.test(prompt)) {
     return pick([
+      'webai-bfl-flux-schnell',
+      'webai-bfl-flux-dev',
       'pollinations-flux',
       'nexray-flux-v1',
       'rin-flux',
@@ -3189,8 +3252,12 @@ export async function generateMultiEngineImage({
       }
 
       if (engine.delivery === 'hybrid-json' && typeof window !== 'undefined') {
+        const isInternalApi = targetUrl.startsWith('/api/');
         const directAbort = new AbortController();
-        const directTimer = window.setTimeout(() => directAbort.abort(), 18000);
+        const directTimer = window.setTimeout(
+          () => directAbort.abort(),
+          isInternalApi ? Math.max(engine.timeoutMs, 28000) : 18000
+        );
         const onParentAbort = () => directAbort.abort();
         signal?.addEventListener('abort', onParentAbort, { once: true });
 
@@ -3219,9 +3286,19 @@ export async function generateMultiEngineImage({
               };
             }
           }
+          if (isInternalApi) {
+            recordImageEngineFailure(engine.id, `internal-api-${directRes.status}`);
+            lastFailedName = engine.name;
+            continue;
+          }
         } catch {
           if (signal?.aborted) {
             throw new DOMException('Pembuatan gambar dibatalkan.', 'AbortError');
+          }
+          if (isInternalApi) {
+            recordImageEngineFailure(engine.id, 'internal-api-timeout');
+            lastFailedName = engine.name;
+            continue;
           }
           // Fall through to serverless gateway attempt
         } finally {

@@ -66,7 +66,7 @@ const IMAGE_CATEGORIES: Array<{ id: 'all' | ImageModelCategory; label: string }>
   { id: 'cepat', label: 'Cepat & Rasio' },
   { id: 'artistik', label: 'Artistik & Flux' },
   { id: 'desain', label: 'Poster & Logo' },
-  { id: 'direct', label: 'Direct Browser' },
+  { id: 'direct', label: 'Direct Scraper & ZeroGPU' },
 ];
 
 export function ModelPickerModal({

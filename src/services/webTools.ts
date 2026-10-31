@@ -283,25 +283,30 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     id: 'tts',
     category: 'B',
     categoryLabel: 'Audio, Video AI & Suara',
-    name: 'Multi-Karakter AI Voice (TTS)',
+    name: 'Multi-Karakter & Neural AI Voice (TTS)',
     shortName: 'Suara AI (TTS)',
     slashCommand: '/tts',
-    badge: 'Karakter Anime & Natural',
+    badge: 'OpenAI.fm Neural & Anime',
     description:
-      'Ubah teks menjadi suara karakter AI ekspresif (Nahida, Raiden, Furina, Hu Tao, Zhongli, Google TTS).',
+      'Ubah teks menjadi suara Neural OpenAI.fm (Coral, Nova, Onyx, Sage, Alloy) maupun karakter Anime ekspresif.',
     placeholder: 'Ketik kalimat yang ingin diubah menjadi suara...',
     exampleInput: 'Halo semuanya! Perkenalkan saya NodataGPT karya Mr.NODATA.',
     requiresInput: true,
     secondarySelect: {
-      label: 'Karakter Suara',
-      defaultValue: 'nahida',
+      label: 'Karakter / Suara Neural',
+      defaultValue: 'coral',
       options: [
-        { value: 'nahida', label: 'Nahida (Cerah & Ramah)' },
-        { value: 'furina', label: 'Furina (Ekspresif)' },
-        { value: 'raiden', label: 'Raiden Shogun (Tenang & Tegas)' },
-        { value: 'hutao', label: 'Hu Tao (Energik)' },
-        { value: 'ganyu', label: 'Ganyu (Lembut)' },
-        { value: 'zhongli', label: 'Zhongli (Bariton Berwibawa)' },
+        { value: 'coral', label: 'OpenAI.fm Coral (Neural Ekspresif & Hangat)' },
+        { value: 'nova', label: 'OpenAI.fm Nova (Neural Cerah & Jernih)' },
+        { value: 'onyx', label: 'OpenAI.fm Onyx (Neural Bariton Sinematik)' },
+        { value: 'sage', label: 'OpenAI.fm Sage (Neural Tenang & Profesional)' },
+        { value: 'alloy', label: 'OpenAI.fm Alloy (Neural Netral Modern)' },
+        { value: 'nahida', label: 'Nahida (Anime Cerah & Ramah)' },
+        { value: 'furina', label: 'Furina (Anime Ekspresif)' },
+        { value: 'raiden', label: 'Raiden Shogun (Anime Tegas)' },
+        { value: 'hutao', label: 'Hu Tao (Anime Energik)' },
+        { value: 'ganyu', label: 'Ganyu (Anime Lembut)' },
+        { value: 'zhongli', label: 'Zhongli (Anime Berwibawa)' },
         { value: 'google', label: 'Natural Bahasa Indonesia (Google TTS)' },
       ],
     },
@@ -1063,7 +1068,7 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
           subOption: voicePipe[1].toLowerCase(),
         };
       }
-      return { toolId: 'tts', arg: rest, subOption: 'nahida' };
+      return { toolId: 'tts', arg: rest, subOption: 'coral' };
     }
     case 'aisong':
     case 'musik':
@@ -2863,9 +2868,70 @@ export async function executeWebToolCommand({
         'Masukkan teks yang ingin diubah menjadi suara. Contoh: `/tts Halo saya NodataGPT!`'
       );
     }
-    const voice = (subOption || 'nahida').toLowerCase();
+    const voice = (subOption || 'coral').toLowerCase();
+    const openAiVoices = new Set([
+      'alloy',
+      'ash',
+      'ballad',
+      'coral',
+      'echo',
+      'fable',
+      'onyx',
+      'nova',
+      'sage',
+      'shimmer',
+      'verse',
+    ]);
 
-    if (voice !== 'google') {
+    if (openAiVoices.has(voice)) {
+      onStatus?.({
+        toolName: 'AI Voice TTS',
+        mirrorName: `OpenAI.fm Neural (${voice})`,
+        attempt: 1,
+        isFallback: false,
+      });
+      try {
+        const probeRes = await fetch('/api/webai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'openai-fm',
+            voice,
+            text: arg.slice(0, 1200),
+          }),
+          signal,
+        });
+        if (probeRes.ok) {
+          const probeJson = (await probeRes.json()) as {
+            ok?: boolean;
+            audioUrl?: string;
+          };
+          if (probeJson?.ok && probeJson.audioUrl) {
+            const downloadUrl = `${probeJson.audioUrl}&download=1`;
+            return {
+              content: `### 🎙️ OpenAI.fm Neural Voice (${voice.toUpperCase()})\n\n> "${arg}"`,
+              answeredById: 'webai-openai-fm',
+              answeredByName: `OpenAI.fm GPT-4o-Mini-TTS (${voice})`,
+              usedFallback: false,
+              audioUrl: probeJson.audioUrl,
+              audioTitle: `OpenAI.fm Neural · ${voice.toUpperCase()}`,
+              downloadItems: [
+                {
+                  label: `Unduh Suara Neural MP3 (${voice})`,
+                  url: downloadUrl,
+                  kind: 'audio',
+                },
+              ],
+            };
+          }
+        }
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        // Fallback below
+      }
+    }
+
+    if (voice !== 'google' && !openAiVoices.has(voice)) {
       onStatus?.({
         toolName: 'AI Voice TTS',
         mirrorName: `Snow Voice (${voice})`,

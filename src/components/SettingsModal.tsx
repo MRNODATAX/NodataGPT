@@ -386,8 +386,29 @@ export function SettingsModal({
             {gateState.unlocked ? (
               <div className="mt-2.5 space-y-2.5">
                 <p className="text-xs leading-relaxed text-[#CBD5E1]">
-                  Perangkat ini telah terverifikasi dengan kunci akses VIP NodataGPT. Anda juga dapat membuat kode undangan berbatas waktu untuk dibagikan.
+                  Perangkat ini telah terverifikasi dengan kunci akses VIP NodataGPT. Jangan lupa kunjungi juga karya resmi ekosistem Mr.NODATA:
                 </p>
+
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <a
+                    href="https://blognodata.my.id"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/10 px-3 py-2 text-xs font-semibold text-[#A5F3FC] transition-colors hover:border-[#22D3EE]/60 hover:text-white"
+                  >
+                    <span className="truncate">Portofolio · blognodata.my.id</span>
+                    <span className="shrink-0">↗</span>
+                  </a>
+                  <a
+                    href="https://nodatanime.web.id"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[#FB923C]/30 bg-[#FB923C]/10 px-3 py-2 text-xs font-semibold text-[#FED7AA] transition-colors hover:border-[#FB923C]/60 hover:text-white"
+                  >
+                    <span className="truncate">Anime · nodatanime.web.id</span>
+                    <span className="shrink-0">↗</span>
+                  </a>
+                </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/35 p-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">

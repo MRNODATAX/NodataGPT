@@ -1021,108 +1021,70 @@ export function App() {
 
       {/* Main Cosmic Stage (z-10 above Starfield) */}
       <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-transparent">
-        {/* Frosted Glass Top Bar */}
-        <header className="nd-glass-topbar pt-safe flex min-h-[56px] shrink-0 items-center justify-between px-2.5 sm:px-5">
-          <div className="flex min-w-0 items-center gap-1.5">
+        {/* Frosted Glass Top Bar — Clean, Balanced & Symmetrical */}
+        <header className="nd-glass-topbar pt-safe flex min-h-[56px] shrink-0 items-center justify-between gap-2 px-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
               aria-label="Buka menu navigasi"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white lg:hidden cursor-pointer"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white lg:hidden cursor-pointer"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-4.5 w-4.5" />
             </button>
 
             <button
               type="button"
               onClick={() => openModelPicker(imageMode ? 'image' : 'chat')}
               aria-label="Pilih model AI NodataGPT"
-              className="inline-flex min-h-[42px] min-w-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.06] cursor-pointer"
+              className="inline-flex h-9 min-w-0 items-center gap-1.5 overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] px-2.5 text-left transition-colors hover:border-[#22D3EE]/35 hover:bg-white/[0.08] sm:h-10 sm:gap-2 sm:px-3 cursor-pointer"
             >
               <img
                 src="/logo-transparent.png"
                 alt=""
-                width={22}
-                height={22}
-                className="h-[22px] w-[22px] shrink-0 object-contain"
+                width={20}
+                height={20}
+                className="h-5 w-5 shrink-0 object-contain"
               />
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="font-display text-[15px] font-bold tracking-tight sm:text-base">
-                  <span className="text-[#22D3EE]">Nodata</span>
-                  <span className="text-[#FB923C]">GPT</span>
-                </span>
-                <span
-                  className={`max-w-[94px] truncate rounded-md border px-1.5 py-0.5 font-mono-code text-[11px] font-medium sm:max-w-[172px] ${
-                    imageMode
-                      ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA]'
-                      : 'border-white/10 bg-white/[0.06] text-[#F8FAFC]'
-                  }`}
-                >
-                  {imageMode
-                    ? activeImageModel.shortName
+              <span className="shrink-0 font-display text-sm font-bold tracking-tight sm:text-[15px]">
+                <span className="text-[#22D3EE]">Nodata</span>
+                <span className="text-[#FB923C]">GPT</span>
+              </span>
+              <span aria-hidden="true" className="h-3.5 w-px shrink-0 bg-white/15" />
+              <span
+                className={`min-w-0 max-w-[96px] truncate font-mono-code text-[11px] font-medium sm:max-w-[185px] ${
+                  imageMode
+                    ? 'text-[#FED7AA]'
                     : deepThink
-                      ? 'DeepThink'
-                      : activeModel.shortName}
-                </span>
-                {(imageMode ? settings.imageAutoFallback : settings.autoFallback) && (
-                  <Shuffle
-                    aria-label="Auto-Fallback Aktif"
-                    className="hidden h-3.5 w-3.5 shrink-0 text-[#FB923C] sm:inline"
-                  />
-                )}
-                <ChevronDown className="h-4 w-4 shrink-0 text-[#94A3B8]" />
-              </div>
+                      ? 'text-[#67E8F9]'
+                      : 'text-[#E2E8F0]'
+                }`}
+              >
+                {imageMode
+                  ? activeImageModel.shortName
+                  : deepThink
+                    ? 'DeepThink'
+                    : activeModel.shortName}
+              </span>
+              {(imageMode ? settings.imageAutoFallback : settings.autoFallback) && (
+                <Shuffle
+                  aria-label="Auto-Fallback Aktif"
+                  className="hidden h-3.5 w-3.5 shrink-0 text-[#FB923C] md:inline"
+                />
+              )}
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
             </button>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setGateModalManualOpen(true)}
-              aria-label={
-                gateState.unlocked
-                  ? 'Status akses VIP aktif'
-                  : `Sisa uji coba gratis ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari ${FREE_TRIAL_LIMIT}`
-              }
-              title={
-                gateState.unlocked
-                  ? 'Akses VIP NodataGPT Aktif Tanpa Batas'
-                  : hasByokKey
-                    ? 'API Key Pribadi (BYOK) Aktif'
-                    : `Uji Coba Gratis: Sisa ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/${FREE_TRIAL_LIMIT} (Klik untuk masukkan sandi VIP)`
-              }
-              className={`inline-flex h-10 items-center gap-1 rounded-xl border px-2 font-mono-code text-[11px] font-semibold transition-colors sm:px-2.5 cursor-pointer ${
-                gateState.unlocked || hasByokKey
-                  ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-300 hover:bg-emerald-500/20'
-                  : gateState.used >= FREE_TRIAL_LIMIT - 1
-                    ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA] hover:bg-[#FB923C]/22'
-                    : 'border-[#22D3EE]/30 bg-[#22D3EE]/10 text-[#A5F3FC] hover:bg-[#22D3EE]/18'
-              }`}
-            >
-              {gateState.unlocked || hasByokKey ? (
-                <>
-                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                  <span>{gateState.unlocked ? 'VIP' : 'BYOK'}</span>
-                </>
-              ) : (
-                <>
-                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
-                  <span className="hidden sm:inline">Uji Coba</span>
-                  <span>
-                    {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/{FREE_TRIAL_LIMIT}
-                  </span>
-                </>
-              )}
-            </button>
-
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setToolsStudioOpen(true)}
               aria-label="Buka Web Tools Studio"
               title="Web Tools Studio (Downloader, Video AI, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.05] px-2.5 text-xs font-semibold text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/10 hover:text-white sm:px-3 cursor-pointer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/[0.08] px-3 text-xs font-semibold text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/60 hover:bg-[#22D3EE]/16 hover:text-white sm:h-10 sm:px-3.5 cursor-pointer"
             >
-              <ToolsIcon className="h-[18px] w-[18px] shrink-0 text-[#22D3EE] sm:h-4 sm:w-4" />
+              <ToolsIcon className="h-4 w-4 shrink-0 text-[#22D3EE]" />
               <span>Tools</span>
             </button>
 
@@ -1142,12 +1104,94 @@ export function App() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Buka pengaturan"
-              className="hidden h-10 w-10 items-center justify-center rounded-xl text-[#CBD5E1] transition-colors hover:bg-white/8 hover:text-white sm:flex cursor-pointer"
+              className="hidden h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white sm:flex cursor-pointer"
             >
               <Settings className="h-[18px] w-[18px]" />
             </button>
           </div>
         </header>
+
+        {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header */}
+        <div className="flex shrink-0 items-center justify-center px-3 pt-2 pb-1">
+          <button
+            type="button"
+            onClick={() => setGateModalManualOpen(true)}
+            aria-label={
+              gateState.unlocked
+                ? 'Status akses VIP aktif tanpa batas'
+                : hasByokKey
+                  ? 'Status kunci API pribadi aktif'
+                  : `Kuota uji coba gratis tersisa ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari ${FREE_TRIAL_LIMIT}`
+            }
+            className={`group inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all cursor-pointer sm:px-3.5 ${
+              gateState.unlocked || hasByokKey
+                ? 'border-emerald-400/35 bg-[#061512]/90 text-emerald-200 hover:border-emerald-400/60'
+                : gateState.used >= FREE_TRIAL_LIMIT - 1
+                  ? 'border-[#FB923C]/45 bg-[#180E08]/92 text-[#FED7AA] hover:border-[#FB923C]/75'
+                  : 'border-[#22D3EE]/30 bg-[#07111E]/90 text-[#E2E8F0] hover:border-[#22D3EE]/60'
+            }`}
+          >
+            {gateState.unlocked || hasByokKey ? (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <span className="truncate font-medium">
+                  {gateState.unlocked
+                    ? 'Akses VIP Aktif · Tanpa Batas'
+                    : 'Mode BYOK · Kunci Pribadi Aktif'}
+                </span>
+                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300">
+                  Ekosistem ›
+                </span>
+              </>
+            ) : (
+              <>
+                <KeyRound
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    gateState.used >= FREE_TRIAL_LIMIT - 1
+                      ? 'text-[#FB923C]'
+                      : 'text-[#22D3EE]'
+                  }`}
+                />
+                <span className="truncate font-medium text-[#CBD5E1]">
+                  Uji Coba Gratis:{' '}
+                  <strong className="font-mono-code font-bold text-white">
+                    {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/{FREE_TRIAL_LIMIT}
+                  </strong>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="hidden items-center gap-1 sm:inline-flex"
+                >
+                  {Array.from({ length: FREE_TRIAL_LIMIT }).map((_, idx) => {
+                    const remaining = Math.max(0, FREE_TRIAL_LIMIT - gateState.used);
+                    const activeDot = idx < remaining;
+                    return (
+                      <span
+                        key={idx}
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          activeDot
+                            ? gateState.used >= FREE_TRIAL_LIMIT - 1
+                              ? 'bg-[#FB923C]'
+                              : 'bg-[#22D3EE]'
+                            : 'bg-white/20'
+                        }`}
+                      />
+                    );
+                  })}
+                </span>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+                    gateState.used >= FREE_TRIAL_LIMIT - 1
+                      ? 'bg-[#FB923C]/20 text-[#FED7AA] group-hover:bg-[#FB923C]/30'
+                      : 'bg-[#22D3EE]/16 text-[#67E8F9] group-hover:bg-[#22D3EE]/26'
+                  }`}
+                >
+                  Buka Kunci ›
+                </span>
+              </>
+            )}
+          </button>
+        </div>
 
         {/* Main Conversation Area */}
         <main className="flex min-h-0 flex-1 flex-col">
@@ -1218,7 +1262,6 @@ export function App() {
             }}
             onOpenModelPicker={() => openModelPicker('chat')}
             onOpenImageModelPicker={() => openModelPicker('image')}
-            onOpenToolsStudio={() => setToolsStudioOpen(true)}
           />
         </main>
       </div>
@@ -1287,6 +1330,7 @@ export function App() {
         isOpen={showAccessGateModal}
         isHardLocked={isHardLocked}
         gateState={gateState}
+        onUnlockStarted={() => setGateModalManualOpen(true)}
         onClose={() => {
           if (!isHardLocked) {
             setGateModalManualOpen(false);

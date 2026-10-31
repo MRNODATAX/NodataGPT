@@ -13,7 +13,6 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import { ToolsIcon } from './ToolsIcon';
 import type { AIModelDefinition } from '../types/chat';
 import {
   AI_MODELS,
@@ -41,7 +40,6 @@ interface ChatComposerProps {
   onToggleImageMode: () => void;
   onOpenModelPicker: () => void;
   onOpenImageModelPicker: () => void;
-  onOpenToolsStudio: () => void;
 }
 
 interface SpeechRecognitionInstance {
@@ -71,7 +69,6 @@ export function ChatComposer({
   onToggleImageMode,
   onOpenModelPicker,
   onOpenImageModelPicker,
-  onOpenToolsStudio,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -517,9 +514,9 @@ export function ChatComposer({
             className="nd-composer-textarea block max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[15px] leading-relaxed text-[#F8FAFC] caret-[#22D3EE] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none sm:text-base"
           />
 
-          {/* Compact Single-Row Gemini + DeepSeek + Qwen Bottom Bar (Zero Wrapping on 320px+) */}
-          <div className="mt-1.5 flex items-center justify-between gap-1.5">
-            <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+          {/* Clean Single-Row Composer Action Bar (Balanced & Uncrowded on Mobile & Desktop) */}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="no-scrollbar flex min-w-0 items-center gap-1.5 overflow-x-auto">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -532,7 +529,7 @@ export function ChatComposer({
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Lampirkan berkas teks atau kode"
                 title="Lampirkan berkas teks atau kode"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white cursor-pointer sm:h-9 sm:w-9"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white cursor-pointer"
               >
                 <Paperclip className="h-4 w-4" />
               </button>
@@ -542,7 +539,7 @@ export function ChatComposer({
                 onClick={onToggleDeepThink}
                 aria-pressed={deepThink}
                 title="Mode Penalaran DeepThink"
-                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all cursor-pointer ${
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all cursor-pointer ${
                   deepThink
                     ? 'border-[#22D3EE]/70 bg-[#22D3EE]/18 text-[#67E8F9] shadow-[0_0_14px_rgba(34,211,238,0.18)]'
                     : 'border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/20 hover:text-white'
@@ -557,7 +554,7 @@ export function ChatComposer({
                 onClick={onToggleImageMode}
                 aria-pressed={imageMode}
                 title="Mode Pembuat Gambar AI"
-                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all cursor-pointer ${
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all cursor-pointer ${
                   imageMode
                     ? 'border-[#FB923C]/70 bg-[#FB923C]/18 text-[#FDBA74] shadow-[0_0_14px_rgba(251,146,60,0.18)]'
                     : 'border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/20 hover:text-white'
@@ -569,19 +566,9 @@ export function ChatComposer({
 
               <button
                 type="button"
-                onClick={onOpenToolsStudio}
-                title="Buka Web Tools Studio (TikTok, YouTube, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-[#CBD5E1] transition-all hover:border-[#22D3EE]/50 hover:text-white cursor-pointer"
-              >
-                <ToolsIcon className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
-                <span>Tools</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={imageMode ? onOpenImageModelPicker : onOpenModelPicker}
                 title={imageMode ? 'Pilih model gambar AI' : 'Pilih model chat AI'}
-                className={`hidden h-9 min-w-0 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors sm:inline-flex cursor-pointer ${
+                className={`hidden h-9 min-w-0 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors sm:inline-flex cursor-pointer ${
                   imageMode
                     ? 'border-[#FB923C]/45 bg-[#FB923C]/12 text-[#FDBA74] hover:border-[#FB923C]/70'
                     : 'border-white/10 bg-white/[0.04] text-[#22D3EE] hover:border-white/20'
@@ -598,16 +585,16 @@ export function ChatComposer({
               </button>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1.5">
               {speechConstructor && (
                 <button
                   type="button"
                   onClick={toggleVoiceInput}
                   aria-label={isListening ? 'Hentikan dikte suara' : 'Dikte suara'}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors cursor-pointer sm:h-10 sm:w-10 ${
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors cursor-pointer ${
                     isListening
-                      ? 'bg-[#FB923C]/20 text-[#FB923C]'
-                      : 'text-[#CBD5E1] hover:bg-white/10 hover:text-white'
+                      ? 'border-[#FB923C]/50 bg-[#FB923C]/20 text-[#FB923C]'
+                      : 'border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/20 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   {isListening ? (
@@ -623,20 +610,20 @@ export function ChatComposer({
                 onClick={triggerSubmit}
                 disabled={!isLoading && !canSend}
                 aria-label={isLoading ? 'Hentikan respons' : 'Kirim pesan'}
-                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-all sm:h-10 sm:w-10 ${
                   isLoading
                     ? 'bg-[#EA580C] text-white shadow-[0_0_16px_rgba(234,88,12,0.45)] hover:bg-[#F97316] cursor-pointer'
                     : canSend
                       ? imageMode
                         ? 'bg-[#EA580C] text-white shadow-[0_0_16px_rgba(234,88,12,0.4)] hover:bg-[#F97316] cursor-pointer'
                         : 'bg-[#0E7490] text-white shadow-[0_0_18px_rgba(34,211,238,0.32)] hover:bg-[#0891B2] cursor-pointer'
-                      : 'bg-white/[0.06] text-[#64748B] cursor-not-allowed'
+                      : 'border border-white/8 bg-white/[0.05] text-[#64748B] cursor-not-allowed'
                 }`}
               >
                 {isLoading ? (
-                  <Square className="h-4 w-4 fill-current" />
+                  <Square className="h-3.5 w-3.5 fill-current sm:h-4 sm:w-4" />
                 ) : (
-                  <ArrowUp className="h-5 w-5" />
+                  <ArrowUp className="h-4 w-4 sm:h-5 sm:w-5" />
                 )}
               </button>
             </div>

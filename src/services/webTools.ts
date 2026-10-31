@@ -64,6 +64,12 @@ export const RANDOM_IMAGE_COMMAND_MODES: WebToolCommandCatalogItem[] = [
     command: '/randomimg mockup',
     altCommand: '/randomimage mockup',
   },
+  {
+    value: 'ninjas',
+    label: '⚡ API Ninjas Official',
+    command: '/randomimg ninjas',
+    altCommand: '/randomimage ninjas',
+  },
 ];
 
 export interface WebToolDefinition {
@@ -469,15 +475,15 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     name: 'Kreasi Visual Acak & Wallpaper 4K Studio',
     shortName: 'Random Image 4K',
     slashCommand: '/randomimage',
-    badge: '9 Mode Lengkap · Atur Jumlah ,N',
+    badge: '10 Mode Lengkap · API Ninjas + 4K',
     description:
-      '9 mode visual 4K/HD tanpa API key: Acak Bebas (/randomimg), Alam (/randomimg nature), Cyberpunk (/randomimg cyberpunk), Galaksi (/randomimg space), Kota (/randomimg city), Anime (/randomimg anime), Minimalis (/randomimg minimal), Wallpaper HP 9:16 (/randomimg portrait), & Foto Mockup UI (/randomimg mockup).',
+      '10 mode visual acak siap pakai: Acak Bebas (/randomimg), Alam (/randomimg nature), Cyberpunk (/randomimg cyberpunk), Galaksi (/randomimg space), Kota (/randomimg city), Anime (/randomimg anime), Minimalis (/randomimg minimal), Wallpaper HP 9:16 (/randomimg portrait), Foto Mockup UI (/randomimg mockup), & API Ninjas Official (/randomimg ninjas).',
     placeholder:
       'Opsional: ketik tema bebas (mis. samurai neon, ocean sunset) atau kosongkan...',
     exampleInput: 'cyberpunk rain neon',
     requiresInput: false,
     secondarySelect: {
-      label: 'Pilih Mode Kreasi Visual (9 Mode Resmi)',
+      label: 'Pilih Mode Kreasi Visual (10 Mode Resmi)',
       defaultValue: 'random',
       options: RANDOM_IMAGE_COMMAND_MODES.map((m) => ({
         value: m.value,
@@ -497,9 +503,9 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
         'Bisa memakai /randomimage maupun /randomimg. Tambahkan koma + angka di akhir perintah (misal ,10) untuk mengatur jumlah gambar yang ditampilkan (1–30).',
       examples: [
         '/randomimage anime ,10',
+        '/randomimg ninjas ,6',
         '/randomimg cyberpunk ,8',
         '/randomimg portrait | alya kujou ,6',
-        '/randomimg ,12',
       ],
     },
     commandCatalog: RANDOM_IMAGE_COMMAND_MODES,
@@ -818,7 +824,7 @@ interface ToolHttpResult {
 }
 
 const PROXY_FIRST_TOOL_HOST_RE =
-  /(?:^|\.)(?:wallhaven\.cc|nominatim\.openstreetmap\.org|finance\.yahoo\.com|wttr\.in)$/i;
+  /(?:^|\.)(?:wallhaven\.cc|api-ninjas\.com|nominatim\.openstreetmap\.org|finance\.yahoo\.com|wttr\.in)$/i;
 
 async function fetchToolEndpoint(
   targetUrl: string,
@@ -1086,6 +1092,15 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
         count: parsedPin.count,
       };
     }
+    case 'apininjas': {
+      const parsedNinjas = extractTrailingImageCount(rest, 4, 30);
+      return {
+        toolId: 'randomimg',
+        arg: parsedNinjas.cleanText,
+        subOption: 'ninjas',
+        count: parsedNinjas.count,
+      };
+    }
     case 'random':
     case 'randomimg':
     case 'randomimage':
@@ -1105,6 +1120,7 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
         if (m === 'galaksi' || m === 'angkasa') return 'space';
         if (m === 'kota' || m === 'arsitektur') return 'city';
         if (m === 'minimalis' || m === 'abstract') return 'minimal';
+        if (m === 'apininjas' || m === 'api-ninjas' || m === 'ninja') return 'ninjas';
         if (
           m === 'hp' ||
           m === '9:16' ||
@@ -1119,7 +1135,7 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       };
 
       const modePattern =
-        'random|nature|alam|lanskap|cyberpunk|space|galaksi|angkasa|city|kota|arsitektur|anime|minimal|minimalis|abstract|portrait|hp|9:16|vertikal|mobile|phone|wallpaper\\s+hp|mockup';
+        'random|nature|alam|lanskap|cyberpunk|space|galaksi|angkasa|city|kota|arsitektur|anime|minimal|minimalis|abstract|portrait|hp|9:16|vertikal|mobile|phone|wallpaper\\s+hp|mockup|ninjas|ninja|apininjas|api-ninjas';
 
       // 1. Pipe syntax: "/randomimg portrait | alya kujou ,6"
       const modePipe = bodyText.match(
@@ -5200,7 +5216,7 @@ export async function executeWebToolCommand({
       `- **Atur Jumlah Gambar:** Tambahkan \`,angka\` di akhir perintah *(contoh: \`/randomimage anime ,10\` atau \`/randomimg cyberpunk ,8\`)*`,
       `- **Unduh Resolusi Asli 4K/HD:** Klik tombol **Unduh** langsung pada masing-masing kartu **#1–#${requestedCount}** atau perbesar di Lightbox.`,
       ``,
-      `**📋 Daftar Lengkap 9 Command Mode yang Bisa Digunakan:**`,
+      `**📋 Daftar Lengkap ${RANDOM_IMAGE_COMMAND_MODES.length} Command Mode yang Bisa Digunakan:**`,
       allNineModesMarkdown,
     ].join('\n');
 
@@ -5208,16 +5224,16 @@ export async function executeWebToolCommand({
       return {
         content: [
           `### 📖 Panduan Lengkap Command & Daftar Mode \`/randomimage\` (\`/randomimg\`)`,
-          `Fitur **Random Image & Wallpaper 4K Studio** berjalan **100% tanpa API key** dan mendukung pengaturan jumlah gambar **1 hingga 30 gambar** sekaligus.`,
+          `Fitur **Random Image & Wallpaper 4K Studio** mendukung pengaturan jumlah gambar **1 hingga 30 gambar** sekaligus serta integrasi resmi **API Ninjas (\`/randomimg ninjas\`)**.`,
           ``,
-          `#### 📋 9 Command Mode Siap Pakai:`,
+          `#### 📋 ${RANDOM_IMAGE_COMMAND_MODES.length} Command Mode Siap Pakai:`,
           allNineModesMarkdown,
           ``,
           `#### 💡 Format & Contoh Kombinasi Lanjutan:`,
           `| Fungsi | Format Command | Contoh Penggunaan |`,
           `| :--- | :--- | :--- |`,
           `| **Acak Bebas + Jumlah** | \`/randomimage ,<jumlah>\` | \`/randomimage ,10\` atau \`/randomimg ,10\` |`,
-          `| **Mode Kategori + Jumlah** | \`/randomimage <mode> ,<jumlah>\` | \`/randomimage anime ,10\` atau \`/randomimg nature ,8\` |`,
+          `| **Mode Kategori + Jumlah** | \`/randomimage <mode> ,<jumlah>\` | \`/randomimage anime ,10\` atau \`/randomimg ninjas ,6\` |`,
           `| **Tema Kustom Bebas** | \`/randomimage <tema bebas> ,<jumlah>\` | \`/randomimage ocean sunset ,8\` |`,
           `| **Mode + Tema Spesifik** | \`/randomimage <mode> \\| <tema> ,<jumlah>\` | \`/randomimage portrait \\| alya kujou ,6\` |`,
           `| **Panduan Cepat** | \`/randomimage help\` | \`/randomimg cara\` |`,
@@ -5238,8 +5254,125 @@ export async function executeWebToolCommand({
       minimal: 'Minimalis & Abstract Desain',
       portrait: 'Wallpaper HP Portrait (9:16)',
       mockup: 'Fotografi Mockup Desain (Unsplash HD)',
+      ninjas: 'API Ninjas Random Image Official',
     };
     const activeLabel = modeLabels[mode] || 'Kreasi Visual Acak';
+
+    // Helper: convert data:image/... base64 URL to fast in-memory Blob URL so DOM stays light and 1-click download saves exact same image in 0ms!
+    const dataUrlToBlobUrl = (dataUrl: string): string => {
+      if (typeof window === 'undefined' || !dataUrl.startsWith('data:')) {
+        return dataUrl;
+      }
+      try {
+        const comma = dataUrl.indexOf(',');
+        if (comma < 0) return dataUrl;
+        const mime = dataUrl.slice(5, comma).split(';')[0] || 'image/jpeg';
+        const bin = window.atob(dataUrl.slice(comma + 1));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) {
+          bytes[i] = bin.charCodeAt(i);
+        }
+        return URL.createObjectURL(new Blob([bytes], { type: mime }));
+      } catch {
+        return dataUrl;
+      }
+    };
+
+    // Mode API Ninjas Official (`https://api.api-ninjas.com/v1/randomimage` via encrypted server-side X-Api-Key)
+    if (mode === 'ninjas') {
+      onStatus?.({
+        toolName: `API Ninjas Random (${requestedCount} Gambar)`,
+        mirrorName: 'API Ninjas /v1/randomimage',
+        attempt: 1,
+        isFallback: false,
+      });
+
+      const ninjasCategoryMap: Record<string, string> = {
+        nature: 'nature',
+        alam: 'nature',
+        city: 'city',
+        kota: 'city',
+        technology: 'technology',
+        tech: 'technology',
+        cyberpunk: 'technology',
+        food: 'food',
+        makanan: 'food',
+        still_life: 'still_life',
+        abstract: 'abstract',
+        minimal: 'abstract',
+        wildlife: 'wildlife',
+        hewan: 'wildlife',
+      };
+      const cleanCatKey = customTheme.trim().toLowerCase();
+      const mappedCat = ninjasCategoryMap[cleanCatKey] || '';
+
+      let targetNinjasUrl = 'https://api.api-ninjas.com/v1/randomimage';
+      let usedPremiumParams = false;
+
+      const ninjasBlobUrls: string[] = [];
+
+      // Probe Premium category parameter once if user requested a valid API Ninjas category
+      if (mappedCat) {
+        const premUrl = `https://api.api-ninjas.com/v1/randomimage?category=${encodeURIComponent(mappedCat)}`;
+        const premTest = await fetchToolEndpoint(premUrl, 14000, signal);
+        if (premTest.ok && premTest.imageUrl) {
+          targetNinjasUrl = premUrl;
+          usedPremiumParams = true;
+          ninjasBlobUrls.push(dataUrlToBlobUrl(premTest.imageUrl));
+        }
+      }
+
+      const chunkSize = 5;
+      for (
+        let offset = 0;
+        offset < requestedCount && ninjasBlobUrls.length < requestedCount;
+        offset += chunkSize
+      ) {
+        const batchCount = Math.min(chunkSize, requestedCount - ninjasBlobUrls.length);
+        const batchResults = await Promise.all(
+          Array.from({ length: batchCount }, () =>
+            fetchToolEndpoint(targetNinjasUrl, 16000, signal)
+          )
+        );
+        for (const rN of batchResults) {
+          if (rN.ok && rN.imageUrl) {
+            ninjasBlobUrls.push(dataUrlToBlobUrl(rN.imageUrl));
+          }
+        }
+      }
+
+      if (ninjasBlobUrls.length > 0) {
+        const tierNote = usedPremiumParams
+          ? `Kategori aktif: \`${mappedCat}\``
+          : customTheme
+            ? `*(Catatan: Parameter kategori/resolusi kustom pada API Ninjas memerlukan paket Premium, sehingga menampilkan stream acak standar \`640×480\`)*`
+            : `Resolusi standar API Ninjas (\`640×480 JPEG\`)`;
+
+        return {
+          content: [
+            `### ⚡ API Ninjas Random Image — ${ninjasBlobUrls.length} Gambar Berhasil Dimuat`,
+            `Menampilkan **${ninjasBlobUrls.length} gambar acak langsung dari \`api.api-ninjas.com/v1/randomimage\`** melalui gateway terenkripsi server *(API Key aman tidak terekspos ke publik · ${tierNote})*:`,
+            ``,
+            randomImgCommandNotice,
+          ].join('\n'),
+          answeredById: 'api-ninjas-randomimage',
+          answeredByName: 'Random Image · API Ninjas Official',
+          usedFallback: false,
+          galleryUrls: ninjasBlobUrls,
+          galleryDownloadUrls: ninjasBlobUrls,
+          galleryAspect: 'landscape',
+          downloadItems:
+            ninjasBlobUrls.length <= 6
+              ? ninjasBlobUrls.map((u, idx) => ({
+                  label: `Unduh Gambar #${idx + 1} (JPEG)`,
+                  url: u,
+                  kind: 'image' as const,
+                }))
+              : undefined,
+        };
+      }
+      // If API Ninjas ever rate-limits or fails, seamlessly fall through to Wallhaven 4K!
+    }
 
     // Helper: wrap Wallhaven preview URLs through 1st-party inline stream so Indonesian ISPs (Komdigi/TrustPositif) NEVER block thumbnails!
     const toSafePreviewUrl = (rawUrl: string): string => {

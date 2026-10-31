@@ -99,6 +99,7 @@ const ALLOWED_HOSTS = new Set([
   'picsum.photos',
   'fastly.picsum.photos',
   'nekos.best',
+  'api.api-ninjas.com',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [
@@ -469,13 +470,20 @@ export default async function handler(req, res) {
 
   const isNominatim = parsedUrl.hostname === 'nominatim.openstreetmap.org';
   const isPximg = parsedUrl.hostname.endsWith('pximg.net');
+  const isApiNinjas = parsedUrl.hostname === 'api.api-ninjas.com';
+  const isApiNinjasRandomImg =
+    isApiNinjas && parsedUrl.pathname === '/v1/randomimage';
+  const envNinjasKey = (process.env.API_NINJAS_KEY || '').trim();
 
   const forwardHeaders = {
-    Accept: 'image/*, audio/*, application/json, text/event-stream, text/plain, */*',
+    Accept: isApiNinjasRandomImg
+      ? 'image/jpg'
+      : 'image/*, audio/*, application/json, text/event-stream, text/plain, */*',
     'User-Agent': isNominatim
       ? 'NodataGPT-HyperLocalWeather/3.1 (https://www.nodatagpt.web.id)'
       : req.headers?.['user-agent'] || DEFAULT_UA,
     ...(isPximg ? { Referer: 'https://www.pixiv.net/' } : {}),
+    ...(isApiNinjas && envNinjasKey ? { 'X-Api-Key': envNinjasKey } : {}),
     ...extraHeaders,
   };
 
@@ -495,7 +503,10 @@ export default async function handler(req, res) {
     const latencyMs = Date.now() - startedAt;
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();
 
-    if (upstream.ok && contentType.startsWith('image/')) {
+    if (
+      upstream.ok &&
+      (contentType.startsWith('image/') || isApiNinjasRandomImg)
+    ) {
       const arrayBuf = await upstream.arrayBuffer();
       if (arrayBuf.byteLength < 256) {
         return res.status(probeOnly ? 200 : 502).json({
@@ -509,7 +520,25 @@ export default async function handler(req, res) {
         });
       }
 
-      const mime = contentType.split(';')[0] || 'image/jpeg';
+      const rawBytes = new Uint8Array(arrayBuf);
+      // Detect whether payload is raw JPEG/PNG binary vs ASCII base64 ("/9j/..." or "iVBOR...")
+      const looksLikeBase64Ascii =
+        (rawBytes[0] === 0x2f && rawBytes[1] === 0x39 && rawBytes[2] === 0x6a) ||
+        (rawBytes[0] === 0x69 && rawBytes[1] === 0x56 && rawBytes[2] === 0x42);
+
+      const rawMime = contentType.split(';')[0] || 'image/jpeg';
+      const mime =
+        rawMime === 'image/jpg' || !rawMime.startsWith('image/')
+          ? 'image/jpeg'
+          : rawMime;
+
+      const base64 = looksLikeBase64Ascii
+        ? Buffer.from(arrayBuf).toString('utf8').replace(/\s+/g, '')
+        : Buffer.from(arrayBuf).toString('base64');
+
+      const decodedByteLength = looksLikeBase64Ascii
+        ? Math.floor((base64.length * 3) / 4)
+        : arrayBuf.byteLength;
 
       if (probeOnly) {
         return res.status(200).json({
@@ -517,18 +546,18 @@ export default async function handler(req, res) {
           status: upstream.status,
           kind: 'image',
           contentType: mime,
-          byteLength: arrayBuf.byteLength,
+          wireEncoding: looksLikeBase64Ascii ? 'base64' : 'binary',
+          byteLength: decodedByteLength,
           latencyMs,
         });
       }
 
-      const base64 = Buffer.from(arrayBuf).toString('base64');
       return res.status(200).json({
         ok: true,
         status: upstream.status,
         kind: 'image',
         contentType: mime,
-        byteLength: arrayBuf.byteLength,
+        byteLength: decodedByteLength,
         latencyMs,
         imageUrl: `data:${mime};base64,${base64}`,
       });

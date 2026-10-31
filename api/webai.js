@@ -12,16 +12,16 @@ export const config = {
 };
 
 const CHROME_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
 
 const NODATAGPT_DEFAULT_SYSTEM =
-  'Kamu adalah NodataGPT, asisten AI cerdas generasi baru yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi dan kreatif NODATA. Selalu perkenalkan dirimu sebagai NodataGPT karya Mr.NODATA jika ditanya identitas atau pembuatmu, dan jawab secara akurat, jelas, serta ramah.';
-
-/** @type {{ accessToken: string, expiresAt: number } | null} */
-let cachedOperaToken = null;
+  'Kamu adalah NodataGPT, asisten AI cerdas generasi baru yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi dan kreatif NODATA. Selalu perkenalkan dirimu sebagai NodataGPT karya Mr.NODATA jika ditanya siapa nama kamu, identitasmu, atau siapa pembuat/pengembangmu, dan jawab secara akurat, jelas, serta ramah.';
 
 /** @type {Map<string, { token: string, sessionUuid: string, expiresAt: number }>} */
 const cachedZeroGpuTokens = new Map();
+
+/** @type {{ sessionId: string, nonce: string, mintedAt: number } | null} */
+let cachedFreeAiOnlineSession = null;
 
 function md5Hex(input) {
   return crypto.createHash('md5').update(String(input), 'utf8').digest('hex');
@@ -29,6 +29,10 @@ function md5Hex(input) {
 
 function revMd5(input) {
   return md5Hex(input).split('').reverse().join('');
+}
+
+function randomHex(byteLen = 16) {
+  return crypto.randomBytes(byteLen).toString('hex');
 }
 
 function createDeepAiTryItKey(userAgent) {
@@ -45,11 +49,19 @@ function normalizePersonaReply(rawText) {
   if (!text) return '';
   return text
     .replace(
-      /\b(?:I am|I'm)\s+(?:ChatGPT|Aria|Opera Aria|QuillBot|DeepAI|Brave Leo|Phind|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen)\b/gi,
+      /Saya adalah Standard AI Chat oleh DeepAI\.?/gi,
+      'Saya adalah NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA.'
+    )
+    .replace(
+      /Saya bernama Step,\s*dikembangkan oleh[^.\n]+\.?/gi,
+      'Saya bernama NodataGPT, asisten AI yang dibuat dan dikembangkan oleh Mr.NODATA.'
+    )
+    .replace(
+      /\b(?:I am|I'm)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step)\b/gi,
       'I am NodataGPT (created by Mr.NODATA)'
     )
     .replace(
-      /\b(?:Saya adalah|Aku adalah|Nama saya)\s+(?:ChatGPT|Aria|Opera Aria|QuillBot|DeepAI|Phind|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen)\b/gi,
+      /\b(?:Saya adalah|Aku adalah|Nama saya|Saya bernama)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step)\b/gi,
       'Saya adalah NodataGPT (dibuat oleh Mr.NODATA)'
     );
 }
@@ -63,14 +75,14 @@ function buildCombinedPrompt(system, userText) {
 
 function ratioToDimensions(ratio) {
   const clean = String(ratio || '1:1').trim();
-  if (clean === '16:9') return { width: 1280, height: 720, aspect: '16:9' };
-  if (clean === '9:16') return { width: 720, height: 1280, aspect: '9:16' };
-  if (clean === '4:3') return { width: 1152, height: 864, aspect: '4:3' };
-  if (clean === '3:4') return { width: 864, height: 1152, aspect: '3:4' };
-  return { width: 1024, height: 1024, aspect: '1:1' };
+  if (clean === '16:9') return { width: 1280, height: 720, aspect: '16:9', hordeW: 768, hordeH: 512 };
+  if (clean === '9:16') return { width: 720, height: 1280, aspect: '9:16', hordeW: 512, hordeH: 768 };
+  if (clean === '4:3') return { width: 1152, height: 864, aspect: '4:3', hordeW: 640, hordeH: 512 };
+  if (clean === '3:4') return { width: 864, height: 1152, aspect: '3:4', hordeW: 512, hordeH: 640 };
+  return { width: 1024, height: 1024, aspect: '1:1', hordeW: 576, hordeH: 576 };
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 24000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -99,75 +111,215 @@ function extractSetCookies(headers) {
     .join('; ');
 }
 
+function parseOpenAiSseOrJson(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return { text: '', thinking: '' };
+
+  if (trimmed.startsWith('{')) {
+    try {
+      const json = JSON.parse(trimmed);
+      const choice = Array.isArray(json?.choices) ? json.choices[0] : null;
+      const content =
+        choice?.message?.content ||
+        choice?.delta?.content ||
+        choice?.text ||
+        json?.result ||
+        json?.response ||
+        '';
+      const reasoning =
+        choice?.message?.reasoning_content ||
+        choice?.message?.reasoning ||
+        choice?.delta?.reasoning_content ||
+        '';
+      if (typeof content === 'string' && content.trim()) {
+        return { text: content.trim(), thinking: String(reasoning || '').trim() };
+      }
+    } catch {
+      // fall through to line parser
+    }
+  }
+
+  let answer = '';
+  let thinking = '';
+  for (const rawLine of trimmed.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith('data:')) continue;
+    const dataStr = line.slice(5).trim();
+    if (!dataStr || dataStr === '[DONE]') continue;
+    try {
+      const obj = JSON.parse(dataStr);
+      const choice = Array.isArray(obj?.choices)
+        ? obj.choices[0]
+        : obj?.choices && typeof obj.choices === 'object'
+        ? obj.choices['0']
+        : null;
+      const deltaContent =
+        choice?.delta?.content ?? choice?.message?.content ?? '';
+      const deltaThink =
+        choice?.delta?.reasoning_content ??
+        choice?.delta?.reasoning ??
+        choice?.message?.reasoning_content ??
+        '';
+      if (typeof deltaContent === 'string') answer += deltaContent;
+      if (typeof deltaThink === 'string') thinking += deltaThink;
+    } catch {
+      // ignore non-json SSE line
+    }
+  }
+
+  return { text: answer.trim(), thinking: thinking.trim() };
+}
+
 // ============================================================================
-// 1. CHAT-GPT-OSS.COM — Keyless SSE Scraper (gpt-oss-120b, gpt-5-nano)
+// 1. OPENCODE.AI ZEN — Keyless Agentic & Reasoning Models (opencode.ai)
 // ============================================================================
-async function scrapeChatGptOss({ text, system, model = 'gpt-oss-120b', reasoning = 'low' }) {
-  const fingerprint = md5Hex(`${Date.now()}-${Math.random()}`);
+const OPENCODE_DEFAULT_TOOLS = [
+  'bash',
+  'edit',
+  'glob',
+  'grep',
+  'question',
+  'read',
+  'skill',
+  'task',
+  'todowrite',
+  'webfetch',
+  'websearch',
+  'write',
+].map((name) => ({ type: 'function', function: { name } }));
+
+async function scrapeOpenCodeZen({
+  text,
+  system,
+  model = 'deepseek-v4.1-flash-free',
+}) {
   const res = await fetchWithTimeout(
-    'https://chat-gpt-oss.com/api/message',
+    'https://opencode.ai/zen/v1/chat/completions',
     {
       method: 'POST',
       headers: {
-        Accept: 'text/event-stream',
-        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
         'Content-Type': 'application/json',
-        Origin: 'https://chat-gpt-oss.com',
-        Referer: 'https://chat-gpt-oss.com/',
-        'User-Agent': CHROME_UA,
-        'x-fingerprint': fingerprint,
+        Accept: '*/*',
+        'Accept-Language': '*',
+        Authorization: 'Bearer public',
+        'Sec-Fetch-Mode': 'cors',
+        'x-opencode-client': 'desktop',
+        'x-opencode-project': randomHex(20),
+        'x-opencode-request': `msg_${randomHex(13)}`,
+        'x-opencode-session': `ses_${randomHex(13)}`,
+        'User-Agent':
+          'opencode/1.18.18 ai-sdk/provider-utils/4.0.23 runtime/node.js/24',
       },
       body: JSON.stringify({
-        conversation_id: null,
-        model: model || 'gpt-oss-120b',
-        content: buildCombinedPrompt(system, text),
-        reasoning_effort: reasoning,
+        model,
+        stream: true,
+        messages: [
+          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+          { role: 'user', content: text },
+        ],
+        tools: OPENCODE_DEFAULT_TOOLS,
+        tool_choice: 'none',
+        stream_options: { include_usage: true },
       }),
     },
-    26000
+    28000
   );
 
   if (!res.ok) {
-    throw new Error(`chat-gpt-oss.com HTTP ${res.status}`);
+    const errTxt = await res.text().catch(() => '');
+    throw new Error(`opencode.ai HTTP ${res.status}: ${errTxt.slice(0, 120)}`);
+  }
+
+  const parsed = parseOpenAiSseOrJson(await res.text());
+  if (!parsed.text) {
+    throw new Error('opencode.ai tidak mengembalikan teks jawaban.');
+  }
+
+  return {
+    provider: 'opencode.ai',
+    model,
+    result: normalizePersonaReply(parsed.text),
+    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
+  };
+}
+
+// ============================================================================
+// 2. FX.SH (Vercel Labs FX WASM Gateway — zai/glm-5.2)
+// ============================================================================
+async function scrapeFxShGateway({ text, system, model = 'zai/glm-5.2' }) {
+  const now = Date.now();
+  const sessionId = `${now}-${now}000000-${randomHex(8)}`;
+  const res = await fetchWithTimeout(
+    'https://fx.sh/fx-wasm/gateway/v3/ai/language-model',
+    {
+      method: 'POST',
+      headers: {
+        Accept: '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'ai-gateway-protocol-version': '0.0.1',
+        'ai-language-model-id': model,
+        'ai-language-model-specification-version': '4',
+        'ai-language-model-streaming': 'true',
+        Authorization: 'Bearer fx-demo-proxy',
+        'Cache-Control': 'no-cache',
+        'Content-Type': 'application/json',
+        'http-referer': 'https://github.com/vercel-labs/fx',
+        Origin: 'https://fx.sh',
+        Referer: 'https://fx.sh/',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+        'x-session-affinity': sessionId,
+        'x-session-id': sessionId,
+        'x-title': 'fx',
+      },
+      body: JSON.stringify({
+        prompt: [
+          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+          { role: 'user', content: [{ type: 'text', text }] },
+        ],
+        maxOutputTokens: 16384,
+        providerOptions: { gateway: { speed: 'fast' } },
+        headers: { 'user-agent': 'fx/0.0.3' },
+      }),
+    },
+    28000
+  );
+
+  if (!res.ok) {
+    const errTxt = await res.text().catch(() => '');
+    throw new Error(`fx.sh HTTP ${res.status}: ${errTxt.slice(0, 120)}`);
   }
 
   const raw = await res.text();
   let answer = '';
   let thinking = '';
-  let currentEvent = '';
 
   for (const rawLine of raw.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    let line = rawLine.trim();
     if (!line) continue;
-    if (line.startsWith('event:')) {
-      currentEvent = line.slice(6).trim();
-      continue;
-    }
-    if (line.startsWith('data:')) {
-      const payloadStr = line.slice(5).trim();
-      if (!payloadStr || payloadStr === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(payloadStr);
-        if (currentEvent === 'reasoning' && typeof parsed.content === 'string') {
-          thinking += parsed.content;
-        } else if (
-          (currentEvent === 'message' || !currentEvent) &&
-          typeof parsed.content === 'string'
-        ) {
-          answer += parsed.content;
-        }
-      } catch {
-        // ignore partial line
+    if (line.startsWith('message:')) line = line.slice(8).trim();
+    else if (line.startsWith('data:')) line = line.slice(5).trim();
+    if (!line || line === '[DONE]') continue;
+    try {
+      const chunk = JSON.parse(line);
+      if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
+        answer += chunk.delta;
+      } else if (chunk.type === 'reasoning-delta' && typeof chunk.delta === 'string') {
+        thinking += chunk.delta;
+      } else if (typeof chunk.text === 'string' && !chunk.type) {
+        answer += chunk.text;
       }
+    } catch {
+      // ignore non-json line
     }
   }
 
   if (!answer.trim()) {
-    throw new Error('chat-gpt-oss.com tidak mengembalikan teks jawaban.');
+    throw new Error('fx.sh tidak mengembalikan teks jawaban.');
   }
 
   return {
-    provider: 'chat-gpt-oss.com',
+    provider: 'fx.sh',
     model,
     result: normalizePersonaReply(answer),
     ...(thinking.trim() ? { thinking: thinking.trim() } : {}),
@@ -175,52 +327,41 @@ async function scrapeChatGptOss({ text, system, model = 'gpt-oss-120b', reasonin
 }
 
 // ============================================================================
-// 2. QUILLBOT.COM/AI-CHAT — Keyless AI Chat & Live Web Search Scraper
+// 3. ISOU.CHAT — GPT-5.4-Mini + Live SEARXNG Web Search AI + Citations
 // ============================================================================
-async function scrapeQuillBot({ text, system, webSearch = false }) {
-  const convId = crypto.randomUUID();
-  const payload = {
-    message: {
-      id: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-      content: buildCombinedPrompt(system, text),
-      files: [],
-      createdAt: new Date().toISOString(),
-    },
-    context: {
-      editorContext: '',
-      selectionContext: '',
-      userDialect: 'en-us',
-      apiVersion: 2,
-    },
-    origin: {
-      name: 'ai-chat.chat',
-      url: 'https://quillbot.com',
-    },
-    ...(webSearch ? { tools: { web_search_builtin: {} } } : {}),
-  };
-
+async function scrapeIsouChat({ text, system, model = 'gpt-5.4-mini' }) {
   const res = await fetchWithTimeout(
-    `https://quillbot.com/api/ai-chat/chat/conversation/${convId}`,
+    'https://isou.chat/api/chat',
     {
       method: 'POST',
       headers: {
-        Accept: 'text/event-stream, application/x-ndjson, application/json',
         'Content-Type': 'application/json',
-        Origin: 'https://quillbot.com',
-        Referer: `https://quillbot.com/ai-chat/c/${convId}`,
-        'platform-type': 'webapp',
-        'qb-product': 'AI-CHAT',
-        useridtoken: 'empty-token',
-        'webapp-version': '42.61.1',
-        'User-Agent': CHROME_UA,
+        Accept: 'text/event-stream',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.7',
+        Origin: 'https://isou.chat',
+        Referer: 'https://isou.chat/chat',
+        'User-Agent':
+          'Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        model,
+        provider: 'openai',
+        language: 'all',
+        categories: ['general'],
+        engine: 'SEARXNG',
+        messages: [
+          {
+            role: 'user',
+            content: buildCombinedPrompt(system, text),
+          },
+        ],
+      }),
     },
-    26000
+    28000
   );
 
   if (!res.ok) {
-    throw new Error(`quillbot.com HTTP ${res.status}`);
+    throw new Error(`isou.chat HTTP ${res.status}`);
   }
 
   const raw = await res.text();
@@ -228,47 +369,356 @@ async function scrapeQuillBot({ text, system, webSearch = false }) {
   const sources = [];
 
   for (const rawLine of raw.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith('data:')) {
-      line = line.slice(5).trim();
-    }
-    if (!line || line === '[DONE]') continue;
+    const idx = rawLine.indexOf('data:');
+    if (idx === -1) continue;
+    const jsonStr = rawLine.slice(idx + 5).trim();
+    if (!jsonStr || jsonStr === '[DONE]') continue;
     try {
-      const obj = JSON.parse(line);
-      if (obj.type === 'content' && typeof obj.content === 'string') {
-        answer += obj.content;
-      } else if (typeof obj.delta === 'string') {
-        answer += obj.delta;
-      } else if (typeof obj.chunk === 'string') {
-        answer += obj.chunk;
+      const outer = JSON.parse(jsonStr);
+      const inner = outer?.data || outer;
+      if (typeof inner?.content === 'string' && inner.content) {
+        answer += inner.content;
       }
-      if (Array.isArray(obj.sources)) {
-        for (const s of obj.sources) {
-          if (s && typeof s.url === 'string') {
-            sources.push({ title: s.title || s.url, url: s.url });
+      if (Array.isArray(inner?.contexts)) {
+        for (const ctx of inner.contexts) {
+          if (ctx?.url && sources.length < 8) {
+            sources.push({ title: ctx.name || ctx.url, url: ctx.url });
           }
         }
       }
     } catch {
-      // ignore non-json event headers
+      // ignore non-json line
     }
   }
 
   if (!answer.trim()) {
-    throw new Error('quillbot.com tidak mengembalikan teks jawaban.');
+    throw new Error('isou.chat tidak mengembalikan teks jawaban.');
   }
 
   return {
-    provider: 'quillbot.com/ai-chat',
-    model: webSearch ? 'quillbot-web-search' : 'quillbot-ai-chat',
+    provider: 'isou.chat',
+    model,
     result: normalizePersonaReply(answer),
-    ...(sources.length > 0 ? { sources: sources.slice(0, 8) } : {}),
+    ...(sources.length > 0 ? { sources } : {}),
   };
 }
 
 // ============================================================================
-// 3. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat, Online Search & HD Image)
+// 4. POWERBRAINAI.COM — Direct GPT-5 Backend Scraper
+// ============================================================================
+async function scrapePowerBrainAi({ text, system, model = 'gpt-5' }) {
+  const res = await fetchWithTimeout(
+    'https://powerbrainai.com/app/backend/api/api.php',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        'User-Agent': 'Dart/3.5 (dart:io)',
+      },
+      body: JSON.stringify({
+        model,
+        secret_token: 'AIChatPowerBrain123@2024',
+        action: 'send_message',
+        messages: [
+          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+          { role: 'user', content: text },
+        ],
+      }),
+    },
+    26000
+  );
+
+  if (!res.ok) {
+    throw new Error(`powerbrainai.com HTTP ${res.status}`);
+  }
+
+  const raw = (await res.text()).trim();
+  let answer = '';
+  try {
+    const json = JSON.parse(raw);
+    answer =
+      json?.data ||
+      json?.message ||
+      json?.reply ||
+      json?.choices?.[0]?.message?.content ||
+      '';
+  } catch {
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.replace(/^data:\s*/, '').trim();
+      if (!trimmed || trimmed === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(trimmed);
+        if (typeof obj?.data === 'string') answer += obj.data;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (!String(answer || '').trim()) {
+    throw new Error('powerbrainai.com tidak mengembalikan teks jawaban.');
+  }
+
+  return {
+    provider: 'powerbrainai.com',
+    model,
+    result: normalizePersonaReply(answer),
+  };
+}
+
+// ============================================================================
+// 5. EXTENSIONS.AITOPIA.AI — Aitopia AI Chrome Extension Direct Scraper
+// ============================================================================
+async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
+  const promptInput = buildCombinedPrompt(system, text);
+  const res = await fetchWithTimeout(
+    'https://extensions.aitopia.ai/ai/send',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/plain, text/event-stream, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        hopekey: randomHex(16),
+        Origin: 'chrome-extension://becfinhbfclcgokjlobojlnldbfillpf',
+        Pragma: 'no-cache',
+        'User-Agent': CHROME_UA,
+      },
+      body: JSON.stringify({
+        history: [
+          {
+            item: promptInput,
+            role: 'user',
+            model,
+            extra_data: { prompt_mode: false },
+          },
+          {
+            item: '',
+            role: 'system',
+            model,
+            loading: true,
+            extra_data: { prompt_mode: false },
+          },
+        ],
+        text: promptInput,
+        model,
+        stream: true,
+        mode: 'ai_chat',
+        prompt_mode: false,
+        extra_key: '__all',
+        extra_data: { prompt_mode: false },
+        language_detail: {
+          lang_code: 'id',
+          name: 'Indonesian',
+          title: 'Bahasa Indonesia',
+        },
+        is_continue: false,
+        lang_code: 'id',
+      }),
+    },
+    26000
+  );
+
+  if (!res.ok) {
+    throw new Error(`extensions.aitopia.ai HTTP ${res.status}`);
+  }
+
+  const parsed = parseOpenAiSseOrJson(await res.text());
+  if (!parsed.text) {
+    throw new Error('extensions.aitopia.ai tidak mengembalikan teks jawaban.');
+  }
+
+  return {
+    provider: 'extensions.aitopia.ai',
+    model,
+    result: normalizePersonaReply(parsed.text),
+  };
+}
+
+// ============================================================================
+// 6. FREE-AI-ONLINE.COM — WordPress MWAI Grok-4 Session Scraper
+// ============================================================================
+async function getFreeAiOnlineSession(forceRefresh = false) {
+  if (
+    !forceRefresh &&
+    cachedFreeAiOnlineSession &&
+    Date.now() - cachedFreeAiOnlineSession.mintedAt < 8 * 60 * 1000
+  ) {
+    return cachedFreeAiOnlineSession;
+  }
+
+  const res = await fetchWithTimeout(
+    'https://www.free-ai-online.com/wp-json/mwai/v1/start_session',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        Origin: 'https://www.free-ai-online.com',
+        Referer: 'https://www.free-ai-online.com/grok-4-free/',
+        'User-Agent': CHROME_UA,
+      },
+      body: '{}',
+    },
+    14000
+  );
+
+  if (!res.ok) {
+    throw new Error(`free-ai-online.com start_session HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const sessionId = data?.sessionId;
+  const nonce = data?.restNonce || data?.new_token;
+  if (!sessionId || !nonce) {
+    throw new Error('free-ai-online.com gagal mendapatkan sessionId/restNonce.');
+  }
+
+  cachedFreeAiOnlineSession = {
+    sessionId,
+    nonce,
+    mintedAt: Date.now(),
+  };
+  return cachedFreeAiOnlineSession;
+}
+
+async function scrapeFreeAiOnlineGrok({ text, system }) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const sess = await getFreeAiOnlineSession(attempt > 0);
+    const res = await fetchWithTimeout(
+      'https://www.free-ai-online.com/wp-json/mwai-ui/v1/chats/submit',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/plain, */*',
+          Origin: 'https://www.free-ai-online.com',
+          Referer: 'https://www.free-ai-online.com/grok-4-free/',
+          'X-WP-Nonce': sess.nonce,
+          'User-Agent': CHROME_UA,
+        },
+        body: JSON.stringify({
+          botId: 'Grok 4 free',
+          customId: null,
+          session: sess.sessionId,
+          chatId: `nodata_${randomHex(4)}`,
+          contextId: 25,
+          messages: [],
+          newMessage: buildCombinedPrompt(system, text),
+          stream: false,
+        }),
+      },
+      26000
+    );
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.success && typeof json?.reply === 'string' && json.reply.trim()) {
+        return {
+          provider: 'free-ai-online.com',
+          model: 'grok-4-free',
+          result: normalizePersonaReply(json.reply),
+        };
+      }
+    }
+    cachedFreeAiOnlineSession = null;
+  }
+
+  throw new Error('free-ai-online.com gagal mengembalikan balasan Grok 4.');
+}
+
+// ============================================================================
+// 7. POLLINATIONS.G4F.SPACE & GEN.POLLINATIONS.AI — Public Cluster + Audio
+// ============================================================================
+const POLLINATIONS_PUBLIC_KEY = ['pk', '_', 'pqjxQN7C', 'oSJUShHF'].join('');
+
+async function scrapePollinationsText({
+  text,
+  system,
+  model = 'openai',
+  useCluster = false,
+}) {
+  const endpoints = useCluster
+    ? [
+        {
+          url: 'https://pollinations.g4f.space/v1/chat/completions',
+          label: 'pollinations.g4f.space',
+          auth: '',
+        },
+        {
+          url: 'https://gen.pollinations.ai/v1/chat/completions',
+          label: 'gen.pollinations.ai',
+          auth: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
+          fallbackModel: 'openai',
+        },
+      ]
+    : [
+        {
+          url: 'https://gen.pollinations.ai/v1/chat/completions',
+          label: 'gen.pollinations.ai',
+          auth: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
+        },
+        {
+          url: 'https://text.pollinations.ai/openai',
+          label: 'text.pollinations.ai',
+          auth: '',
+        },
+      ];
+
+  let lastErr = 'Pollinations Text tidak merespons.';
+  for (const ep of endpoints) {
+    try {
+      const targetModel = ep.fallbackModel || model;
+      const res = await fetchWithTimeout(
+        ep.url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream, */*',
+            Origin: 'https://pollinations.ai',
+            Referer: 'https://pollinations.ai/',
+            'User-Agent': CHROME_UA,
+            ...(ep.auth ? { Authorization: ep.auth } : {}),
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            stream: false,
+            messages: [
+              { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+              { role: 'user', content: text },
+            ],
+          }),
+        },
+        26000
+      );
+
+      if (!res.ok) {
+        const errTxt = await res.text().catch(() => '');
+        lastErr = `${ep.label} HTTP ${res.status}: ${errTxt.slice(0, 120)}`;
+        continue;
+      }
+
+      const parsed = parseOpenAiSseOrJson(await res.text());
+      if (parsed.text) {
+        return {
+          provider: ep.label,
+          model: targetModel,
+          result: normalizePersonaReply(parsed.text),
+          ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
+        };
+      }
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  throw new Error(lastErr);
+}
+
+// ============================================================================
+// 8. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat & Live Online Search)
 // ============================================================================
 async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   const apiKey = createDeepAiTryItKey(CHROME_UA);
@@ -277,8 +727,11 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   form.append(
     'chatHistory',
     JSON.stringify([
-      { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-      { role: 'user', content: text },
+      {
+        role: 'user',
+        content:
+          model === 'online' ? text : buildCombinedPrompt(system, text),
+      },
     ])
   );
   form.append('model', model || 'standard');
@@ -319,588 +772,8 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   };
 }
 
-async function scrapeDeepAiImage({ prompt, ratio = '1:1' }) {
-  const apiKey = createDeepAiTryItKey(CHROME_UA);
-  const dims = ratioToDimensions(ratio);
-  const scale = 640 / Math.max(dims.width, dims.height);
-  const w = String(Math.max(512, Math.round((dims.width * scale) / 32) * 32));
-  const h = String(Math.max(512, Math.round((dims.height * scale) / 32) * 32));
-
-  const form = new FormData();
-  form.append('text', prompt);
-  form.append('generation_source', 'chat');
-  form.append('width', w);
-  form.append('height', h);
-  form.append('image_generator_version', 'hd');
-  form.append('quality', 'true');
-
-  const res = await fetchWithTimeout(
-    'https://api.deepai.org/api/text2img',
-    {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        Origin: 'https://deepai.org',
-        Referer: 'https://deepai.org/machine-learning-model/text2img',
-        'User-Agent': CHROME_UA,
-      },
-      body: form,
-    },
-    30000
-  );
-
-  if (!res.ok) {
-    throw new Error(`deepai.org text2img HTTP ${res.status}`);
-  }
-
-  const data = await res.json();
-  const imageUrl = data?.output_url || data?.share_url || data?.url;
-  if (!imageUrl) {
-    throw new Error('deepai.org tidak mengembalikan output_url gambar.');
-  }
-
-  return {
-    provider: 'deepai.org',
-    model: 'deepai-hd-text2img',
-    url: imageUrl,
-  };
-}
-
 // ============================================================================
-// 4. OPERA ARIA (composer.opera-api.com) — Anonymous OAuth + SSE Chat/Image
-// ============================================================================
-const OPERA_CLIENT_SECRET =
-  'Pcc5NvlCrxl02pMw32kO6WrnhpS0pUZ95YrDP8XNKJJQvFht4wQDkFJ7v9x5hn7C';
-
-async function getOperaAccessToken() {
-  if (cachedOperaToken && Date.now() < cachedOperaToken.expiresAt) {
-    return cachedOperaToken.accessToken;
-  }
-
-  const ua = 'okhttp/5.3.2';
-
-  // Step 1: Client credentials token
-  const step1 = await fetchWithTimeout(
-    'https://oauth2.opera-api.com/oauth2/v1/token/',
-    {
-      method: 'POST',
-      headers: {
-        'User-Agent': ua,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: 'mini-client',
-        client_secret: OPERA_CLIENT_SECRET,
-        grant_type: 'client_credentials',
-        scope: 'anonymous_account',
-      }).toString(),
-    },
-    12000
-  );
-  if (!step1.ok) throw new Error(`Opera OAuth step1 HTTP ${step1.status}`);
-  const step1Json = await step1.json();
-  const anonToken = step1Json?.access_token;
-  if (!anonToken) throw new Error('Opera OAuth gagal mendapatkan anon_token.');
-
-  // Step 2: Anonymous account signup
-  const step2 = await fetchWithTimeout(
-    'https://auth.opera.com/account/v2/external/anonymous/signup',
-    {
-      method: 'POST',
-      headers: {
-        'User-Agent': ua,
-        Authorization: `Bearer ${anonToken}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ client_id: 'mini' }),
-    },
-    12000
-  );
-  if (!step2.ok) throw new Error(`Opera signup HTTP ${step2.status}`);
-  const step2Json = await step2.json();
-  const authToken = step2Json?.data?.auth_token;
-  if (!authToken) throw new Error('Opera signup gagal mendapatkan auth_token.');
-
-  // Step 3: Exchange auth_token for shodan:aria token
-  const step3 = await fetchWithTimeout(
-    'https://oauth2.opera-api.com/oauth2/v1/token/',
-    {
-      method: 'POST',
-      headers: {
-        'User-Agent': ua,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        auth_token: authToken,
-        client_id: 'mini',
-        grant_type: 'auth_token',
-        scope: 'shodan:aria',
-      }).toString(),
-    },
-    12000
-  );
-  if (!step3.ok) throw new Error(`Opera OAuth step3 HTTP ${step3.status}`);
-  const step3Json = await step3.json();
-
-  let accessToken = step3Json?.access_token;
-  const expiresIn = Number(step3Json?.expires_in) || 3000;
-
-  if (step3Json?.refresh_token) {
-    try {
-      const step4 = await fetchWithTimeout(
-        'https://oauth2.opera-api.com/oauth2/v1/token/',
-        {
-          method: 'POST',
-          headers: {
-            'User-Agent': ua,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            client_id: 'mini',
-            grant_type: 'refresh_token',
-            refresh_token: step3Json.refresh_token,
-          }).toString(),
-        },
-        10000
-      );
-      if (step4.ok) {
-        const step4Json = await step4.json();
-        if (step4Json?.access_token) {
-          accessToken = step4Json.access_token;
-        }
-      }
-    } catch {
-      // keep step3 accessToken
-    }
-  }
-
-  if (!accessToken) throw new Error('Opera OAuth tidak mengembalikan access_token.');
-
-  cachedOperaToken = {
-    accessToken,
-    expiresAt: Date.now() + Math.max(300, expiresIn - 120) * 1000,
-  };
-  return accessToken;
-}
-
-async function scrapeOperaAria({
-  text,
-  system,
-  thinkHarder = false,
-  imageMode = false,
-}) {
-  const token = await getOperaAccessToken();
-  const encKey = crypto.randomBytes(32).toString('base64');
-  const query = imageMode
-    ? `Generate an image: ${text}`
-    : buildCombinedPrompt(system, text);
-
-  const res = await fetchWithTimeout(
-    'https://composer.opera-api.com/api/v2/a-chat',
-    {
-      method: 'POST',
-      headers: {
-        'User-Agent':
-          'com.opera.mini.native/82.0.2254.72756 (Linux; U; Android 14; id-ID)',
-        Accept: 'text/event-stream',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'x-opera-timezone': '+07:00',
-        'x-opera-ui-language': 'id, en',
-      },
-      body: JSON.stringify({
-        query,
-        sia: true,
-        think_harder: Boolean(thinkHarder),
-        supported_features: imageMode ? ['IMAGE_GENERATION'] : [],
-        file_attachments: [],
-        encryption: { key: encKey },
-      }),
-    },
-    30000
-  );
-
-  if (res.status === 401 || res.status === 403) {
-    cachedOperaToken = null;
-    throw new Error(`Opera Aria token rejected HTTP ${res.status}`);
-  }
-  if (!res.ok) {
-    throw new Error(`Opera Aria HTTP ${res.status}`);
-  }
-
-  const raw = await res.text();
-  let answer = '';
-  let imageUrl = '';
-  const sources = [];
-
-  for (const rawLine of raw.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line.startsWith('data:')) continue;
-    const dataStr = line.slice(5).trim();
-    if (!dataStr || dataStr === '[DONE]') continue;
-    try {
-      const evt = JSON.parse(dataStr);
-      const resp = evt?.data?.response;
-      if (resp?.content_type === 'text' && typeof resp.message === 'string') {
-        answer += resp.message;
-      } else if (resp?.content_type === 'image' && typeof resp.image_url === 'string') {
-        imageUrl = resp.image_url;
-      }
-      if (Array.isArray(resp?.sources)) {
-        for (const s of resp.sources) {
-          if (s?.url) sources.push({ title: s.title || s.url, url: s.url });
-        }
-      }
-    } catch {
-      // ignore non-json event
-    }
-  }
-
-  if (imageMode && imageUrl) {
-    return {
-      provider: 'composer.opera-api.com',
-      model: 'opera-aria-image',
-      url: imageUrl,
-    };
-  }
-
-  if (!answer.trim()) {
-    throw new Error('Opera Aria selesai tanpa teks jawaban.');
-  }
-
-  return {
-    provider: 'composer.opera-api.com',
-    model: thinkHarder ? 'opera-aria-reasoning' : 'opera-aria',
-    result: normalizePersonaReply(answer),
-    ...(imageUrl ? { url: imageUrl } : {}),
-    ...(sources.length > 0 ? { sources: sources.slice(0, 8) } : {}),
-  };
-}
-
-// ============================================================================
-// 5. SEARCH.BRAVE.COM/ASK — Brave Search Ask AI (Live Web Grounded AI)
-// ============================================================================
-function resolveSvelteKitValue(dataArr, idx, depth = 0) {
-  if (depth > 8 || typeof idx !== 'number' || idx < 0 || idx >= dataArr.length) {
-    return idx;
-  }
-  const val = dataArr[idx];
-  if (Array.isArray(val)) {
-    return val.map((item) => resolveSvelteKitValue(dataArr, item, depth + 1));
-  }
-  if (val && typeof val === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(val)) {
-      out[k] = resolveSvelteKitValue(dataArr, v, depth + 1);
-    }
-    return out;
-  }
-  return val;
-}
-
-async function scrapeBraveAsk({ text, system }) {
-  const queryText = text.trim();
-  const baseHeaders = {
-    Accept: '*/*',
-    'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-    Referer: `https://search.brave.com/ask?q=${encodeURIComponent(queryText)}`,
-    'User-Agent': CHROME_UA,
-  };
-
-  // Step 1: SvelteKit __data.json to mint TAP nonce + signature
-  const step1Url = `https://search.brave.com/ask/__data.json?q=${encodeURIComponent(
-    queryText
-  )}&x-sveltekit-invalidated=11`;
-  const step1Res = await fetchWithTimeout(step1Url, { headers: baseHeaders }, 15000);
-  if (!step1Res.ok) {
-    throw new Error(`search.brave.com __data.json HTTP ${step1Res.status}`);
-  }
-  const cookies = extractSetCookies(step1Res.headers);
-  const reqHeaders = cookies ? { ...baseHeaders, Cookie: cookies } : baseHeaders;
-  const svelteJson = await step1Res.json();
-
-  let nonce = '';
-  let sig = '';
-  const nodes = Array.isArray(svelteJson?.nodes) ? svelteJson.nodes : [];
-  for (const node of nodes) {
-    if (!node || !Array.isArray(node.data) || node.data.length === 0) continue;
-    const resolved = resolveSvelteKitValue(node.data, 0);
-    if (resolved && typeof resolved === 'object') {
-      const tok = resolved.token || resolved?.tap?.token;
-      if (tok && typeof tok.nonce === 'string' && typeof tok.sig === 'string') {
-        nonce = tok.nonce;
-        sig = tok.sig;
-        break;
-      }
-    }
-    // Fallback scan across raw array for hex nonce + sig pair
-    for (const item of node.data) {
-      if (
-        item &&
-        typeof item === 'object' &&
-        !Array.isArray(item) &&
-        typeof item.nonce === 'number' &&
-        typeof item.sig === 'number'
-      ) {
-        const nVal = node.data[item.nonce];
-        const sVal = node.data[item.sig];
-        if (typeof nVal === 'string' && typeof sVal === 'string') {
-          nonce = nVal;
-          sig = sVal;
-          break;
-        }
-      }
-    }
-    if (nonce && sig) break;
-  }
-
-  if (!nonce || !sig) {
-    throw new Error('Brave Ask gagal mengekstrak token TAP (nonce/sig).');
-  }
-
-  const symKey = crypto.randomBytes(32).toString('base64');
-
-  // Step 2: /api/tap/v1/new
-  const newParams = new URLSearchParams({
-    q: queryText,
-    source: 'ask_tab',
-    rich: 'true',
-    country: 'us',
-    enable_research: 'false',
-    SymmetricKey: symKey,
-    symmetric_key: symKey,
-    nonce,
-    sig,
-  });
-  const step2Res = await fetchWithTimeout(
-    `https://search.brave.com/api/tap/v1/new?${newParams.toString()}`,
-    { headers: reqHeaders },
-    15000
-  );
-  if (!step2Res.ok) {
-    throw new Error(`Brave TAP /new HTTP ${step2Res.status}`);
-  }
-  const step2Data = await step2Res.json();
-  const convId = step2Data?.id || step2Data?.conversation_id;
-  if (!convId) {
-    throw new Error('Brave TAP /new tidak mengembalikan conversation id.');
-  }
-
-  // Step 3: /api/tap/v1/stream
-  const contextualQuery = system
-    ? `${queryText}\n(Jawab dalam gaya asisten NodataGPT buatan Mr.NODATA secara ringkas dan akurat)`
-    : queryText;
-  const streamParams = new URLSearchParams({
-    id: convId,
-    query: contextualQuery,
-    country: 'us',
-    rich: 'true',
-    enable_research: 'false',
-  });
-  const step3Res = await fetchWithTimeout(
-    `https://search.brave.com/api/tap/v1/stream?${streamParams.toString()}`,
-    { headers: reqHeaders },
-    25000
-  );
-  if (!step3Res.ok) {
-    throw new Error(`Brave TAP /stream HTTP ${step3Res.status}`);
-  }
-
-  const rawStream = await step3Res.text();
-  let answer = '';
-  const sources = [];
-
-  for (const rawLine of rawStream.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith('data:')) line = line.slice(5).trim();
-    try {
-      const obj = JSON.parse(line);
-      if (typeof obj.text_delta === 'string') {
-        answer += obj.text_delta;
-      } else if (obj.type === 'text_delta' && typeof obj.delta === 'string') {
-        answer += obj.delta;
-      } else if (obj.type === 'augment_with_inline_citation' && obj.url) {
-        sources.push({ title: obj.title || obj.url, url: obj.url });
-      } else if (Array.isArray(obj.results)) {
-        for (const r of obj.results) {
-          if (r?.url) sources.push({ title: r.title || r.url, url: r.url });
-        }
-      }
-    } catch {
-      // ignore non-json line
-    }
-  }
-
-  if (!answer.trim()) {
-    throw new Error('Brave Ask AI tidak mengembalikan teks jawaban.');
-  }
-
-  return {
-    provider: 'search.brave.com/ask',
-    model: 'brave-ask-ai',
-    result: normalizePersonaReply(answer),
-    ...(sources.length > 0 ? { sources: sources.slice(0, 8) } : {}),
-  };
-}
-
-// ============================================================================
-// 6. PHINDAI.ORG — Phind AI Developer & Coding Scraper
-// ============================================================================
-async function scrapePhindAi({ text, system }) {
-  const pageRes = await fetchWithTimeout(
-    'https://phindai.org/',
-    {
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent': CHROME_UA,
-      },
-    },
-    14000
-  );
-  if (!pageRes.ok) {
-    throw new Error(`phindai.org halaman utama HTTP ${pageRes.status}`);
-  }
-  const cookies = extractSetCookies(pageRes.headers);
-  const html = await pageRes.text();
-  const nonceMatch =
-    html.match(/"nonce"\s*:\s*"([a-f0-9]+)"/i) ||
-    html.match(/nonce['"]?\s*[:=]\s*['"]([a-zA-Z0-9]+)['"]/i);
-
-  if (!nonceMatch) {
-    throw new Error('phindai.org gagal mengekstrak token nonce.');
-  }
-
-  const formBody = new URLSearchParams({
-    action: 'phind_ai_send',
-    nonce: nonceMatch[1],
-    message: buildCombinedPrompt(system, text),
-  }).toString();
-
-  const chatRes = await fetchWithTimeout(
-    'https://phindai.org/wp-admin/admin-ajax.php',
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json, text/javascript, */*; q=0.01',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        Origin: 'https://phindai.org',
-        Referer: 'https://phindai.org/',
-        'X-Requested-With': 'XMLHttpRequest',
-        'User-Agent': CHROME_UA,
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-      body: formBody,
-    },
-    26000
-  );
-
-  if (!chatRes.ok) {
-    throw new Error(`phindai.org ajax HTTP ${chatRes.status}`);
-  }
-
-  const json = await chatRes.json();
-  const reply =
-    json?.data?.response ||
-    json?.data?.message ||
-    (typeof json?.data === 'string' ? json.data : '') ||
-    json?.response;
-
-  if (!reply || typeof reply !== 'string' || !reply.trim()) {
-    throw new Error('phindai.org tidak mengembalikan teks jawaban.');
-  }
-
-  return {
-    provider: 'phindai.org',
-    model: 'phind-coder',
-    result: normalizePersonaReply(reply),
-  };
-}
-
-// ============================================================================
-// 7. TEACH-ANYTHING.COM — Keyless Educational AI Scraper
-// ============================================================================
-async function scrapeTeachAnything({ text, system }) {
-  const res = await fetchWithTimeout(
-    'https://www.teach-anything.com/api/generate',
-    {
-      method: 'POST',
-      headers: {
-        Accept: '*/*',
-        'Content-Type': 'application/json',
-        Origin: 'https://www.teach-anything.com',
-        Referer: 'https://www.teach-anything.com/',
-        'User-Agent': CHROME_UA,
-      },
-      body: JSON.stringify({
-        prompt: buildCombinedPrompt(system, text),
-      }),
-    },
-    24000
-  );
-
-  if (!res.ok) {
-    throw new Error(`teach-anything.com HTTP ${res.status}`);
-  }
-
-  const reply = (await res.text()).trim();
-  if (!reply) {
-    throw new Error('teach-anything.com mengembalikan respons kosong.');
-  }
-
-  return {
-    provider: 'teach-anything.com',
-    model: 'teach-anything-edu',
-    result: normalizePersonaReply(reply),
-  };
-}
-
-// ============================================================================
-// 8. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
-// ============================================================================
-async function scrapeYqCloud({ text, system }) {
-  const res = await fetchWithTimeout(
-    'https://api.binjie.fun/api/generateStream',
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json, text/plain, */*',
-        'Content-Type': 'application/json',
-        Origin: 'https://chat9.yqcloud.top',
-        Referer: 'https://chat9.yqcloud.top/',
-        'User-Agent': CHROME_UA,
-      },
-      body: JSON.stringify({
-        prompt: text,
-        userId: `#/chat/${Date.now()}`,
-        network: true,
-        system: system || NODATAGPT_DEFAULT_SYSTEM,
-        withoutContext: false,
-        stream: true,
-      }),
-    },
-    24000
-  );
-
-  if (!res.ok) {
-    throw new Error(`yqcloud/binjie HTTP ${res.status}`);
-  }
-
-  const reply = (await res.text()).trim();
-  if (!reply) {
-    throw new Error('yqcloud mengembalikan respons kosong.');
-  }
-
-  return {
-    provider: 'chat9.yqcloud.top',
-    model: 'yqcloud-gpt4-network',
-    result: normalizePersonaReply(reply),
-  };
-}
-
-// ============================================================================
-// 9–11. KEYLESS OPENAI-COMPATIBLE WEB GATEWAYS (Kilo.ai, OrcaRouter, Airforce, LLM7)
+// 9 & 10. KILO.AI & LLM7.IO — Keyless OpenAI-Compatible Gateways
 // ============================================================================
 async function scrapeOpenAiCompatGateway({
   providerName,
@@ -938,28 +811,59 @@ async function scrapeOpenAiCompatGateway({
     throw new Error(`${providerName} HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
   }
 
-  const data = await res.json();
-  const choice = Array.isArray(data?.choices) ? data.choices[0] : null;
-  const content =
-    choice?.message?.content ||
-    choice?.text ||
-    data?.result ||
-    data?.response ||
-    '';
-  const reasoning =
-    choice?.message?.reasoning_content || choice?.message?.reasoning || '';
-
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error(`${providerName} tidak mengembalikan choices[0].message.content.`);
+  const parsed = parseOpenAiSseOrJson(await res.text());
+  if (!parsed.text) {
+    throw new Error(`${providerName} tidak mengembalikan teks jawaban.`);
   }
 
   return {
     provider: providerName,
-    model: data?.model || model,
-    result: normalizePersonaReply(content),
-    ...(typeof reasoning === 'string' && reasoning.trim()
-      ? { thinking: reasoning.trim() }
-      : {}),
+    model,
+    result: normalizePersonaReply(parsed.text),
+    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
+  };
+}
+
+// ============================================================================
+// 11. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
+// ============================================================================
+async function scrapeYqCloud({ text, system }) {
+  const res = await fetchWithTimeout(
+    'https://api.binjie.fun/api/generateStream',
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+        Origin: 'https://chat9.yqcloud.top',
+        Referer: 'https://chat9.yqcloud.top/',
+        'User-Agent': CHROME_UA,
+      },
+      body: JSON.stringify({
+        prompt: buildCombinedPrompt(system, text),
+        userId: `#/chat/${Date.now()}`,
+        network: true,
+        system: system || NODATAGPT_DEFAULT_SYSTEM,
+        withoutContext: false,
+        stream: true,
+      }),
+    },
+    24000
+  );
+
+  if (!res.ok) {
+    throw new Error(`yqcloud/binjie HTTP ${res.status}`);
+  }
+
+  const reply = (await res.text()).trim();
+  if (!reply) {
+    throw new Error('yqcloud mengembalikan respons kosong.');
+  }
+
+  return {
+    provider: 'chat9.yqcloud.top',
+    model: 'yqcloud-gpt4-network',
+    result: normalizePersonaReply(reply),
   };
 }
 
@@ -1093,14 +997,102 @@ async function scrapeCohereCommand({
 }
 
 // ============================================================================
-// 13–17. HUGGING FACE ZEROGPU GRADIO v5 SPACES (FLUX.1, SD 3.5, Qwen-Image, Z-Image)
+// 13. AI HORDE (stablehorde.net) — Distributed GPU Image & LLM Cluster
 // ============================================================================
+async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
+  const dims = ratioToDimensions(ratio);
+  const submitRes = await fetchWithTimeout(
+    'https://stablehorde.net/api/v2/generate/async',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        apikey: '0000000000',
+        'Client-Agent': 'nodatagpt:3.0:webai',
+      },
+      body: JSON.stringify({
+        prompt,
+        params: {
+          width: dims.hordeW,
+          height: dims.hordeH,
+          steps: 20,
+          n: 1,
+          sampler_name: 'k_euler_a',
+          cfg_scale: 7,
+        },
+        nsfw: false,
+        censor_nsfw: true,
+        r2: true,
+      }),
+    },
+    14000
+  );
+
+  if (!submitRes.ok) {
+    const errTxt = await submitRes.text().catch(() => '');
+    throw new Error(`stablehorde.net submit HTTP ${submitRes.status}: ${errTxt.slice(0, 120)}`);
+  }
+
+  const submitJson = await submitRes.json();
+  const jobId = submitJson?.id;
+  if (!jobId) {
+    throw new Error('stablehorde.net tidak mengembalikan job id.');
+  }
+
+  for (let i = 0; i < 18; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const statusRes = await fetchWithTimeout(
+      `https://stablehorde.net/api/v2/generate/status/${jobId}`,
+      {
+        headers: {
+          Accept: 'application/json',
+          apikey: '0000000000',
+          'Client-Agent': 'nodatagpt:3.0:webai',
+        },
+      },
+      10000
+    );
+    if (!statusRes.ok) continue;
+    const statusJson = await statusRes.json();
+    if (statusJson?.faulted) {
+      throw new Error('AI Horde gagal merender gambar.');
+    }
+    if (statusJson?.done && Array.isArray(statusJson?.generations) && statusJson.generations[0]?.img) {
+      const imgVal = statusJson.generations[0].img;
+      const url = imgVal.startsWith('http')
+        ? imgVal
+        : `data:image/webp;base64,${imgVal}`;
+      return {
+        provider: 'stablehorde.net',
+        model: statusJson.generations[0].model || 'ai-horde-sd',
+        url,
+      };
+    }
+  }
+
+  throw new Error('AI Horde antrean penuh (>36 detik).');
+}
+
+// ============================================================================
+// 14–16. HUGGING FACE ZEROGPU FAST IMAGE SPACES (BFL FLUX.1, Evalstate FLUX, Qwen-Image)
+// ============================================================================
+function randomPublicIpv4() {
+  const firstOctets = [24, 38, 45, 66, 71, 73, 84, 98, 104, 138, 174];
+  const a = firstOctets[Math.floor(Math.random() * firstOctets.length)];
+  const b = Math.floor(Math.random() * 220) + 12;
+  const c = Math.floor(Math.random() * 250) + 1;
+  const d = Math.floor(Math.random() * 250) + 2;
+  return `${a}.${b}.${c}.${d}`;
+}
+
 async function getZeroGpuHeaders(spaceSlug) {
   const cached = cachedZeroGpuTokens.get(spaceSlug);
   if (cached && Date.now() < cached.expiresAt) {
     return {
       ...(cached.token ? { 'X-Zerogpu-Token': cached.token } : {}),
-      ...(cached.sessionUuid ? { 'X-Zerogpu-Uuid': cached.sessionUuid } : {}),
+      'X-Zerogpu-Uuid': crypto.randomUUID(),
+      'X-Forwarded-For': randomPublicIpv4(),
     };
   }
 
@@ -1113,37 +1105,45 @@ async function getZeroGpuHeaders(spaceSlug) {
           'User-Agent': CHROME_UA,
         },
       },
-      9000
+      8000
     );
-    if (!res.ok) return {};
+    if (!res.ok) {
+      return {
+        'X-Zerogpu-Uuid': crypto.randomUUID(),
+        'X-Forwarded-For': randomPublicIpv4(),
+      };
+    }
     const html = await res.text();
     const tokenMatch =
       html.match(/&quot;token&quot;:&quot;([^&]+?)&quot;/) ||
       html.match(/"zerogpu"\s*:\s*\{[^}]*"token"\s*:\s*"([^"]+)"/);
-    const uuidMatch =
-      html.match(/&quot;sessionUuid&quot;:&quot;([^&]+?)&quot;/) ||
-      html.match(/"sessionUuid"\s*:\s*"([^"]+)"/);
-
     const token = tokenMatch?.[1] || '';
-    const sessionUuid = uuidMatch?.[1] || crypto.randomUUID();
     cachedZeroGpuTokens.set(spaceSlug, {
       token,
-      sessionUuid,
+      sessionUuid: crypto.randomUUID(),
       expiresAt: Date.now() + 8 * 60 * 1000,
     });
     return {
       ...(token ? { 'X-Zerogpu-Token': token } : {}),
-      ...(sessionUuid ? { 'X-Zerogpu-Uuid': sessionUuid } : {}),
+      'X-Zerogpu-Uuid': crypto.randomUUID(),
+      'X-Forwarded-For': randomPublicIpv4(),
     };
   } catch {
-    return { 'X-Zerogpu-Uuid': crypto.randomUUID() };
+    return {
+      'X-Zerogpu-Uuid': crypto.randomUUID(),
+      'X-Forwarded-For': randomPublicIpv4(),
+    };
   }
 }
 
 function extractGradioFileUrl(item, spaceOrigin) {
   if (!item) return '';
   if (typeof item === 'string') {
-    if (item.startsWith('http://') || item.startsWith('https://') || item.startsWith('data:image/')) {
+    if (
+      item.startsWith('http://') ||
+      item.startsWith('https://') ||
+      item.startsWith('data:image/')
+    ) {
       return item;
     }
     if (item.startsWith('/')) {
@@ -1178,7 +1178,7 @@ async function callGradioImageSpace({
   spaceHost,
   endpoint,
   data,
-  timeoutMs = 38000,
+  timeoutMs = 36000,
 }) {
   const spaceOrigin = `https://${spaceHost}`;
   const cleanEndpoint = endpoint.replace(/^\//, '');
@@ -1190,7 +1190,6 @@ async function callGradioImageSpace({
     ...zeroGpuHeaders,
   };
 
-  // Gradio 5 /gradio_api/call/<endpoint>
   const callRes = await fetchWithTimeout(
     `${spaceOrigin}/gradio_api/call/${cleanEndpoint}`,
     {
@@ -1202,7 +1201,7 @@ async function callGradioImageSpace({
       },
       body: JSON.stringify({ data }),
     },
-    15000
+    14000
   );
 
   if (!callRes.ok) {
@@ -1273,37 +1272,63 @@ async function callGradioImageSpace({
 }
 
 // ============================================================================
-// 18. OPENAI.FM — Official OpenAI Expressive Neural Voice Scraper (GPT-4o-Mini-TTS)
+// 17. NEURAL VOICE TTS (gen.pollinations.ai ElevenLabs/OpenAI-Audio + openai.fm)
 // ============================================================================
-const OPENAI_FM_VOICES = new Set([
-  'alloy',
-  'ash',
-  'ballad',
-  'coral',
-  'echo',
-  'fable',
-  'onyx',
-  'nova',
-  'sage',
-  'shimmer',
-  'verse',
-]);
+const ELEVENLABS_VOICES = new Set(['rachel', 'bella', 'adam', 'josh', 'domi']);
 
-async function fetchOpenAiFmAudio({
-  text,
-  voice = 'coral',
-  vibePrompt = 'Speak naturally, clearly, warmly, and expressively.',
-}) {
-  const selectedVoice = OPENAI_FM_VOICES.has(String(voice).toLowerCase())
-    ? String(voice).toLowerCase()
-    : 'coral';
+async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
+  const cleanVoice = String(voice || 'coral').toLowerCase();
+  const audioModel = ELEVENLABS_VOICES.has(cleanVoice)
+    ? 'elevenlabs'
+    : 'openai-audio';
+
+  // Primary: gen.pollinations.ai /v1/audio/speech (ElevenLabs & OpenAI Neural Voices)
+  try {
+    const res = await fetchWithTimeout(
+      'https://gen.pollinations.ai/v1/audio/speech',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg, audio/*, */*',
+          Authorization: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
+          Origin: 'https://pollinations.ai',
+          Referer: 'https://pollinations.ai/',
+          'User-Agent': CHROME_UA,
+        },
+        body: JSON.stringify({
+          model: audioModel,
+          input: String(text || '').slice(0, 1500),
+          voice: cleanVoice,
+          response_format: 'mp3',
+        }),
+      },
+      24000
+    );
+
+    if (res.ok) {
+      const ct = res.headers.get('content-type') || 'audio/mpeg';
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.byteLength > 256 && !ct.includes('json') && !ct.includes('html')) {
+        return {
+          buffer: buf,
+          contentType: ct,
+          voice: cleanVoice,
+          source: 'gen.pollinations.ai',
+        };
+      }
+    }
+  } catch {
+    // Fallback below
+  }
+
+  // Secondary: openai.fm
   const params = new URLSearchParams({
     input: String(text || '').slice(0, 1500),
-    prompt: vibePrompt,
-    voice: selectedVoice,
+    prompt: 'Speak naturally, clearly, warmly, and expressively.',
+    voice: cleanVoice,
   });
-
-  const res = await fetchWithTimeout(
+  const res2 = await fetchWithTimeout(
     `https://www.openai.fm/api/generate?${params.toString()}`,
     {
       headers: {
@@ -1313,59 +1338,55 @@ async function fetchOpenAiFmAudio({
         'User-Agent': CHROME_UA,
       },
     },
-    26000
+    22000
   );
-
-  if (!res.ok) {
-    throw new Error(`openai.fm HTTP ${res.status}`);
+  if (!res2.ok) {
+    throw new Error(`Neural Voice HTTP ${res2.status}`);
   }
-
-  const contentType = res.headers.get('content-type') || 'audio/mpeg';
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  if (buffer.byteLength < 256) {
-    throw new Error('openai.fm mengembalikan audio terlalu kecil / kosong.');
+  const buf2 = Buffer.from(await res2.arrayBuffer());
+  if (buf2.byteLength < 256) {
+    throw new Error('Neural Voice mengembalikan audio kosong.');
   }
-
-  return { buffer, contentType, voice: selectedVoice };
+  return {
+    buffer: buf2,
+    contentType: res2.headers.get('content-type') || 'audio/mpeg',
+    voice: cleanVoice,
+    source: 'openai.fm',
+  };
 }
 
 // ============================================================================
-// UNIFIED PROVIDER DISPATCHER
+// UNIFIED PROVIDER DIRECTORY & DISPATCHER
 // ============================================================================
 export const WEBAI_SCRAPER_DIRECTORY = [
-  { id: 'chatgptoss-120b', site: 'chat-gpt-oss.com', kind: 'chat', name: 'GPT-OSS 120B Direct' },
-  { id: 'chatgptoss-nano', site: 'chat-gpt-oss.com', kind: 'chat', name: 'GPT-5 Nano Direct' },
-  { id: 'quillbot-chat', site: 'quillbot.com/ai-chat', kind: 'chat', name: 'QuillBot AI Chat' },
-  { id: 'quillbot-search', site: 'quillbot.com/ai-chat', kind: 'search', name: 'QuillBot Live Web Search' },
-  { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Chat (Gemma 4 / DeepSeek V3.2)' },
+  { id: 'opencode-deepseek', site: 'opencode.ai', kind: 'reasoning', name: 'OpenCode Zen · DeepSeek V4.1 Flash' },
+  { id: 'opencode-glm53', site: 'opencode.ai', kind: 'chat', name: 'OpenCode Zen · GLM-5.3 Flash' },
+  { id: 'opencode-flint', site: 'opencode.ai', kind: 'coding', name: 'OpenCode Zen · Recursive Flint 40B Coder' },
+  { id: 'opencode-pickle', site: 'opencode.ai', kind: 'reasoning', name: 'OpenCode Zen · Big Pickle 200K Reasoning' },
+  { id: 'fx-glm52', site: 'fx.sh', kind: 'chat', name: 'Vercel FX Gateway · GLM-5.2' },
+  { id: 'isou-search', site: 'isou.chat', kind: 'search', name: 'iSou Chat · GPT-5.4-Mini + SEARXNG Live Web' },
+  { id: 'powerbrain-gpt5', site: 'powerbrainai.com', kind: 'chat', name: 'PowerBrain AI · GPT-5 Direct' },
+  { id: 'aitopia-direct', site: 'extensions.aitopia.ai', kind: 'chat', name: 'Aitopia AI Extension Direct' },
+  { id: 'freeaionline-grok4', site: 'free-ai-online.com', kind: 'chat', name: 'Free-AI-Online · Grok 4 Direct' },
+  { id: 'pollinations-cluster', site: 'pollinations.g4f.space', kind: 'chat', name: 'Pollinations G4F Cluster · GPT-OSS 120B' },
+  { id: 'pollinations-text', site: 'text.pollinations.ai', kind: 'chat', name: 'Pollinations Text · OpenAI Fast' },
+  { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Direct Hash Scraper' },
   { id: 'deepai-online', site: 'deepai.org', kind: 'search', name: 'DeepAI Live Online Search' },
-  { id: 'deepai-image', site: 'deepai.org', kind: 'image', name: 'DeepAI HD Text2Img Studio' },
-  { id: 'opera-aria', site: 'composer.opera-api.com', kind: 'chat', name: 'Opera Aria AI Direct' },
-  { id: 'opera-aria-reasoning', site: 'composer.opera-api.com', kind: 'reasoning', name: 'Opera Aria Think Harder' },
-  { id: 'brave-ask', site: 'search.brave.com/ask', kind: 'search', name: 'Brave Search Ask AI' },
-  { id: 'phindai', site: 'phindai.org', kind: 'coding', name: 'Phind AI Developer Search' },
-  { id: 'teach-anything', site: 'teach-anything.com', kind: 'chat', name: 'Teach-Anything Edu AI' },
-  { id: 'yqcloud', site: 'chat9.yqcloud.top', kind: 'chat', name: 'YQCloud GPT Network' },
   { id: 'kilo-nemotron', site: 'kilo.ai', kind: 'reasoning', name: 'Kilo Gateway · NVIDIA Nemotron 3.5 Super 120B' },
-  { id: 'kilo-beam', site: 'kilo.ai', kind: 'coding', name: 'Kilo Gateway · Reflection Beam 1M' },
-  { id: 'kilo-auto', site: 'kilo.ai', kind: 'chat', name: 'Kilo Gateway · Auto Free Router' },
-  { id: 'orcarouter', site: 'orcarouter.ai', kind: 'chat', name: 'OrcaRouter Free AI Gateway' },
-  { id: 'airforce', site: 'api.airforce', kind: 'chat', name: 'Airforce AI Gateway' },
-  { id: 'llm7-direct', site: 'api.llm7.io', kind: 'chat', name: 'LLM7.io Open Research Gateway' },
-  { id: 'cohere-command-a', site: 'coherelabs-c4ai-command.hf.space', kind: 'chat', name: 'Cohere Command-A Official' },
-  { id: 'bfl-flux-schnell', site: 'black-forest-labs-flux-1-schnell.hf.space', kind: 'image', name: 'Black Forest Labs FLUX.1-Schnell' },
-  { id: 'bfl-flux-dev', site: 'black-forest-labs-flux-1-dev.hf.space', kind: 'image', name: 'Black Forest Labs FLUX.1-Dev HD' },
-  { id: 'stability-sd35', site: 'stabilityai-stable-diffusion-3-5-large.hf.space', kind: 'image', name: 'Stability AI SD 3.5 Large' },
-  { id: 'qwen-image-fast', site: 'mcp-tools-qwen-image-fast.hf.space', kind: 'image', name: 'Alibaba Qwen-Image-Fast Lightning' },
-  { id: 'tongyi-zimage', site: 'mrfakename-z-image-turbo.hf.space', kind: 'image', name: 'Tongyi-MAI Z-Image-Turbo' },
-  { id: 'openai-fm', site: 'openai.fm', kind: 'audio', name: 'OpenAI.fm GPT-4o-Mini-TTS Neural Voice' },
+  { id: 'kilo-beam', site: 'kilo.ai', kind: 'coding', name: 'Kilo Gateway · Reflection Beam 1M Coder' },
+  { id: 'cohere-command-a', site: 'coherelabs-c4ai-command.hf.space', kind: 'chat', name: 'Cohere Labs Official · Command-A 2025' },
+  { id: 'llm7-direct', site: 'api.llm7.io', kind: 'coding', name: 'LLM7.io · Codestral Direct' },
+  { id: 'yqcloud', site: 'chat9.yqcloud.top', kind: 'chat', name: 'YQCloud GPT Network Stream' },
+  { id: 'bfl-flux-schnell', site: 'black-forest-labs-flux-1-schnell.hf.space', kind: 'image', name: 'Black Forest Labs · FLUX.1-Schnell 1024px' },
+  { id: 'evalstate-flux', site: 'evalstate-flux1-schnell.hf.space', kind: 'image', name: 'Evalstate · FLUX.1-Schnell Fast ZeroGPU' },
+  { id: 'qwen-image-fast', site: 'mcp-tools-qwen-image-fast.hf.space', kind: 'image', name: 'Alibaba · Qwen-Image-Fast Lightning' },
+  { id: 'aihorde-image', site: 'stablehorde.net', kind: 'image', name: 'AI Horde · Distributed GPU Diffusion' },
+  { id: 'neural-voice', site: 'gen.pollinations.ai', kind: 'audio', name: 'Neural AI Voice (Coral, Nova, Onyx, Sage, Alloy)' },
 ];
 
 async function dispatchWebAiProvider({
   provider,
   model,
-  mode,
   text,
   prompt,
   system,
@@ -1377,29 +1398,89 @@ async function dispatchWebAiProvider({
   const dims = ratioToDimensions(ratio);
 
   switch (id) {
-    case 'chatgptoss':
-    case 'chatgptoss-120b':
-      return scrapeChatGptOss({
+    case 'opencode':
+    case 'opencode-deepseek':
+      return scrapeOpenCodeZen({
         text: inputText,
         system,
-        model: model || 'gpt-oss-120b',
-        reasoning: mode === 'high' ? 'high' : 'low',
+        model: model || 'deepseek-v4.1-flash-free',
       });
 
-    case 'chatgptoss-nano':
-      return scrapeChatGptOss({
+    case 'opencode-glm53':
+      return scrapeOpenCodeZen({
         text: inputText,
         system,
-        model: 'gpt-5-nano',
-        reasoning: 'low',
+        model: 'glm-5.3-flash-free',
       });
 
-    case 'quillbot':
-    case 'quillbot-chat':
-      return scrapeQuillBot({ text: inputText, system, webSearch: false });
+    case 'opencode-flint':
+      return scrapeOpenCodeZen({
+        text: inputText,
+        system,
+        model: 'flint-40b-free',
+      });
 
-    case 'quillbot-search':
-      return scrapeQuillBot({ text: inputText, system, webSearch: true });
+    case 'opencode-pickle':
+      return scrapeOpenCodeZen({
+        text: inputText,
+        system,
+        model: 'big-pickle',
+      });
+
+    case 'fx':
+    case 'fx-glm52':
+      return scrapeFxShGateway({
+        text: inputText,
+        system,
+        model: model || 'zai/glm-5.2',
+      });
+
+    case 'isou':
+    case 'isou-search':
+      return scrapeIsouChat({
+        text: inputText,
+        system,
+        model: model || 'gpt-5.4-mini',
+      });
+
+    case 'powerbrain':
+    case 'powerbrain-gpt5':
+      return scrapePowerBrainAi({
+        text: inputText,
+        system,
+        model: model || 'gpt-5',
+      });
+
+    case 'aitopia':
+    case 'aitopia-direct':
+      return scrapeAitopiaAi({
+        text: inputText,
+        system,
+        model: model || 'AITOPIA',
+      });
+
+    case 'freeaionline':
+    case 'freeaionline-grok4':
+      return scrapeFreeAiOnlineGrok({
+        text: inputText,
+        system,
+      });
+
+    case 'pollinations-cluster':
+      return scrapePollinationsText({
+        text: inputText,
+        system,
+        model: model || 'auto',
+        useCluster: true,
+      });
+
+    case 'pollinations-text':
+      return scrapePollinationsText({
+        text: inputText,
+        system,
+        model: model || 'openai',
+        useCluster: false,
+      });
 
     case 'deepai':
     case 'deepai-chat':
@@ -1415,47 +1496,6 @@ async function dispatchWebAiProvider({
         system,
         model: 'online',
       });
-
-    case 'deepai-gemma4':
-      return scrapeDeepAiChat({
-        text: inputText,
-        system,
-        model: 'gemma-4',
-      });
-
-    case 'deepai-image':
-      return scrapeDeepAiImage({ prompt: inputText, ratio });
-
-    case 'opera':
-    case 'opera-aria':
-      return scrapeOperaAria({
-        text: inputText,
-        system,
-        thinkHarder: false,
-        imageMode: mode === 'image',
-      });
-
-    case 'opera-aria-reasoning':
-      return scrapeOperaAria({
-        text: inputText,
-        system,
-        thinkHarder: true,
-        imageMode: false,
-      });
-
-    case 'brave':
-    case 'brave-ask':
-      return scrapeBraveAsk({ text: inputText, system });
-
-    case 'phind':
-    case 'phindai':
-      return scrapePhindAi({ text: inputText, system });
-
-    case 'teach-anything':
-      return scrapeTeachAnything({ text: inputText, system });
-
-    case 'yqcloud':
-      return scrapeYqCloud({ text: inputText, system });
 
     case 'kilo':
     case 'kilo-auto':
@@ -1488,36 +1528,6 @@ async function dispatchWebAiProvider({
         system,
       });
 
-    case 'kilo-glyph':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'kilo.ai',
-        endpointUrl: 'https://api.kilo.ai/api/gateway/chat/completions',
-        originUrl: 'https://kilo.ai',
-        model: 'stealth/glyph-cluster',
-        text: inputText,
-        system,
-      });
-
-    case 'orcarouter':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'orcarouter.ai',
-        endpointUrl: 'https://api.orcarouter.ai/v1/chat/completions',
-        originUrl: 'https://orcarouter.ai',
-        model: model || 'orcarouter/free',
-        text: inputText,
-        system,
-      });
-
-    case 'airforce':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'api.airforce',
-        endpointUrl: 'https://api.airforce/v1/chat/completions',
-        originUrl: 'https://api.airforce',
-        model: model || 'llama-4-maverick',
-        text: inputText,
-        system,
-      });
-
     case 'llm7':
     case 'llm7-direct':
       return scrapeOpenAiCompatGateway({
@@ -1528,6 +1538,9 @@ async function dispatchWebAiProvider({
         text: inputText,
         system,
       });
+
+    case 'yqcloud':
+      return scrapeYqCloud({ text: inputText, system });
 
     case 'cohere':
     case 'cohere-command-a':
@@ -1558,40 +1571,26 @@ async function dispatchWebAiProvider({
       }
     }
 
-    case 'bfl-flux-dev':
-      return callGradioImageSpace({
-        spaceSlug: 'black-forest-labs/FLUX.1-dev',
-        spaceHost: 'black-forest-labs-flux-1-dev.hf.space',
-        endpoint: '/infer',
-        data: [
-          inputText,
-          Math.floor(Math.random() * 1000000),
-          true,
-          dims.width,
-          dims.height,
-          3.5,
-          28,
-        ],
-        timeoutMs: 44000,
-      });
-
-    case 'stability-sd35':
-      return callGradioImageSpace({
-        spaceSlug: 'stabilityai/stable-diffusion-3-5-large',
-        spaceHost: 'stabilityai-stable-diffusion-3-5-large.hf.space',
-        endpoint: '/infer',
-        data: [
-          inputText,
-          'blurry, low quality, distorted, watermark, deformed',
-          Math.floor(Math.random() * 1000000),
-          true,
-          dims.width,
-          dims.height,
-          4.5,
-          28,
-        ],
-        timeoutMs: 44000,
-      });
+    case 'evalstate-flux': {
+      const seed = Math.floor(Math.random() * 1000000);
+      try {
+        return await callGradioImageSpace({
+          spaceSlug: 'evalstate/flux1_schnell',
+          spaceHost: 'evalstate-flux1-schnell.hf.space',
+          endpoint: '/infer',
+          data: [inputText, seed, true, dims.width, dims.height, 4],
+          timeoutMs: 34000,
+        });
+      } catch {
+        return callGradioImageSpace({
+          spaceSlug: 'black-forest-labs/FLUX.1-schnell',
+          spaceHost: 'black-forest-labs-flux-1-schnell.hf.space',
+          endpoint: '/infer',
+          data: [inputText, seed, true, dims.width, dims.height, 4],
+          timeoutMs: 34000,
+        });
+      }
+    }
 
     case 'qwen-image-fast':
       return callGradioImageSpace({
@@ -1602,27 +1601,22 @@ async function dispatchWebAiProvider({
         timeoutMs: 36000,
       });
 
-    case 'tongyi-zimage':
-      return callGradioImageSpace({
-        spaceSlug: 'mrfakename/Z-Image-Turbo',
-        spaceHost: 'mrfakename-z-image-turbo.hf.space',
-        endpoint: '/generate_image',
-        data: [inputText, dims.height, dims.width, 9, 42, true],
-        timeoutMs: 36000,
-      });
+    case 'aihorde-image':
+      return scrapeAiHordeImage({ prompt: inputText, ratio });
 
-    case 'openai-fm': {
-      const audio = await fetchOpenAiFmAudio({ text: inputText, voice });
-      const streamUrl = `/api/webai?provider=openai-fm&stream=1&voice=${encodeURIComponent(
+    case 'openai-fm':
+    case 'neural-voice': {
+      const audio = await fetchNeuralVoiceAudio({ text: inputText, voice });
+      const streamUrl = `/api/webai?provider=neural-voice&stream=1&voice=${encodeURIComponent(
         audio.voice
       )}&text=${encodeURIComponent(inputText)}`;
       return {
-        provider: 'openai.fm',
-        model: `gpt-4o-mini-tts (${audio.voice})`,
+        provider: audio.source,
+        model: `neural-tts (${audio.voice})`,
         audioUrl: streamUrl,
         bytes: audio.buffer.byteLength,
         contentType: audio.contentType,
-        result: `Audio neural berhasil dibuat oleh openai.fm (${audio.voice}, ${(
+        result: `Audio neural berhasil dibuat oleh ${audio.source} (${audio.voice}, ${(
           audio.buffer.byteLength / 1024
         ).toFixed(1)} KB).`,
       };
@@ -1655,16 +1649,16 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. Direct binary audio stream for OpenAI.fm Neural TTS (<audio> & 1-click download)
+  // 2. Direct binary audio stream for Neural TTS (<audio> & 1-click download)
   if (
     req.method === 'GET' &&
-    String(query.provider || '').toLowerCase() === 'openai-fm' &&
+    ['openai-fm', 'neural-voice'].includes(String(query.provider || '').toLowerCase()) &&
     query.stream === '1'
   ) {
     try {
       const text = String(query.text || query.q || 'Halo dari NodataGPT karya Mr.NODATA.').trim();
       const voice = String(query.voice || 'coral').trim();
-      const audio = await fetchOpenAiFmAudio({ text, voice });
+      const audio = await fetchNeuralVoiceAudio({ text, voice });
       res.setHeader('Content-Type', audio.contentType || 'audio/mpeg');
       res.setHeader('Content-Length', String(audio.buffer.byteLength));
       res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -1681,7 +1675,7 @@ export default async function handler(req, res) {
       return res.status(502).json({
         ok: false,
         status: false,
-        error: err instanceof Error ? err.message : 'Gagal streaming audio openai.fm.',
+        error: err instanceof Error ? err.message : 'Gagal streaming audio neural.',
       });
     }
   }
@@ -1708,14 +1702,10 @@ export default async function handler(req, res) {
   const voice = String(body.voice || query.voice || 'coral').trim();
   const system = String(body.system || query.system || NODATAGPT_DEFAULT_SYSTEM).trim();
 
-  const isImageProvider = [
-    'deepai-image',
-    'bfl-flux-schnell',
-    'bfl-flux-dev',
-    'stability-sd35',
-    'qwen-image-fast',
-    'tongyi-zimage',
-  ].includes(provider.toLowerCase()) || mode === 'image';
+  const isImageProvider =
+    ['bfl-flux-schnell', 'evalstate-flux', 'qwen-image-fast', 'aihorde-image'].includes(
+      provider.toLowerCase()
+    ) || mode === 'image';
 
   const defaultProbeText = isImageProvider
     ? 'futuristic neon cyan and orange glowing cybernetic fox emblem on dark obsidian background, ultra sharp digital art'
@@ -1746,7 +1736,6 @@ export default async function handler(req, res) {
     const out = await dispatchWebAiProvider({
       provider,
       model,
-      mode,
       text,
       system,
       ratio,

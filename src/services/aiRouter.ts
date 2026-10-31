@@ -949,41 +949,45 @@ export function buildModelRequests(
         },
       ];
 
-    case 'webai-gptoss-120b':
-    case 'webai-gpt5-nano':
-    case 'webai-quillbot':
-    case 'webai-quillbot-search':
-    case 'webai-brave-ask':
-    case 'webai-opera-aria':
-    case 'webai-opera-reasoning':
+    case 'webai-opencode-deepseek':
+    case 'webai-opencode-glm53':
+    case 'webai-opencode-flint':
+    case 'webai-opencode-pickle':
+    case 'webai-fx-glm52':
+    case 'webai-isou-search':
+    case 'webai-powerbrain-gpt5':
+    case 'webai-aitopia':
+    case 'webai-freeaionline-grok4':
+    case 'webai-pollinations-cluster':
+    case 'webai-pollinations-text':
     case 'webai-deepai-chat':
     case 'webai-deepai-online':
     case 'webai-cohere-command':
-    case 'webai-phind-coder':
     case 'webai-kilo-nemotron':
     case 'webai-kilo-beam':
-    case 'webai-orcarouter':
-    case 'webai-teach-anything':
+    case 'webai-llm7-codestral':
     case 'webai-yqcloud': {
       const webAiProviderChains: Record<string, string[]> = {
-        'webai-gptoss-120b': ['chatgptoss-120b', 'kilo-nemotron', 'orcarouter'],
-        'webai-gpt5-nano': ['chatgptoss-nano', 'chatgptoss-120b', 'orcarouter'],
-        'webai-quillbot': ['quillbot-chat', 'deepai-chat', 'chatgptoss-120b'],
-        'webai-quillbot-search': ['quillbot-search', 'brave-ask', 'deepai-online'],
-        'webai-brave-ask': ['brave-ask', 'quillbot-search', 'deepai-online'],
-        'webai-opera-aria': ['opera-aria', 'quillbot-chat', 'orcarouter'],
-        'webai-opera-reasoning': ['opera-aria-reasoning', 'kilo-nemotron', 'chatgptoss-120b'],
-        'webai-deepai-chat': ['deepai-chat', 'quillbot-chat', 'orcarouter'],
-        'webai-deepai-online': ['deepai-online', 'quillbot-search', 'brave-ask'],
-        'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'chatgptoss-120b'],
-        'webai-phind-coder': ['phindai', 'kilo-beam', 'chatgptoss-120b'],
-        'webai-kilo-nemotron': ['kilo-nemotron', 'kilo-auto', 'orcarouter'],
-        'webai-kilo-beam': ['kilo-beam', 'kilo-nemotron', 'phindai'],
-        'webai-orcarouter': ['orcarouter', 'kilo-auto', 'chatgptoss-120b'],
-        'webai-teach-anything': ['teach-anything', 'quillbot-chat', 'deepai-chat'],
-        'webai-yqcloud': ['yqcloud', 'deepai-chat', 'orcarouter'],
+        'webai-opencode-deepseek': ['opencode-deepseek', 'kilo-nemotron', 'cohere-command-a'],
+        'webai-opencode-glm53': ['opencode-glm53', 'fx-glm52', 'deepai-chat'],
+        'webai-opencode-flint': ['opencode-flint', 'kilo-beam', 'llm7-direct'],
+        'webai-opencode-pickle': ['opencode-pickle', 'kilo-nemotron', 'cohere-command-a'],
+        'webai-fx-glm52': ['fx-glm52', 'opencode-glm53', 'cohere-command-a'],
+        'webai-isou-search': ['isou-search', 'deepai-online', 'yqcloud'],
+        'webai-powerbrain-gpt5': ['powerbrain-gpt5', 'aitopia-direct', 'deepai-chat'],
+        'webai-aitopia': ['aitopia-direct', 'powerbrain-gpt5', 'cohere-command-a'],
+        'webai-freeaionline-grok4': ['freeaionline-grok4', 'kilo-nemotron', 'deepai-chat'],
+        'webai-pollinations-cluster': ['pollinations-cluster', 'pollinations-text', 'kilo-nemotron'],
+        'webai-pollinations-text': ['pollinations-text', 'pollinations-cluster', 'deepai-chat'],
+        'webai-deepai-chat': ['deepai-chat', 'cohere-command-a', 'kilo-nemotron'],
+        'webai-deepai-online': ['deepai-online', 'isou-search', 'yqcloud'],
+        'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'deepai-chat'],
+        'webai-kilo-nemotron': ['kilo-nemotron', 'kilo-auto', 'cohere-command-a'],
+        'webai-kilo-beam': ['kilo-beam', 'llm7-direct', 'opencode-flint'],
+        'webai-llm7-codestral': ['llm7-direct', 'kilo-beam', 'cohere-command-a'],
+        'webai-yqcloud': ['yqcloud', 'deepai-online', 'cohere-command-a'],
       };
-      const providers = webAiProviderChains[model.id] || ['chatgptoss-120b'];
+      const providers = webAiProviderChains[model.id] || ['kilo-nemotron'];
       return [
         ...providers.map((prov, idx) => ({
           targetUrl: '/api/webai',
@@ -2895,7 +2899,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-ideogram',
       'nexray-sologo',
-      'webai-sd35-large',
+      'webai-qwen-image',
+      'webai-bfl-flux-schnell',
       'bintang-grok',
       'pollinations-flux',
       'zelai-zimage-turbo',
@@ -2909,8 +2914,8 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-flux-v1',
       'zelai-zimage-turbo',
-      'webai-zimage-turbo',
       'webai-bfl-flux-schnell',
+      'webai-evalstate-flux',
       'comiku-sdxl',
       'pollinations-flux',
       'bintang-zimage',
@@ -2924,7 +2929,7 @@ function orderImageEnginesForPrompt(
     return pick([
       'nexray-ideogram',
       'webai-qwen-image',
-      'webai-sd35-large',
+      'webai-bfl-flux-schnell',
       'bintang-grok',
       'pollinations-flux',
       'nexray-magicstudio',
@@ -2945,7 +2950,7 @@ function orderImageEnginesForPrompt(
   if (/\bflux\b/i.test(prompt)) {
     return pick([
       'webai-bfl-flux-schnell',
-      'webai-bfl-flux-dev',
+      'webai-evalstate-flux',
       'pollinations-flux',
       'nexray-flux-v1',
       'rin-flux',

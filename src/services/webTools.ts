@@ -286,9 +286,9 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     name: 'Multi-Karakter & Neural AI Voice (TTS)',
     shortName: 'Suara AI (TTS)',
     slashCommand: '/tts',
-    badge: 'OpenAI.fm Neural & Anime',
+    badge: 'Neural OpenAI · ElevenLabs · Anime',
     description:
-      'Ubah teks menjadi suara Neural OpenAI.fm (Coral, Nova, Onyx, Sage, Alloy) maupun karakter Anime ekspresif.',
+      'Ubah teks menjadi suara Neural AI (Coral, Nova, Onyx, Sage, Alloy, Rachel, Adam) maupun karakter Anime ekspresif.',
     placeholder: 'Ketik kalimat yang ingin diubah menjadi suara...',
     exampleInput: 'Halo semuanya! Perkenalkan saya NodataGPT karya Mr.NODATA.',
     requiresInput: true,
@@ -296,11 +296,13 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
       label: 'Karakter / Suara Neural',
       defaultValue: 'coral',
       options: [
-        { value: 'coral', label: 'OpenAI.fm Coral (Neural Ekspresif & Hangat)' },
-        { value: 'nova', label: 'OpenAI.fm Nova (Neural Cerah & Jernih)' },
-        { value: 'onyx', label: 'OpenAI.fm Onyx (Neural Bariton Sinematik)' },
-        { value: 'sage', label: 'OpenAI.fm Sage (Neural Tenang & Profesional)' },
-        { value: 'alloy', label: 'OpenAI.fm Alloy (Neural Netral Modern)' },
+        { value: 'coral', label: 'Neural Coral · OpenAI Audio (Ekspresif & Hangat)' },
+        { value: 'nova', label: 'Neural Nova · OpenAI Audio (Cerah & Jernih)' },
+        { value: 'onyx', label: 'Neural Onyx · OpenAI Audio (Bariton Sinematik)' },
+        { value: 'sage', label: 'Neural Sage · OpenAI Audio (Tenang & Profesional)' },
+        { value: 'alloy', label: 'Neural Alloy · OpenAI Audio (Netral Modern)' },
+        { value: 'rachel', label: 'ElevenLabs Rachel (Suara Natural Studio)' },
+        { value: 'adam', label: 'ElevenLabs Adam (Narator Pria Tegas)' },
         { value: 'nahida', label: 'Nahida (Anime Cerah & Ramah)' },
         { value: 'furina', label: 'Furina (Anime Ekspresif)' },
         { value: 'raiden', label: 'Raiden Shogun (Anime Tegas)' },
@@ -2869,7 +2871,7 @@ export async function executeWebToolCommand({
       );
     }
     const voice = (subOption || 'coral').toLowerCase();
-    const openAiVoices = new Set([
+    const neuralVoices = new Set([
       'alloy',
       'ash',
       'ballad',
@@ -2881,12 +2883,17 @@ export async function executeWebToolCommand({
       'sage',
       'shimmer',
       'verse',
+      'rachel',
+      'bella',
+      'adam',
+      'josh',
+      'domi',
     ]);
 
-    if (openAiVoices.has(voice)) {
+    if (neuralVoices.has(voice)) {
       onStatus?.({
         toolName: 'AI Voice TTS',
-        mirrorName: `OpenAI.fm Neural (${voice})`,
+        mirrorName: `Neural Voice AI (${voice})`,
         attempt: 1,
         isFallback: false,
       });
@@ -2895,7 +2902,7 @@ export async function executeWebToolCommand({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            provider: 'openai-fm',
+            provider: 'neural-voice',
             voice,
             text: arg.slice(0, 1200),
           }),
@@ -2909,12 +2916,12 @@ export async function executeWebToolCommand({
           if (probeJson?.ok && probeJson.audioUrl) {
             const downloadUrl = `${probeJson.audioUrl}&download=1`;
             return {
-              content: `### 🎙️ OpenAI.fm Neural Voice (${voice.toUpperCase()})\n\n> "${arg}"`,
-              answeredById: 'webai-openai-fm',
-              answeredByName: `OpenAI.fm GPT-4o-Mini-TTS (${voice})`,
+              content: `### 🎙️ Neural AI Voice (${voice.toUpperCase()})\n\n> "${arg}"`,
+              answeredById: 'webai-neural-voice',
+              answeredByName: `Neural Speech Engine (${voice})`,
               usedFallback: false,
               audioUrl: probeJson.audioUrl,
-              audioTitle: `OpenAI.fm Neural · ${voice.toUpperCase()}`,
+              audioTitle: `Neural AI Voice · ${voice.toUpperCase()}`,
               downloadItems: [
                 {
                   label: `Unduh Suara Neural MP3 (${voice})`,
@@ -2931,7 +2938,7 @@ export async function executeWebToolCommand({
       }
     }
 
-    if (voice !== 'google' && !openAiVoices.has(voice)) {
+    if (voice !== 'google' && !neuralVoices.has(voice)) {
       onStatus?.({
         toolName: 'AI Voice TTS',
         mirrorName: `Snow Voice (${voice})`,

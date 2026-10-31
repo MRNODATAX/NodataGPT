@@ -7,10 +7,13 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Lock,
+  MessageCircle,
   Network,
   Play,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Trash2,
   X,
@@ -29,12 +32,23 @@ import {
   resolveSmartBaseUrlForKey,
 } from '../services/routerGateway';
 
+import {
+  FREE_TRIAL_LIMIT,
+  WHATSAPP_DISPLAY_NUMBER,
+  buildWhatsAppRequestKeyUrl,
+  mintVipInviteCode,
+  relockCurrentDevice,
+  type AccessGateState,
+} from '../services/accessGate';
+
 interface SettingsModalProps {
   isOpen: boolean;
   settings: AppSettings;
+  gateState: AccessGateState;
   conversationCount: number;
   onClose: () => void;
   onUpdateSettings: (next: AppSettings) => void;
+  onOpenAccessGate: () => void;
   onReplaySplash: () => void;
   onClearAllChats: () => void;
 }
@@ -42,13 +56,20 @@ interface SettingsModalProps {
 export function SettingsModal({
   isOpen,
   settings,
+  gateState,
   conversationCount,
   onClose,
   onUpdateSettings,
+  onOpenAccessGate,
   onReplaySplash,
   onClearAllChats,
 }: SettingsModalProps) {
   const [confirmClear, setConfirmClear] = useState(false);
+  const [inviteDurationHours, setInviteDurationHours] = useState(168);
+  const [mintingInvite, setMintingInvite] = useState(false);
+  const [mintedCode, setMintedCode] = useState<string | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [showRouterKey, setShowRouterKey] = useState(false);
   const [routerTesting, setRouterTesting] = useState(false);
   const [routerModelSearch, setRouterModelSearch] = useState('');
@@ -336,6 +357,173 @@ export function SettingsModal({
         </div>
 
         <div className="pb-safe min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
+          {/* VIP Access Key Status & Signed Invite Code Generator */}
+          <div className="rounded-2xl border border-[#22D3EE]/30 bg-gradient-to-br from-[#081526]/95 via-[#070E1B]/95 to-[#150E09]/90 p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck
+                  className={`h-4 w-4 shrink-0 ${
+                    gateState.unlocked ? 'text-emerald-400' : 'text-[#22D3EE]'
+                  }`}
+                />
+                <span className="text-xs font-bold tracking-wide text-white uppercase">
+                  Status Keamanan &amp; Kunci Akses
+                </span>
+              </div>
+              <span
+                className={`rounded-full border px-2 py-0.5 font-mono-code text-[10px] font-semibold ${
+                  gateState.unlocked
+                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300'
+                    : 'border-[#FB923C]/40 bg-[#FB923C]/14 text-[#FED7AA]'
+                }`}
+              >
+                {gateState.unlocked
+                  ? 'VIP AKTIF TANPA BATAS'
+                  : `UJI COBA ${gateState.used}/${FREE_TRIAL_LIMIT}`}
+              </span>
+            </div>
+
+            {gateState.unlocked ? (
+              <div className="mt-2.5 space-y-2.5">
+                <p className="text-xs leading-relaxed text-[#CBD5E1]">
+                  Perangkat ini telah terverifikasi dengan kunci akses VIP NodataGPT. Anda juga dapat membuat kode undangan berbatas waktu untuk dibagikan.
+                </p>
+
+                <div className="rounded-xl border border-white/10 bg-black/35 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-[#67E8F9]">
+                      Generator Kode Akses Tamu (Signed Token)
+                    </span>
+                    <select
+                      value={inviteDurationHours}
+                      onChange={(e) => {
+                        setInviteDurationHours(Number(e.target.value));
+                        setMintedCode(null);
+                      }}
+                      aria-label="Durasi masa berlaku kode undangan"
+                      className="h-7 rounded-lg border border-white/15 bg-[#0B1222] px-2 text-[11px] text-white focus:border-[#22D3EE] focus:outline-none"
+                    >
+                      <option value={24}>Berlaku 24 Jam</option>
+                      <option value={168}>Berlaku 7 Hari</option>
+                      <option value={720}>Berlaku 30 Hari</option>
+                      <option value={8760}>Berlaku 1 Tahun</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={mintingInvite}
+                      onClick={async () => {
+                        setMintingInvite(true);
+                        setInviteError(null);
+                        const res = await mintVipInviteCode(
+                          inviteDurationHours,
+                          `VIP-${inviteDurationHours}h`
+                        );
+                        setMintingInvite(false);
+                        if (res.ok && res.code) {
+                          setMintedCode(res.code);
+                        } else {
+                          setInviteError(res.error || 'Gagal membuat kode.');
+                        }
+                      }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0E7490] px-3 text-[11px] font-semibold text-white transition-colors hover:bg-[#0891B2] disabled:opacity-60 cursor-pointer"
+                    >
+                      {mintingInvite ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <KeyRound className="h-3.5 w-3.5" />
+                      )}
+                      <span>Buat Kode Undangan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await relockCurrentDevice();
+                        onClose();
+                      }}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 text-[11px] font-medium text-[#94A3B8] transition-colors hover:border-[#FB923C]/40 hover:text-[#FED7AA] cursor-pointer"
+                    >
+                      <Lock className="h-3 w-3" />
+                      <span>Kunci Ulang Perangkat</span>
+                    </button>
+                  </div>
+
+                  {inviteError && (
+                    <p className="mt-1.5 text-[11px] text-rose-300">{inviteError}</p>
+                  )}
+
+                  {mintedCode && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5">
+                      <code className="min-w-0 flex-1 truncate font-mono-code text-[11px] text-emerald-200">
+                        {mintedCode}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(mintedCode);
+                            setCopiedInvite(true);
+                            window.setTimeout(() => setCopiedInvite(false), 1800);
+                          } catch {
+                            // Ignore clipboard error
+                          }
+                        }}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-400/20 px-2 py-1 text-[10.5px] font-semibold text-emerald-200 hover:bg-emerald-400/30 cursor-pointer"
+                      >
+                        {copiedInvite ? (
+                          <>
+                            <Check className="h-3 w-3" />
+                            <span>Tersalin</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3" />
+                            <span>Salin</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2.5 space-y-2.5">
+                <p className="text-xs leading-relaxed text-[#CBD5E1]">
+                  Sisa uji coba gratis Anda:{' '}
+                  <strong className="text-white">
+                    {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari {FREE_TRIAL_LIMIT}x
+                  </strong>
+                  . Masukkan sandi akses VIP atau hubungi WhatsApp Admin ({WHATSAPP_DISPLAY_NUMBER}).
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenAccessGate();
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#0E7490] px-3 text-xs font-semibold text-white hover:bg-[#0891B2] cursor-pointer"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    <span>Masukkan Sandi VIP</span>
+                  </button>
+                  <a
+                    href={buildWhatsAppRequestKeyUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-400/35 bg-emerald-500/12 px-3 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>Minta Kunci (WA)</span>
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Live Starfield & Shooting Stars */}
           <div className="flex items-start justify-between gap-4">
             <div>

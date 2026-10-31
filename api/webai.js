@@ -1,5 +1,6 @@
 import dns from 'node:dns';
 import crypto from 'node:crypto';
+import { enforceNodeApiSecurity } from '../lib/securityGate.js';
 
 try {
   dns.setDefaultResultOrder('ipv4first');
@@ -1262,19 +1263,49 @@ async function dispatchWebAiProvider({
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
   const startedAt = Date.now();
   const query = req.query || {};
 
-  // 1. Catalog listing
-  if (req.method === 'GET' && query.catalog === '1') {
+  const isAudioStream =
+    req.method === 'GET' &&
+    ['openai-fm', 'neural-voice'].includes(String(query.provider || '').toLowerCase()) &&
+    query.stream === '1';
+
+  let parsedBody = {};
+  if (req.method === 'POST') {
+    if (typeof req.body === 'string') {
+      if (Buffer.byteLength(req.body, 'utf8') > 98304) {
+        return res.status(413).json({
+          ok: false,
+          status: false,
+          error: 'Ukuran teks melebihi batas keamanan server.',
+        });
+      }
+      try {
+        parsedBody = JSON.parse(req.body);
+      } catch {
+        parsedBody = {};
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      parsedBody = req.body;
+    }
+  }
+
+  const isProbe = query.probe === '1' || parsedBody.probe === true;
+  const isCatalog = req.method === 'GET' && query.catalog === '1';
+
+  const sec = enforceNodeApiSecurity(req, res, {
+    routeName: isAudioStream ? 'webai-stream' : 'webai',
+    mode: isAudioStream ? 'media' : 'api',
+    isDiagnostic: isProbe || isCatalog,
+    maxBodyBytes: 98304,
+    guestRatePerMin: 16,
+    vipRatePerMin: 48,
+  });
+  if (!sec.allowed) return;
+
+  // 1. Catalog listing (VIP / Admin Diag only)
+  if (isCatalog) {
     return res.status(200).json({
       ok: true,
       status: true,
@@ -1284,18 +1315,16 @@ export default async function handler(req, res) {
   }
 
   // 2. Direct binary audio stream for Neural TTS (<audio> & 1-click download)
-  if (
-    req.method === 'GET' &&
-    ['openai-fm', 'neural-voice'].includes(String(query.provider || '').toLowerCase()) &&
-    query.stream === '1'
-  ) {
+  if (isAudioStream) {
     try {
-      const text = String(query.text || query.q || 'Halo dari NodataGPT karya Mr.NODATA.').trim();
+      const text = String(query.text || query.q || 'Halo dari NodataGPT karya Mr.NODATA.')
+        .trim()
+        .slice(0, 2500);
       const voice = String(query.voice || 'coral').trim();
       const audio = await fetchNeuralVoiceAudio({ text, voice });
       res.setHeader('Content-Type', audio.contentType || 'audio/mpeg');
       res.setHeader('Content-Length', String(audio.buffer.byteLength));
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Cache-Control', 'private, max-age=1800');
       if (query.download === '1') {
         res.setHeader(
           'Content-Disposition',
@@ -1314,21 +1343,17 @@ export default async function handler(req, res) {
     }
   }
 
-  // 3. Parse request parameters (GET probe or POST live)
-  let body = {};
-  if (req.method === 'POST') {
-    if (typeof req.body === 'string') {
-      try {
-        body = JSON.parse(req.body);
-      } catch {
-        body = {};
-      }
-    } else if (req.body && typeof req.body === 'object') {
-      body = req.body;
-    }
+  // Reject unauthenticated GET scraping attempts (only POST or VIP diagnostic probe allowed)
+  if (req.method !== 'POST' && !isProbe) {
+    return res.status(405).json({
+      ok: false,
+      status: false,
+      error: 'Metode GET publik dinonaktifkan oleh sistem anti-scraping NodataGPT.',
+    });
   }
 
-  const isProbe = query.probe === '1' || body.probe === true;
+  // 3. Parse request parameters (VIP probe or POST live)
+  const body = parsedBody;
   const provider = String(body.provider || query.provider || '').trim();
   const model = String(body.model || query.model || '').trim();
   const mode = String(body.mode || query.mode || '').trim();
@@ -1363,6 +1388,14 @@ export default async function handler(req, res) {
       ok: false,
       status: false,
       error: 'Parameter "text" atau "prompt" wajib diisi.',
+    });
+  }
+
+  if (text.length > 24000) {
+    return res.status(413).json({
+      ok: false,
+      status: false,
+      error: 'Panjang prompt melebihi batas maksimum 24.000 karakter.',
     });
   }
 

@@ -1,4 +1,5 @@
 import dns from 'node:dns';
+import { enforceFetchMediaSecurity } from '../lib/securityGate.js';
 
 try {
   dns.setDefaultResultOrder('ipv4first');
@@ -124,18 +125,24 @@ function sanitizeFilename(rawName, contentType = '') {
 
 export default {
   async fetch(request) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204 });
+    const preUrl = new URL(request.url);
+    const preIsProbe = preUrl.searchParams.get('probe') === '1';
+    const sec = enforceFetchMediaSecurity(request, { isDiagnostic: preIsProbe });
+    if (!sec.allowed) {
+      return sec.response;
     }
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return Response.json({ ok: false, error: 'Metode tidak didukung.' }, { status: 405 });
+      return Response.json(
+        { ok: false, error: 'Metode tidak didukung.' },
+        { status: 405, headers: sec.extraHeaders }
+      );
     }
 
-    const reqUrl = new URL(request.url);
+    const reqUrl = preUrl;
     const rawTarget = (reqUrl.searchParams.get('url') || '').trim();
     const rawFilename = (reqUrl.searchParams.get('filename') || 'nodatagpt-media').trim();
-    const isProbe = reqUrl.searchParams.get('probe') === '1';
+    const isProbe = preIsProbe;
     const isInline = reqUrl.searchParams.get('inline') === '1';
 
     if (!rawTarget) {
@@ -298,7 +305,7 @@ export default {
       const asciiFallback = finalFilename.replace(/[^\x20-\x7E]/g, '_');
       const utf8Encoded = encodeURIComponent(finalFilename);
 
-      const responseHeaders = new Headers();
+      const responseHeaders = new Headers(sec.extraHeaders || {});
       responseHeaders.set('Content-Type', contentType);
       responseHeaders.set(
         'Content-Disposition',
@@ -309,7 +316,7 @@ export default {
       responseHeaders.set('X-Content-Type-Options', 'nosniff');
       responseHeaders.set(
         'Cache-Control',
-        isInline ? 'public, max-age=86400, s-maxage=86400' : 'private, max-age=300'
+        isInline ? 'private, max-age=3600' : 'private, max-age=300'
       );
 
       const upstreamLen = upstreamRes.headers.get('content-length');

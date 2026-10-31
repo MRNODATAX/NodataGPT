@@ -1,4 +1,5 @@
 import dns from 'node:dns';
+import { enforceNodeApiSecurity } from '../lib/securityGate.js';
 
 try {
   dns.setDefaultResultOrder('ipv4first');
@@ -239,22 +240,74 @@ async function fetchWithRetry(url, options, timeoutMs) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  const isProbeGet = req.method === 'GET' && String(req.query?.probe || '') === '1';
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  let parsedBodyPreview = req.body;
+  if (!isProbeGet && typeof parsedBodyPreview === 'string') {
+    if (Buffer.byteLength(parsedBodyPreview, 'utf8') > 6 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'Payload melebihi batas keamanan 6 MB.' });
+    }
+    try {
+      parsedBodyPreview = JSON.parse(parsedBodyPreview);
+    } catch {
+      parsedBodyPreview = null;
+    }
   }
 
-  const isProbeGet = req.method === 'GET' && String(req.query?.probe || '') === '1';
+  const isUploadAction = Boolean(parsedBodyPreview?.action === 'uploadImage');
+  const isProbePayload = isProbeGet || Boolean(parsedBodyPreview?.probe);
+  const rawAuthHeader = String(
+    parsedBodyPreview?.headers?.Authorization ||
+      parsedBodyPreview?.headers?.authorization ||
+      parsedBodyPreview?.headers?.['x-api-key'] ||
+      parsedBodyPreview?.headers?.['X-Api-Key'] ||
+      ''
+  ).trim();
+  const rawTargetPreview = String(parsedBodyPreview?.targetUrl || '').trim();
+  const isModelsDiscovery =
+    Boolean(parsedBodyPreview?.routerRelay) && /\/models(?:\?|$)/i.test(rawTargetPreview);
+  const hasPersonalByokRelay =
+    Boolean(parsedBodyPreview?.routerRelay) &&
+    (rawAuthHeader.length >= 16 || isModelsDiscovery);
+
+  const sec = enforceNodeApiSecurity(req, res, {
+    routeName: isUploadAction ? 'proxy-upload' : 'proxy',
+    mode: isUploadAction ? 'media' : 'api',
+    isDiagnostic: isProbePayload,
+    allowByokBypass: hasPersonalByokRelay,
+    maxBodyBytes: isUploadAction ? 6 * 1024 * 1024 : 131072,
+    guestRatePerMin: isUploadAction ? 6 : 20,
+    vipRatePerMin: isUploadAction ? 15 : 60,
+  });
+  if (!sec.allowed) return;
+
+  // Extra check for uploadImage: require proof header AND block if 5-trial quota is already exhausted
+  if (isUploadAction && !sec.isAdminDiag) {
+    const clientProof = String(req.headers?.['x-nodata-proof'] || '').trim();
+    if (!clientProof) {
+      return res.status(403).json({
+        ok: false,
+        code: 'PROOF_REQUIRED',
+        error: 'Token keamanan diperlukan untuk mengunggah gambar.',
+      });
+    }
+    if (sec.session?.tier === 'guest' && Number(sec.session?.used || 0) >= 5) {
+      return res.status(402).json({
+        ok: false,
+        code: 'TRIAL_EXHAUSTED',
+        used: 5,
+        limit: 5,
+        remaining: 0,
+        error: 'Masa uji coba gratis 5x telah habis. Masukkan sandi akses untuk melanjutkan.',
+      });
+    }
+  }
 
   if (req.method !== 'POST' && !isProbeGet) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
-  let payload = req.body;
+  let payload = isProbeGet ? null : parsedBodyPreview;
   if (isProbeGet) {
     payload = {
       targetUrl: typeof req.query?.targetUrl === 'string' ? req.query.targetUrl : '',
@@ -267,12 +320,8 @@ export default async function handler(req, res) {
       timeoutMs: Number(req.query?.timeoutMs) || 28000,
       probe: true,
     };
-  } else if (typeof payload === 'string') {
-    try {
-      payload = JSON.parse(payload);
-    } catch {
-      return res.status(400).json({ ok: false, error: 'Payload JSON tidak valid.' });
-    }
+  } else if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ ok: false, error: 'Payload JSON tidak valid.' });
   }
 
   if (payload?.action === 'uploadImage') {
@@ -473,7 +522,38 @@ export default async function handler(req, res) {
   const isApiNinjas = parsedUrl.hostname === 'api.api-ninjas.com';
   const isApiNinjasRandomImg =
     isApiNinjas && parsedUrl.pathname === '/v1/randomimage';
+
+  // Confused-deputy path pinning: API Ninjas is strictly restricted to /v1/randomimage
+  if (isApiNinjas && !isApiNinjasRandomImg) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Endpoint API Ninjas selain /v1/randomimage tidak diizinkan.',
+    });
+  }
+
+  // Sanitize extraHeaders to prevent hop-by-hop or server-credential override
+  const sanitizedExtraHeaders = {};
+  const blockedHeaderNames = new Set([
+    'host',
+    'cookie',
+    'set-cookie',
+    'x-forwarded-for',
+    'x-real-ip',
+    'x-vercel-forwarded-for',
+    'connection',
+    'transfer-encoding',
+  ]);
+  for (const [hk, hv] of Object.entries(extraHeaders)) {
+    const lk = String(hk || '').trim().toLowerCase();
+    if (!lk || blockedHeaderNames.has(lk)) continue;
+    if ((lk === 'x-api-key' || lk === 'authorization') && !routerRelay) continue;
+    if (typeof hv === 'string' && hv.length <= 4096) {
+      sanitizedExtraHeaders[hk] = hv;
+    }
+  }
+
   const envNinjasKey = (process.env.API_NINJAS_KEY || '').trim();
+  const envNinjasKey2 = (process.env.API_NINJAS_KEY_2 || '').trim();
 
   const forwardHeaders = {
     Accept: isApiNinjasRandomImg
@@ -482,15 +562,15 @@ export default async function handler(req, res) {
     'User-Agent': isNominatim
       ? 'NodataGPT-HyperLocalWeather/3.1 (https://www.nodatagpt.web.id)'
       : req.headers?.['user-agent'] || DEFAULT_UA,
+    ...sanitizedExtraHeaders,
     ...(isPximg ? { Referer: 'https://www.pixiv.net/' } : {}),
-    ...(isApiNinjas && envNinjasKey ? { 'X-Api-Key': envNinjasKey } : {}),
-    ...extraHeaders,
+    ...(isApiNinjasRandomImg && envNinjasKey ? { 'X-Api-Key': envNinjasKey } : {}),
   };
 
   const startedAt = Date.now();
 
   try {
-    const upstream = await fetchWithRetry(
+    let upstream = await fetchWithRetry(
       parsedUrl.toString(),
       {
         method,
@@ -499,6 +579,27 @@ export default async function handler(req, res) {
       },
       timeoutMs
     );
+
+    // Automatic server-side failover to API_NINJAS_KEY_2 if primary key hits quota/401/403/429
+    if (
+      isApiNinjasRandomImg &&
+      envNinjasKey2 &&
+      envNinjasKey2 !== envNinjasKey &&
+      (upstream.status === 401 || upstream.status === 403 || upstream.status === 429)
+    ) {
+      upstream = await fetchWithRetry(
+        parsedUrl.toString(),
+        {
+          method,
+          headers: {
+            ...forwardHeaders,
+            'X-Api-Key': envNinjasKey2,
+          },
+          body: method === 'POST' ? requestBody : undefined,
+        },
+        Math.max(6000, timeoutMs - (Date.now() - startedAt))
+      );
+    }
 
     const latencyMs = Date.now() - startedAt;
     const contentType = (upstream.headers.get('content-type') || '').toLowerCase();

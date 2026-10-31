@@ -9,6 +9,7 @@ import {
   Shuffle,
   Sparkles,
   X,
+  Zap,
 } from 'lucide-react';
 import type {
   AIModelDefinition,
@@ -33,6 +34,29 @@ import {
   ROUTER_IMAGE_MODEL_ID,
   isRouterConfiguredAndReady,
 } from '../services/routerGateway';
+import { getModelLatencyMs } from '../services/accessGate';
+
+const VERIFIED_BASELINE_MS: Record<string, number> = {
+  auto: 950,
+  'webai-deepai-online': 670,
+  'webai-cohere-command-a': 810,
+  'webai-kilo-beam': 1050,
+  'webai-llm7-codestral': 1220,
+  'webai-kilo-nemotron': 1640,
+  'webai-aitopia-gpt': 1750,
+  'webai-yqcloud-search': 2160,
+  'gemini-web-scraper': 1850,
+  'chatgpt-web-scraper': 2100,
+  'qwen-web-scraper': 2300,
+  'bfl-flux-schnell-direct': 3610,
+  'evalstate-flux-direct': 3640,
+};
+
+function formatSpeedBadge(modelId: string): string | null {
+  const ms = getModelLatencyMs(modelId) ?? VERIFIED_BASELINE_MS[modelId] ?? null;
+  if (!ms) return null;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
 interface ModelPickerModalProps {
   isOpen: boolean;
@@ -475,6 +499,12 @@ export function ModelPickerModal({
                         <span className="rounded bg-white/8 px-1.5 py-0.5 font-mono-code text-[10px] text-[#CBD5E1]">
                           {model.provider}
                         </span>
+                        {formatSpeedBadge(model.id) && (
+                          <span className="inline-flex items-center gap-0.5 rounded border border-emerald-400/30 bg-emerald-500/12 px-1.5 py-0.5 font-mono-code text-[10px] text-emerald-300">
+                            <Zap className="h-2.5 w-2.5" />
+                            {formatSpeedBadge(model.id)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs leading-relaxed text-[#94A3B8]">
                         {model.description}
@@ -565,6 +595,12 @@ export function ModelPickerModal({
                         <span className="rounded border border-[#FB923C]/30 bg-[#FB923C]/10 px-1.5 py-0.5 font-mono-code text-[10px] text-[#FDBA74]">
                           {imgModel.badge}
                         </span>
+                        {formatSpeedBadge(imgModel.id) && (
+                          <span className="inline-flex items-center gap-0.5 rounded border border-emerald-400/30 bg-emerald-500/12 px-1.5 py-0.5 font-mono-code text-[10px] text-emerald-300">
+                            <Zap className="h-2.5 w-2.5" />
+                            {formatSpeedBadge(imgModel.id)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs leading-relaxed text-[#94A3B8]">
                         {imgModel.description}

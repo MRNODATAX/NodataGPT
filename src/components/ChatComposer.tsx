@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
+  Command,
   FileText,
   ImageIcon,
   Mic,
@@ -19,7 +20,10 @@ import {
   IMAGE_ENGINES,
   type ImageModelOption,
 } from '../services/modelCatalog';
-import { RANDOM_IMAGE_COMMAND_MODES } from '../services/webTools';
+import {
+  RANDOM_IMAGE_COMMAND_MODES,
+  WEB_TOOLS_CATALOG,
+} from '../services/webTools';
 
 interface ChatComposerProps {
   value: string;
@@ -76,6 +80,69 @@ export function ChatComposer({
   const [attachment, setAttachment] = useState<{ name: string; content: string } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [dismissedSlashForValue, setDismissedSlashForValue] = useState('');
+
+  // Slash-command autocomplete items (/gambar + all 34 Web Tools)
+  const allSlashSuggestions = useMemo(
+    () => [
+      {
+        cmd: '/gambar',
+        title: 'Generator Gambar AI',
+        badge: 'Multi-Engine',
+        hint: '/gambar naga kristal neon cyberpunk 4k',
+      },
+      ...WEB_TOOLS_CATALOG.map((tool) => ({
+        cmd: tool.slashCommand,
+        title: tool.shortName || tool.name,
+        badge: tool.categoryLabel,
+        hint: tool.requiresInput
+          ? `${tool.slashCommand} ${tool.exampleInput}`.slice(0, 56)
+          : tool.slashCommand,
+        requiresInput: tool.requiresInput,
+      })),
+    ],
+    []
+  );
+
+  const slashMatch = value.match(/^\s*\/([a-z0-9_-]{0,18})$/i);
+  const isCompletedSpecialWithoutSpace =
+    /^\s*\/(?:randomimg|randomimage|pinterest)\s*$/i.test(value);
+
+  const filteredSlashItems = useMemo(() => {
+    if (!slashMatch || isCompletedSpecialWithoutSpace) return [];
+    if (dismissedSlashForValue && dismissedSlashForValue === value) return [];
+    const partial = (slashMatch[1] || '').toLowerCase();
+    const matched = allSlashSuggestions.filter((item) => {
+      if (!partial) return true;
+      const bareCmd = item.cmd.slice(1).toLowerCase();
+      return (
+        bareCmd.startsWith(partial) ||
+        bareCmd.includes(partial) ||
+        item.title.toLowerCase().includes(partial)
+      );
+    });
+    return matched.slice(0, 7);
+  }, [
+    slashMatch,
+    isCompletedSpecialWithoutSpace,
+    dismissedSlashForValue,
+    value,
+    allSlashSuggestions,
+  ]);
+
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [value]);
+
+  const applySlashSelection = (item: {
+    cmd: string;
+    requiresInput?: boolean;
+  }) => {
+    const suffix = item.requiresInput === false ? '' : ' ';
+    onChange(`${item.cmd}${suffix}`);
+    textareaRef.current?.focus();
+  };
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -161,6 +228,41 @@ export function ChatComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (filteredSlashItems.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex((prev) => (prev + 1) % filteredSlashItems.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex(
+          (prev) => (prev - 1 + filteredSlashItems.length) % filteredSlashItems.length
+        );
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const picked = filteredSlashItems[slashIndex] || filteredSlashItems[0];
+        if (picked) applySlashSelection(picked);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDismissedSlashForValue(value);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const picked = filteredSlashItems[slashIndex] || filteredSlashItems[0];
+        // Complete command if user hasn't typed exact full zero-arg command yet
+        if (picked && value.trim().toLowerCase() !== picked.cmd.toLowerCase()) {
+          e.preventDefault();
+          applySlashSelection(picked);
+          return;
+        }
+      }
+    }
+
     const isMobileViewport = typeof window !== 'undefined' && window.innerWidth < 640;
     if (e.key === 'Enter' && !e.shiftKey && enterToSend && !isMobileViewport) {
       e.preventDefault();
@@ -170,10 +272,12 @@ export function ChatComposer({
 
   const canSend = Boolean(value.trim() || attachment);
 
-  const isRandomImageCmd = /^\s*\/(?:random|randomimg|randomimage|wallpaper|wall)\b/i.test(
-    value
-  );
-  const isPinterestCmd = /^\s*\/(?:pinterest|pin)\b/i.test(value);
+  const isRandomImageCmd =
+    filteredSlashItems.length === 0 &&
+    /^\s*\/(?:random|randomimg|randomimage|wallpaper|wall)\b/i.test(value);
+  const isPinterestCmd =
+    filteredSlashItems.length === 0 &&
+    /^\s*\/(?:pinterest|pin)\b/i.test(value);
 
   const applyQuickCountToInput = (n: number) => {
     const trimmed = value.trim();
@@ -196,6 +300,56 @@ export function ChatComposer({
   return (
     <div className="pb-safe w-full shrink-0 bg-gradient-to-t from-[#03050B]/95 via-[#03050B]/70 to-transparent px-3 pt-1.5 sm:px-6 sm:pt-2">
       <div className="mx-auto w-full max-w-3xl">
+        {/* Instant Slash-Command Autocomplete Menu */}
+        {filteredSlashItems.length > 0 && (
+          <div
+            role="listbox"
+            aria-label="Saran perintah cepat slash command"
+            className="mb-2 max-h-[34dvh] overflow-y-auto rounded-2xl border border-[#22D3EE]/35 bg-[#060D1A]/96 p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.75)] backdrop-blur-xl"
+          >
+            <div className="flex items-center justify-between px-2.5 py-1 text-[10.5px] text-[#94A3B8]">
+              <span className="inline-flex items-center gap-1.5 font-semibold text-[#67E8F9]">
+                <Command className="h-3 w-3" />
+                <span>Pintasan Command Cepat</span>
+              </span>
+              <span className="hidden font-mono-code text-[10px] sm:inline">
+                ↑↓ Pilih · Tab/Enter Isi
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {filteredSlashItems.map((item, idx) => {
+                const active = idx === slashIndex;
+                return (
+                  <button
+                    key={item.cmd}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => applySlashSelection(item)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-colors cursor-pointer ${
+                      active
+                        ? 'border border-[#22D3EE]/40 bg-[#22D3EE]/15 text-white'
+                        : 'border border-transparent text-[#CBD5E1] hover:bg-white/[0.05] hover:text-white'
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <code className="shrink-0 rounded-md border border-[#22D3EE]/30 bg-black/60 px-1.5 py-0.5 font-mono-code text-xs font-semibold text-[#67E8F9]">
+                        {item.cmd}
+                      </code>
+                      <span className="truncate text-xs font-medium text-[#F1F5F9]">
+                        {item.title}
+                      </span>
+                    </div>
+                    <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono-code text-[10px] text-[#94A3B8]">
+                      {item.badge}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {(isRandomImageCmd || isPinterestCmd) && (
           <div className="mb-2 max-h-[38dvh] overflow-y-auto rounded-2xl border border-[#22D3EE]/30 bg-[#07111E]/95 px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.6)] backdrop-blur-md">
             <div className="flex flex-wrap items-center justify-between gap-1.5">

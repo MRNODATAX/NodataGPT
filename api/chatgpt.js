@@ -1,5 +1,6 @@
 import dns from 'node:dns';
 import crypto from 'node:crypto';
+import { enforceNodeApiSecurity } from '../lib/securityGate.js';
 
 // Force IPv4-first DNS resolution on Vercel Node 24 to prevent IPv6 connect blackholes
 dns.setDefaultResultOrder('ipv4first');
@@ -389,22 +390,24 @@ async function tryServerOpenAiKey(cleanText, system, startedAt) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
   const startedAt = Date.now();
   const isProbe = req.query?.probe === '1';
+
+  const sec = enforceNodeApiSecurity(req, res, {
+    routeName: 'chatgpt',
+    mode: 'api',
+    isDiagnostic: isProbe,
+    maxBodyBytes: 98304,
+    guestRatePerMin: 12,
+    vipRatePerMin: 40,
+  });
+  if (!sec.allowed) return;
 
   let text = '';
   let system = '';
   let modelSlug = 'auto';
 
-  if (req.method === 'GET') {
+  if (req.method === 'GET' && isProbe) {
     text =
       typeof req.query?.text === 'string'
         ? req.query.text
@@ -414,8 +417,16 @@ export default async function handler(req, res) {
       modelSlug = req.query.model.trim();
     }
   } else if (req.method === 'POST') {
-    const payload =
-      typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+    let payload = {};
+    if (typeof req.body === 'string') {
+      try {
+        payload = JSON.parse(req.body || '{}');
+      } catch {
+        return res.status(400).json({ status: false, error: 'Payload JSON tidak valid.' });
+      }
+    } else if (req.body && typeof req.body === 'object') {
+      payload = req.body;
+    }
     text = payload.text || payload.prompt || payload.q || '';
     system = payload.system || '';
     if (typeof payload.model === 'string' && payload.model.trim()) {
@@ -430,6 +441,12 @@ export default async function handler(req, res) {
     return res.status(400).json({
       status: false,
       error: 'Parameter text atau prompt wajib diisi.',
+    });
+  }
+  if (cleanText.length > 24000) {
+    return res.status(413).json({
+      status: false,
+      error: 'Panjang prompt melebihi batas keamanan 24.000 karakter.',
     });
   }
 

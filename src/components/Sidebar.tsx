@@ -70,7 +70,74 @@ export function Sidebar({
     );
   }, [conversations, searchQuery]);
 
+  const pinnedConversations = useMemo(
+    () => filteredConversations.filter((c) => Boolean(c.pinned)),
+    [filteredConversations]
+  );
+
+  const recentConversations = useMemo(
+    () => filteredConversations.filter((c) => !c.pinned),
+    [filteredConversations]
+  );
+
   const showExpanded = mobileOpen || !collapsed;
+
+  const renderChatRow = (chat: Conversation) => {
+    const isActive = chat.id === activeChatId;
+    return (
+      <li key={chat.id}>
+        <div
+          className={`group flex min-h-[42px] items-center justify-between gap-1 rounded-xl px-2.5 py-1.5 text-sm transition-colors ${
+            isActive
+              ? 'border border-[#22D3EE]/30 bg-[#22D3EE]/12 text-white'
+              : 'text-[#CBD5E1] hover:bg-white/[0.05] hover:text-white'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onSelectChat(chat.id);
+              onCloseMobile();
+            }}
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left cursor-pointer"
+          >
+            {chat.pinned ? (
+              <Pin className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+            ) : (
+              <MessageSquare
+                className={`h-4 w-4 shrink-0 ${
+                  isActive ? 'text-[#22D3EE]' : 'text-[#94A3B8]'
+                }`}
+              />
+            )}
+            <span className="truncate">{chat.title}</span>
+          </button>
+
+          <div className="flex shrink-0 items-center gap-0.5 opacity-100 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => onTogglePinChat(chat.id)}
+              aria-label={chat.pinned ? 'Lepas sematan' : 'Sematkan chat'}
+              title={chat.pinned ? 'Lepas sematan' : 'Sematkan di atas'}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer ${
+                chat.pinned ? 'text-[#FB923C]' : 'text-[#94A3B8]'
+              }`}
+            >
+              <Pin className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteChat(chat.id)}
+              aria-label={`Hapus ${chat.title}`}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#94A3B8] hover:bg-white/10 hover:text-[#FB923C] cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </li>
+    );
+  };
 
   return (
     <>
@@ -171,72 +238,44 @@ export function Sidebar({
         <div className="flex-1 overflow-y-auto px-2.5 py-1.5">
           {showExpanded ? (
             <>
-              <div className="mb-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                Riwayat Percakapan
-              </div>
-
               {filteredConversations.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-5 text-center text-xs text-[#94A3B8]">
-                  {searchQuery
-                    ? 'Tidak ada percakapan yang cocok.'
-                    : 'Belum ada riwayat percakapan.'}
-                </div>
+                <>
+                  <div className="mb-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                    Riwayat Percakapan
+                  </div>
+                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-5 text-center text-xs text-[#94A3B8]">
+                    {searchQuery
+                      ? 'Tidak ada percakapan yang cocok.'
+                      : 'Belum ada riwayat percakapan.'}
+                  </div>
+                </>
               ) : (
-                <ul className="space-y-1">
-                  {filteredConversations.map((chat) => {
-                    const isActive = chat.id === activeChatId;
-                    return (
-                      <li key={chat.id}>
-                        <div
-                          className={`group flex min-h-[42px] items-center justify-between gap-1 rounded-xl px-2.5 py-1.5 text-sm transition-colors ${
-                            isActive
-                              ? 'border border-[#22D3EE]/30 bg-[#22D3EE]/12 text-white'
-                              : 'text-[#CBD5E1] hover:bg-white/[0.05] hover:text-white'
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelectChat(chat.id);
-                              onCloseMobile();
-                            }}
-                            className="flex min-w-0 flex-1 items-center gap-2.5 text-left cursor-pointer"
-                          >
-                            <MessageSquare
-                              className={`h-4 w-4 shrink-0 ${
-                                isActive ? 'text-[#22D3EE]' : 'text-[#94A3B8]'
-                              }`}
-                            />
-                            <span className="truncate">{chat.title}</span>
-                          </button>
+                <div className="space-y-3">
+                  {pinnedConversations.length > 0 && (
+                    <div>
+                      <div className="mb-1 flex items-center gap-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#FDBA74]">
+                        <Pin className="h-3 w-3 text-[#FB923C]" />
+                        <span>Disematkan ({pinnedConversations.length})</span>
+                      </div>
+                      <ul className="space-y-1">
+                        {pinnedConversations.map(renderChatRow)}
+                      </ul>
+                    </div>
+                  )}
 
-                          <div className="flex shrink-0 items-center gap-0.5 opacity-100 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() => onTogglePinChat(chat.id)}
-                              aria-label={
-                                chat.pinned ? 'Lepas sematan' : 'Sematkan chat'
-                              }
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/10 cursor-pointer ${
-                                chat.pinned ? 'text-[#FB923C]' : 'text-[#94A3B8]'
-                              }`}
-                            >
-                              <Pin className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteChat(chat.id)}
-                              aria-label={`Hapus ${chat.title}`}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#94A3B8] hover:bg-white/10 hover:text-[#FB923C] cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                  {recentConversations.length > 0 && (
+                    <div>
+                      <div className="mb-1 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                        {pinnedConversations.length > 0
+                          ? 'Riwayat Terbaru'
+                          : 'Riwayat Percakapan'}
+                      </div>
+                      <ul className="space-y-1">
+                        {recentConversations.map(renderChatRow)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
             </>
           ) : null}

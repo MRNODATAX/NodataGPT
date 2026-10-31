@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   Download,
+  KeyRound,
   Menu,
   Settings,
+  ShieldCheck,
   Shuffle,
 } from 'lucide-react';
 import { ToolsIcon } from './components/ToolsIcon';
@@ -17,6 +19,22 @@ import { ModelPickerModal } from './components/ModelPickerModal';
 import { ToolsStudioModal } from './components/ToolsStudioModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
+import { AccessGateModal } from './components/AccessGateModal';
+import {
+  FREE_TRIAL_LIMIT,
+  beginProtectedTurn,
+  checkSendCooldownRemainingMs,
+  clearProtectedTurn,
+  consumeProtectedTurnOnServer,
+  getAccessGateState,
+  hasPersonalByokActive,
+  initAccessGateSession,
+  isGateLockedForSettings,
+  markUserSendDispatched,
+  recordModelLatency,
+  subscribeAccessGate,
+  type AccessGateState,
+} from './services/accessGate';
 import {
   generateMultiEngineImage,
   getHealthyModelCount,
@@ -81,6 +99,11 @@ export function App() {
   const [toolsStudioOpen, setToolsStudioOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [gateState, setGateState] = useState<AccessGateState>(() =>
+    getAccessGateState()
+  );
+  const [gateModalManualOpen, setGateModalManualOpen] = useState(false);
+  const [configuringByokFromLock, setConfiguringByokFromLock] = useState(false);
 
   const [draft, setDraft] = useState('');
   const [deepThink, setDeepThink] = useState(false);
@@ -117,6 +140,25 @@ export function App() {
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
   }, [sidebarCollapsed]);
+
+  // Subscribe to server-enforced Access Gate & 5-Trial state
+  useEffect(() => {
+    const unsub = subscribeAccessGate((next) => {
+      setGateState(next);
+    });
+    void initAccessGateSession();
+    return unsub;
+  }, []);
+
+  const hasByokKey = useMemo(() => hasPersonalByokActive(settings), [settings]);
+  const isHardLocked = useMemo(
+    () => isGateLockedForSettings(gateState, settings) && !isLoading,
+    [gateState, settings, isLoading]
+  );
+  const showAccessGateModal =
+    !showSplash &&
+    !(settingsOpen && configuringByokFromLock) &&
+    (isHardLocked || gateModalManualOpen);
 
   // Live seconds ticker (updates every 80ms throughout both waiting and AI typing phases)
   useEffect(() => {
@@ -347,6 +389,9 @@ export function App() {
       setElapsedMs(0);
       setIsLoading(true);
       setRouterStatus(null);
+      markUserSendDispatched();
+      const protectedTurnId = beginProtectedTurn();
+      const byokActiveForTurn = hasPersonalByokActive(settings);
 
       const fullPrompt = attachmentText
         ? `${promptText.trim() || 'Analisis berkas berikut:'}\n\n[Berkas: ${attachmentName || 'lampiran'}]\n${attachmentText}`
@@ -371,8 +416,16 @@ export function App() {
               onStatus: (st) => setRouterStatus(st),
             });
 
+        clearProtectedTurn(protectedTurnId);
         abortControllerRef.current = null;
         setRouterStatus(null);
+
+        const rawTurnDuration = Math.max(
+          100,
+          Math.round(performance.now() - turnStartRef.current)
+        );
+        recordModelLatency(result.answeredById, rawTurnDuration);
+        void consumeProtectedTurnOnServer(protectedTurnId, byokActiveForTurn);
 
         const reducedMotion =
           typeof window !== 'undefined' &&
@@ -485,6 +538,7 @@ export function App() {
           }
         }, 26);
       } catch (err) {
+        clearProtectedTurn(protectedTurnId);
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
@@ -523,6 +577,11 @@ export function App() {
     async (attachmentText?: string, attachmentName?: string) => {
       const trimmed = draft.trim();
       if ((!trimmed && !attachmentText) || isLoading) return;
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setGateModalManualOpen(true);
+        return;
+      }
+      if (checkSendCooldownRemainingMs() > 0) return;
 
       const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
       const intent =
@@ -597,13 +656,18 @@ export function App() {
         useDeepThink: useThinking,
       });
     },
-    [draft, isLoading, imageMode, deepThink, activeConversation, executePrompt]
+    [draft, isLoading, settings, imageMode, deepThink, activeConversation, executePrompt]
   );
 
   const handleRunDirectCommand = useCallback(
     async (commandText: string) => {
       const clean = commandText.trim();
       if (!clean || isLoading) return;
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setGateModalManualOpen(true);
+        return;
+      }
+      if (checkSendCooldownRemainingMs() > 0) return;
 
       const isWebTool = Boolean(detectWebToolCommand(clean));
       const useImage = !isWebTool && parseImagePromptIntent(clean).isImageIntent;
@@ -662,7 +726,7 @@ export function App() {
         useDeepThink: false,
       });
     },
-    [isLoading, activeConversation, executePrompt]
+    [isLoading, settings, activeConversation, executePrompt]
   );
 
   const handleSelectStarter = useCallback(
@@ -671,6 +735,11 @@ export function App() {
       options?: { imageMode?: boolean; deepThink?: boolean }
     ) => {
       if (isLoading) return;
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setGateModalManualOpen(true);
+        return;
+      }
+      if (checkSendCooldownRemainingMs() > 0) return;
       const isImg = Boolean(options?.imageMode);
       const userMsg: ChatMessage = {
         id: generateId(),
@@ -706,12 +775,16 @@ export function App() {
         useDeepThink: Boolean(options?.deepThink),
       });
     },
-    [isLoading, executePrompt]
+    [isLoading, settings, executePrompt]
   );
 
   const handleRegenerate = useCallback(
     async (assistantMessageId: string) => {
       if (!activeConversation || isLoading) return;
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setGateModalManualOpen(true);
+        return;
+      }
       const idx = activeConversation.messages.findIndex(
         (m) => m.id === assistantMessageId
       );
@@ -769,7 +842,7 @@ export function App() {
         useDeepThink: deepThink && !regenerateAsImage,
       });
     },
-    [activeConversation, isLoading, deepThink, executePrompt]
+    [activeConversation, isLoading, settings, deepThink, executePrompt]
   );
 
   const handleUpdateMessageContent = useCallback(
@@ -811,6 +884,10 @@ export function App() {
     async (userMessageId: string, updatedContent: string) => {
       const trimmed = updatedContent.trim();
       if (!activeConversation || !trimmed) return;
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setGateModalManualOpen(true);
+        return;
+      }
 
       const idx = activeConversation.messages.findIndex((m) => m.id === userMessageId);
       if (idx < 0) return;
@@ -884,7 +961,7 @@ export function App() {
         useDeepThink: useThinking,
       });
     },
-    [activeConversation, imageMode, deepThink, executePrompt]
+    [activeConversation, settings, imageMode, deepThink, executePrompt]
   );
 
   const handleDeleteChat = useCallback(
@@ -999,6 +1076,45 @@ export function App() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setGateModalManualOpen(true)}
+              aria-label={
+                gateState.unlocked
+                  ? 'Status akses VIP aktif'
+                  : `Sisa uji coba gratis ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari ${FREE_TRIAL_LIMIT}`
+              }
+              title={
+                gateState.unlocked
+                  ? 'Akses VIP NodataGPT Aktif Tanpa Batas'
+                  : hasByokKey
+                    ? 'API Key Pribadi (BYOK) Aktif'
+                    : `Uji Coba Gratis: Sisa ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/${FREE_TRIAL_LIMIT} (Klik untuk masukkan sandi VIP)`
+              }
+              className={`inline-flex h-10 items-center gap-1 rounded-xl border px-2 font-mono-code text-[11px] font-semibold transition-colors sm:px-2.5 cursor-pointer ${
+                gateState.unlocked || hasByokKey
+                  ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-300 hover:bg-emerald-500/20'
+                  : gateState.used >= FREE_TRIAL_LIMIT - 1
+                    ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA] hover:bg-[#FB923C]/22'
+                    : 'border-[#22D3EE]/30 bg-[#22D3EE]/10 text-[#A5F3FC] hover:bg-[#22D3EE]/18'
+              }`}
+            >
+              {gateState.unlocked || hasByokKey ? (
+                <>
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                  <span>{gateState.unlocked ? 'VIP' : 'BYOK'}</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+                  <span className="hidden sm:inline">Uji Coba</span>
+                  <span>
+                    {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/{FREE_TRIAL_LIMIT}
+                  </span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setToolsStudioOpen(true)}
@@ -1140,9 +1256,14 @@ export function App() {
       <SettingsModal
         isOpen={settingsOpen}
         settings={settings}
+        gateState={gateState}
         conversationCount={conversations.length}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false);
+          setConfiguringByokFromLock(false);
+        }}
         onUpdateSettings={setSettings}
+        onOpenAccessGate={() => setGateModalManualOpen(true)}
         onReplaySplash={() => setShowSplash(true)}
         onClearAllChats={() => {
           if (pendingStreamRef.current) {
@@ -1160,6 +1281,26 @@ export function App() {
         isIos={isIos}
         isAndroid={isAndroid}
         onTriggerNativeInstall={triggerInstall}
+      />
+
+      <AccessGateModal
+        isOpen={showAccessGateModal}
+        isHardLocked={isHardLocked}
+        gateState={gateState}
+        onClose={() => {
+          if (!isHardLocked) {
+            setGateModalManualOpen(false);
+          }
+        }}
+        onUnlocked={() => {
+          setGateModalManualOpen(false);
+          setConfiguringByokFromLock(false);
+        }}
+        onOpenByokSettings={() => {
+          setConfiguringByokFromLock(true);
+          setGateModalManualOpen(false);
+          setSettingsOpen(true);
+        }}
       />
     </div>
   );

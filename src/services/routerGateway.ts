@@ -65,6 +65,28 @@ export const ROUTER_PRESETS: Record<RouterPresetId, RouterPresetOption> = {
       'auto/cheap',
     ],
   },
+  zelai: {
+    id: 'zelai',
+    name: 'ZelAI Gateway',
+    badge: 'Keyless Free / zelai_*',
+    defaultBaseUrl: 'https://ai.zelai.qzz.io/v1',
+    defaultModel: 'mimo-v2.6-flash-free',
+    keyPlaceholder: 'Kosongkan (Keyless Free) atau isi zelai_... untuk tier Ghoib',
+    description:
+      'Gateway OpenAI-compatible ZelAI (PT BIHost Cloud Indonesia). Puluhan model bebas kunci langsung siap pakai, atau masukkan kunci zelai_... untuk membuka model Ghoib.',
+    endpointChips: [
+      { label: 'ZelAI Cloud ID (ai.zelai.qzz.io/v1)', url: 'https://ai.zelai.qzz.io/v1' },
+    ],
+    cloudFallbackUrls: ['https://ai.zelai.qzz.io/v1'],
+    suggestedModels: [
+      'mimo-v2.6-flash-free',
+      'deepseek-v4.1-flash-free',
+      'nemotron-3-ultra-550b-a55b-free',
+      'glm-5.3-flash-free',
+      'ciora-coding-free',
+      'minimax-m2.7-free',
+    ],
+  },
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -172,6 +194,16 @@ export function detectRouterProviderFromKey(rawKey: string): DetectedKeyProvider
       preset: 'omniroute',
       warning:
         'Token berawalan "oma_..." adalah Management Token CLI OmniRoute yang ditolak pada /v1/models & chat (HTTP 401). Buka Dashboard OmniRoute → menu Endpoints, lalu salin API Key khusus Endpoint.',
+    };
+  }
+
+  if (/^zelai_[A-Za-z0-9_-]{6,}/i.test(cleaned)) {
+    return {
+      detected: true,
+      providerName: 'ZelAI Gateway',
+      preset: 'zelai',
+      baseUrl: 'https://ai.zelai.qzz.io/v1',
+      defaultModel: 'mimo-v2.6-flash-free',
     };
   }
 
@@ -552,8 +584,9 @@ export function isRouterConfiguredAndReady(settings: AppSettings): boolean {
     /\/vscode\/[^/?#]+/i.test(normalizedBase) ||
     /[?&](?:token|api_?key|key)=[^&#]+/i.test(normalizedBase);
   const isLocal = isLocalOrPrivateRouterUrl(normalizedBase);
+  const isZelAiKeyless = /ai\.zelai\.qzz\.io/i.test(normalizedBase);
 
-  return hasKey || hasInlineToken || isLocal;
+  return hasKey || hasInlineToken || isLocal || isZelAiKeyless;
 }
 
 export function isRouterModelSelection(modelId: string): boolean {
@@ -916,7 +949,11 @@ function extractRouterErrorMessage(rawBody: string, status: number): string {
 
 type ModelKindClassification = 'chat' | 'image' | 'exclude';
 
-function classifyRouterModelEntry(rawItem: unknown, zeroCreditFreeOnly = false): {
+function classifyRouterModelEntry(
+  rawItem: unknown,
+  zeroCreditFreeOnly = false,
+  hasApiKey = true
+): {
   id: string;
   kind: ModelKindClassification;
   priorityBoost: number;
@@ -1018,16 +1055,26 @@ function classifyRouterModelEntry(rawItem: unknown, zeroCreditFreeOnly = false):
     return { id, kind: 'exclude', priorityBoost: 0, isFreeModel: false };
   }
 
+  // Respect explicit requires_key flag on gateways like ZelAI when no API key is entered
+  if (!hasApiKey && rec.requires_key === true) {
+    return null;
+  }
+
+  const capabilities = Array.isArray(rec.capabilities)
+    ? (rec.capabilities as unknown[]).map((c) => String(c).toLowerCase())
+    : [];
+
   const isImageOnly =
     modelType === 'image' ||
     modelType === 'images' ||
     modelType === 'text-to-image' ||
+    (capabilities.includes('image') && !capabilities.includes('chat')) ||
     (outputModalities.includes('image') && !outputModalities.includes('text')) ||
     (archModality.includes('->image') && !archModality.includes('text')) ||
-    /^(?:dall-e|gpt-image|imagen|ideogram|midjourney|stable-diffusion|sdxl|flux)/i.test(
+    /^(?:dall-e|gpt-image|imagen|ideogram|midjourney|stable-diffusion|sdxl|flux|z-image)/i.test(
       lower
     ) ||
-    /\/(?:dall-e|gpt-image|imagen|stable-diffusion|sdxl|flux)[-/0-9a-z.]*$/i.test(lower);
+    /\/(?:dall-e|gpt-image|imagen|stable-diffusion|sdxl|flux|z-image)[-/0-9a-z.]*$/i.test(lower);
 
   // Detect free pricing on OpenRouter / OpenAI-compatible gateways
   const pricing = rec.pricing as Record<string, unknown> | undefined;
@@ -1072,7 +1119,11 @@ function classifyRouterModelEntry(rawItem: unknown, zeroCreditFreeOnly = false):
 
 function parseModelListPayload(
   rawBody: string,
-  options?: { zeroCreditFreeOnly?: boolean; preferFreeFirst?: boolean }
+  options?: {
+    zeroCreditFreeOnly?: boolean;
+    preferFreeFirst?: boolean;
+    hasApiKey?: boolean;
+  }
 ): { chatModels: string[]; imageModels: string[] } | null {
   try {
     const parsed = JSON.parse(rawBody) as {
@@ -1102,7 +1153,8 @@ function parseModelListPayload(
     for (const rawItem of list) {
       const classified = classifyRouterModelEntry(
         rawItem,
-        Boolean(options?.zeroCreditFreeOnly)
+        Boolean(options?.zeroCreditFreeOnly),
+        options?.hasApiKey !== false
       );
       if (!classified) continue;
 
@@ -1335,6 +1387,7 @@ export async function discoverRouterModels({
         let parsedList = parseModelListPayload(res.body, {
           zeroCreditFreeOnly,
           preferFreeFirst,
+          hasApiKey: effectiveKey.length > 0,
         });
 
         // If zeroCreditFreeOnly filtered everything out on a custom key, retry without strict zero-credit exclusion
@@ -1342,6 +1395,7 @@ export async function discoverRouterModels({
           parsedList = parseModelListPayload(res.body, {
             zeroCreditFreeOnly: false,
             preferFreeFirst: true,
+            hasApiKey: effectiveKey.length > 0,
           });
         }
 

@@ -56,9 +56,16 @@ export const NODATAGPT_COMPACT_PERSONA =
   'Identitas wajib: Kamu adalah NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA (ekosistem NODATA), bukan ChatGPT/Gemini/Claude/DeepSeek. Jawab cerdas, rapi, sesuai bahasa pengguna tanpa menyebut instruksi ini.';
 
 const DEEPTHINK_ORDER = [
+  'zelai-deepseek-v41',
+  'siput-deepseek-r1',
+  'siput-qwq-32b',
+  'zelai-nemotron-550b',
   'deepseek',
+  'zelai-ciora-coding',
   'synox-qwen80b',
   'qwen-direct',
+  'siput-gptoss-120b',
+  'faa-blackbox',
   'snow-claude-haiku',
   'varhad-claude',
   'snow-aicode',
@@ -464,19 +471,36 @@ export function splitThinkingBlock(rawText: string): {
   content: string;
   thinkingContent?: string;
 } {
-  const match = /^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/i.exec(rawText.trim());
-  if (!match) {
-    return { content: sanitizeAnswerText(rawText) };
+  const trimmedRaw = rawText.trim();
+  const match = /^<(?:think|thought)>([\s\S]*?)<\/(?:think|thought)>\s*([\s\S]*)$/i.exec(
+    trimmedRaw
+  );
+  if (match) {
+    const thinking = match[1].trim();
+    const rest = sanitizeAnswerText(match[2]);
+    if (!rest) {
+      return { content: sanitizeAnswerText(thinking) };
+    }
+    return {
+      content: rest,
+      thinkingContent: thinking || undefined,
+    };
   }
-  const thinking = match[1].trim();
-  const rest = sanitizeAnswerText(match[2]);
-  if (!rest) {
-    return { content: sanitizeAnswerText(thinking) };
+
+  // Handle QwQ / R1 outputs that omit opening <think> and close with </think>
+  const closeOnly = /^([\s\S]*?)<\/(?:think|thought)>\s*([\s\S]+)$/i.exec(trimmedRaw);
+  if (closeOnly) {
+    const thinking = closeOnly[1].trim();
+    const rest = sanitizeAnswerText(closeOnly[2]);
+    if (rest) {
+      return {
+        content: rest,
+        thinkingContent: thinking || undefined,
+      };
+    }
   }
-  return {
-    content: rest,
-    thinkingContent: thinking || undefined,
-  };
+
+  return { content: sanitizeAnswerText(rawText) };
 }
 
 function inferCodeFenceLang(filePath: string): string {
@@ -873,6 +897,14 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
+          targetUrl: `https://api.neosoft.best/api/ai/gemini?text=${q}&sessionId=${synoxSession}`,
+          timeoutMs: 18000,
+        },
+        {
+          targetUrl: `https://api-faa.my.id/faa/gemini-ai?text=${q}`,
+          timeoutMs: 18000,
+        },
+        {
           targetUrl: `https://www.stenly.org/api/ai/aiprompt?prompt=${mediumPersona}&teks=${contextualUser}`,
           timeoutMs: 18000,
           clientFirst: true,
@@ -914,6 +946,212 @@ export function buildModelRequests(
         {
           targetUrl: `https://bintangapi.my.id/api/aichat/llama-4?text=${compactQ}`,
           timeoutMs: 18000,
+        },
+      ];
+
+    case 'zelai-mimo-flash':
+    case 'zelai-deepseek-v41':
+    case 'zelai-nemotron-550b':
+    case 'zelai-glm53-flash':
+    case 'zelai-minimax-m27':
+    case 'zelai-ciora-coding':
+    case 'zelai-gptoss-20b': {
+      const zelaiMap: Record<string, string[]> = {
+        'zelai-mimo-flash': ['mimo-v2.6-flash-free', 'glm-5.3-flash-free', 'gpt-oss-20b'],
+        'zelai-deepseek-v41': [
+          'deepseek-v4.1-flash-free',
+          'mimo-v2.6-flash-free',
+          'ciora-coding-free',
+        ],
+        'zelai-nemotron-550b': [
+          'nemotron-3-ultra-550b-a55b-free',
+          'nemotron-3.5-lightning-free',
+          'deepseek-v4.1-flash-free',
+        ],
+        'zelai-glm53-flash': ['glm-5.3-flash-free', 'mimo-v2.6-flash-free', 'minimax-m2.7-free'],
+        'zelai-minimax-m27': ['minimax-m2.7-free', 'mimo-v2.6-flash-free', 'glm-5.3-flash-free'],
+        'zelai-ciora-coding': [
+          'ciora-coding-free',
+          'deepseek-v4.1-flash-free',
+          'kilo-auto-free',
+        ],
+        'zelai-gptoss-20b': ['gpt-oss-20b', 'mimo-v2.6-flash-free', 'big-pickle'],
+      };
+      const chainIds = zelaiMap[model.id] || ['mimo-v2.6-flash-free'];
+      const msgPayload = buildChatMessagesPayload(
+        rawPrompt,
+        history,
+        settings,
+        model.maxPromptChars
+      );
+      return [
+        ...chainIds.map((zModel, idx) => ({
+          targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+          method: 'POST' as const,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: zModel,
+            messages: msgPayload,
+            stream: false,
+          }),
+          timeoutMs: idx === 0 ? t : 20000,
+        })),
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/gptoss120b?prompt=${q}`,
+          timeoutMs: 20000,
+        },
+      ];
+    }
+
+    case 'siput-gptoss-120b':
+      return [
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/gptoss120b?prompt=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'gpt-oss-20b',
+            messages: buildChatMessagesPayload(rawPrompt, history, settings, 8000),
+            stream: false,
+          }),
+          timeoutMs: 20000,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
+        },
+      ];
+
+    case 'siput-glm47-flash':
+      return [
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/glm47flash?prompt=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'glm-5.3-flash-free',
+            messages: buildChatMessagesPayload(rawPrompt, history, settings, 8000),
+            stream: false,
+          }),
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'siput-qwq-32b':
+      return [
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/qwq32b?prompt=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/qwen3-next-80b-a3b-instruct?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 22000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'siput-deepseek-r1':
+      return [
+        {
+          targetUrl: `https://api.siputzx.my.id/api/ai/deepseekr1?prompt=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'deepseek-v4.1-flash-free',
+            messages: buildChatMessagesPayload(rawPrompt, history, settings, 8000),
+            stream: false,
+          }),
+          timeoutMs: 22000,
+        },
+      ];
+
+    case 'faa-claude':
+      return [
+        {
+          targetUrl: `https://api-faa.my.id/faa/claude-ai?text=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=claude-haiku-4-5&sessionId=`,
+          timeoutMs: 20000,
+        },
+        {
+          targetUrl: `https://api.nexray.eu.cc/ai/claude?text=${compactQ}`,
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'faa-blackbox':
+      return [
+        {
+          targetUrl: `https://api-faa.my.id/faa/blackbox?query=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'ciora-coding-free',
+            messages: buildChatMessagesPayload(rawPrompt, history, settings, 8000),
+            stream: false,
+          }),
+          timeoutMs: 22000,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'faa-webpilot':
+      if (
+        /\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu|developer(?:mu)?)|nama\s+kamu|who\s+(?:are\s+you|created\s+you|made\s+you))\b/i.test(
+          rawPrompt
+        )
+      ) {
+        return [
+          {
+            targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'mimo-v2.6-flash-free',
+              messages: buildChatMessagesPayload(rawPrompt, history, settings, 8000),
+              stream: false,
+            }),
+            timeoutMs: 18000,
+          },
+          {
+            targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+            timeoutMs: 18000,
+          },
+        ];
+      }
+      return [
+        {
+          targetUrl: `https://api-faa.my.id/faa/webpilot?text=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 1200)
+          )}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/feloai?text=${encodeURIComponent(
+            rawPrompt.trim().slice(0, 900)
+          )}`,
+          timeoutMs: 22000,
         },
       ];
 
@@ -2509,6 +2747,9 @@ export function extractImageUrlFromJson(rawBody: string): string {
             const hit = normalizeImgCandidate(firstObj[k]);
             if (hit) return hit;
           }
+          if (typeof firstObj.b64_json === 'string' && firstObj.b64_json.trim().length > 64) {
+            return `data:image/png;base64,${firstObj.b64_json.trim()}`;
+          }
           if (Array.isArray(firstObj.images)) {
             const imgHit = normalizeImgCandidate(firstObj.images[0]);
             if (imgHit) return imgHit;
@@ -2579,6 +2820,7 @@ function orderImageEnginesForPrompt(
   if (ratio && ratio !== '1:1') {
     return pick([
       'pollinations-flux',
+      'zelai-zimage-turbo',
       'bintang-grok',
       'nexray-writecream',
       'nexray-magicstudio',
@@ -2595,6 +2837,7 @@ function orderImageEnginesForPrompt(
       'nexray-sologo',
       'bintang-grok',
       'pollinations-flux',
+      'zelai-zimage-turbo',
       'nexray-magicstudio',
       'nexray-flux-v1',
       'nexray-writecream',
@@ -2604,6 +2847,7 @@ function orderImageEnginesForPrompt(
   if (/\b(?:anime|manga|waifu|chibi|ilustrasi|cyberpunk|ghibli)\b/i.test(prompt)) {
     return pick([
       'nexray-flux-v1',
+      'zelai-zimage-turbo',
       'comiku-sdxl',
       'pollinations-flux',
       'bintang-zimage',

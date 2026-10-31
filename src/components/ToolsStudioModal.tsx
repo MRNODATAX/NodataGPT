@@ -5,6 +5,7 @@ import {
   Film,
   ImagePlus,
   Loader2,
+  LocateFixed,
   Play,
   Search,
   Sparkles,
@@ -68,6 +69,8 @@ export function ToolsStudioModal({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
+  const [locatingGps, setLocatingGps] = useState(false);
+  const [gpsNotice, setGpsNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -112,6 +115,34 @@ export function ToolsStudioModal({
     setSubOption(tool.secondarySelect?.defaultValue || '');
     setUploadError('');
     setUploadedPreviewUrl('');
+    setLocatingGps(false);
+    setGpsNotice('');
+  };
+
+  const handleUseBrowserGps = () => {
+    if (!selectedTool || typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsNotice('Perangkat/browser ini tidak mendukung sensor GPS otomatis. Ketik nama desa/kecamatan secara manual.');
+      return;
+    }
+    setLocatingGps(true);
+    setGpsNotice('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+        setLocatingGps(false);
+        setInputValue(coords);
+        setGpsNotice(`Koordinat GPS akurat terdeteksi (${coords}) — klik Jalankan!`);
+      },
+      (err) => {
+        setLocatingGps(false);
+        setGpsNotice(
+          err.code === 1
+            ? 'Izin lokasi ditolak browser. Anda tetap bisa mengetik desa, kecamatan, atau kota secara langsung.'
+            : 'Gagal membaca titik GPS. Ketik nama desa/kecamatan/kota secara manual.'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
   };
 
   const handlePhotoUpload = async (file: File | undefined) => {
@@ -324,6 +355,32 @@ export function ToolsStudioModal({
                   {uploadError && (
                     <span className="text-[11px] text-rose-300">{uploadError}</span>
                   )}
+                </div>
+              )}
+
+              {selectedTool.acceptsGeoLocation && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#22D3EE]/25 bg-black/45 p-2.5">
+                  <button
+                    type="button"
+                    disabled={locatingGps}
+                    onClick={handleUseBrowserGps}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#22D3EE]/45 bg-[#22D3EE]/15 px-3 text-xs font-semibold text-[#A5F3FC] transition-colors hover:bg-[#22D3EE]/25 disabled:opacity-50 cursor-pointer"
+                  >
+                    {locatingGps ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#22D3EE]" />
+                    ) : (
+                      <LocateFixed className="h-3.5 w-3.5 text-[#22D3EE]" />
+                    )}
+                    <span>
+                      {locatingGps
+                        ? 'Mendeteksi Titik GPS...'
+                        : 'Gunakan Lokasi GPS Saya'}
+                    </span>
+                  </button>
+                  <span className="text-[11px] text-[#CBD5E1]">
+                    {gpsNotice ||
+                      'Atau ketik nama desa, kelurahan, kecamatan, gunung, maupun kota kecil.'}
+                  </span>
                 </div>
               )}
 

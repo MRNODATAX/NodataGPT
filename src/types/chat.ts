@@ -2,7 +2,12 @@ export type MessageRole = 'user' | 'assistant';
 
 export type AssistantMessageStatus = 'waiting' | 'typing' | 'done' | 'error';
 
-export type RouterPresetId = '9router' | 'omniroute' | 'openrouter' | 'custom';
+export type RouterPresetId =
+  | '9router'
+  | 'omniroute'
+  | 'zelai'
+  | 'openrouter'
+  | 'custom';
 
 export interface MediaDownloadItem {
   label: string;
@@ -78,6 +83,7 @@ export type ModelCategory =
   | 'auto'
   | 'router'
   | 'scraper'
+  | 'zelai'
   | 'snow'
   | 'synox'
   | 'utama'

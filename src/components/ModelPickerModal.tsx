@@ -50,6 +50,7 @@ const CHAT_CATEGORIES: Array<{ id: 'all' | ModelCategory; label: string }> = [
   { id: 'all', label: 'Semua' },
   { id: 'router', label: '9Router & OmniRoute' },
   { id: 'scraper', label: 'Direct Scraper' },
+  { id: 'zelai', label: 'ZelAI Cloud' },
   { id: 'snow', label: 'Snow API' },
   { id: 'synox', label: 'Synox Cloud' },
   { id: 'utama', label: 'Utama & Cepat' },

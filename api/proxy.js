@@ -75,6 +75,24 @@ const ALLOWED_HOSTS = new Set([
   'h.uguu.se',
   'litterbox.catbox.moe',
   'files.catbox.moe',
+  'catbox.moe',
+  'lunara.softbotz.my.id',
+  'cdn.nekohime.site',
+  'direct.lunee.lol',
+  'ai.zelai.qzz.io',
+  'api.siputzx.my.id',
+  'brat.siputzx.my.id',
+  'shinana-brat.hf.space',
+  'api-faa.my.id',
+  'api.memegen.link',
+  'my.izuka-api.xyz',
+  'api.bmkg.go.id',
+  'api-apps.bmkg.go.id',
+  'nominatim.openstreetmap.org',
+  'geocoding-api.open-meteo.com',
+  'api.open-meteo.com',
+  'air-quality-api.open-meteo.com',
+  'i.pximg.net',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [
@@ -299,7 +317,7 @@ export default async function handler(req, res) {
       // Fall through to Litterbox backup
     }
 
-    // Fallback uploader: Litterbox 1h temporary storage
+    // Fallback 2: Litterbox 1h temporary storage
     try {
       const fd2 = new FormData();
       fd2.append('reqtype', 'fileupload');
@@ -309,7 +327,7 @@ export default async function handler(req, res) {
         method: 'POST',
         headers: { 'User-Agent': DEFAULT_UA },
         body: fd2,
-        signal: AbortSignal.timeout(22000),
+        signal: AbortSignal.timeout(20000),
       });
       if (up2.ok) {
         const txt2 = (await up2.text()).trim();
@@ -318,7 +336,77 @@ export default async function handler(req, res) {
         }
       }
     } catch {
-      // Fall through
+      // Fall through to Lunara
+    }
+
+    // Fallback 3: Lunara Pro (lunara.softbotz.my.id/upload)
+    try {
+      const fd3 = new FormData();
+      fd3.append('file', blob, safeName);
+      fd3.append('filename', safeName);
+      const up3 = await fetch('https://lunara.softbotz.my.id/upload', {
+        method: 'POST',
+        headers: { 'User-Agent': DEFAULT_UA },
+        body: fd3,
+        signal: AbortSignal.timeout(20000),
+      });
+      if (up3.ok) {
+        const j3 = await up3.json().catch(() => null);
+        const url3 = String(j3?.file_url || j3?.url || j3?.data?.url || '').trim();
+        if (/^https:\/\/\S+/i.test(url3)) {
+          return res.status(200).json({ ok: true, url: url3, provider: 'lunara' });
+        }
+      }
+    } catch {
+      // Fall through to Nekohime CDN
+    }
+
+    // Fallback 4: Nekohime CDN (cdn.nekohime.site/upload)
+    try {
+      const fd4 = new FormData();
+      fd4.append('file', blob, safeName);
+      const up4 = await fetch('https://cdn.nekohime.site/upload', {
+        method: 'POST',
+        headers: { 'User-Agent': DEFAULT_UA },
+        body: fd4,
+        signal: AbortSignal.timeout(20000),
+      });
+      if (up4.ok) {
+        const j4 = await up4.json().catch(() => null);
+        const firstFile = Array.isArray(j4?.files) ? j4.files[0] : null;
+        const rawUrl4 = String(
+          firstFile?.url || firstFile || j4?.url || j4?.data?.url || ''
+        ).trim();
+        const url4 = rawUrl4.startsWith('/')
+          ? `https://cdn.nekohime.site${rawUrl4}`
+          : rawUrl4;
+        if (/^https:\/\/\S+/i.test(url4)) {
+          return res.status(200).json({ ok: true, url: url4, provider: 'nekohime' });
+        }
+      }
+    } catch {
+      // Fall through to LuneTools
+    }
+
+    // Fallback 5: LuneTools Direct Cloud (direct.lunee.lol/api/upload?format=text)
+    try {
+      const fd5 = new FormData();
+      fd5.append('file', blob, safeName);
+      const up5 = await fetch('https://direct.lunee.lol/api/upload?format=text', {
+        method: 'POST',
+        headers: { 'User-Agent': DEFAULT_UA },
+        body: fd5,
+        signal: AbortSignal.timeout(20000),
+      });
+      if (up5.ok) {
+        const txt5 = (await up5.text()).trim();
+        const line5 = txt5.split(/\s+/)[0] || '';
+        if (/^https:\/\/\S+/i.test(line5)) {
+          return res.status(200).json({ ok: true, url: line5, provider: 'lunee' });
+        }
+      }
+    } catch {
+      // Exhausted all 5 uploaders
     }
 
     return res.status(502).json({
@@ -373,9 +461,15 @@ export default async function handler(req, res) {
     });
   }
 
+  const isNominatim = parsedUrl.hostname === 'nominatim.openstreetmap.org';
+  const isPximg = parsedUrl.hostname.endsWith('pximg.net');
+
   const forwardHeaders = {
     Accept: 'image/*, audio/*, application/json, text/event-stream, text/plain, */*',
-    'User-Agent': req.headers?.['user-agent'] || DEFAULT_UA,
+    'User-Agent': isNominatim
+      ? 'NodataGPT-HyperLocalWeather/3.1 (https://www.nodatagpt.web.id)'
+      : req.headers?.['user-agent'] || DEFAULT_UA,
+    ...(isPximg ? { Referer: 'https://www.pixiv.net/' } : {}),
     ...extraHeaders,
   };
 

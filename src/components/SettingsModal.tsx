@@ -80,7 +80,10 @@ export function SettingsModal({
   useEffect(() => {
     if (!isOpen) return;
     const cleanKey = cleanRouterApiKey(settings.routerApiKey);
-    if (cleanKey.length < 12) return;
+    const isKeylessZelai =
+      settings.routerPreset === 'zelai' &&
+      /ai\.zelai\.qzz\.io/i.test(settings.routerBaseUrl || 'ai.zelai.qzz.io');
+    if (cleanKey.length < 12 && !isKeylessZelai) return;
 
     const keyCheck = detectRouterProviderFromKey(cleanKey);
     if (keyCheck.warning) {
@@ -635,9 +638,10 @@ export function SettingsModal({
             </div>
 
             {/* Preset Tabs */}
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-              {(['9router', 'omniroute', 'openrouter', 'custom'] as RouterPresetId[]).map(
-                (presetId) => {
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+              {(
+                ['9router', 'omniroute', 'zelai', 'openrouter', 'custom'] as RouterPresetId[]
+              ).map((presetId) => {
                   const p = ROUTER_PRESETS[presetId];
                   const isActive = settings.routerPreset === presetId;
                   return (

@@ -137,6 +137,7 @@ export default {
     const rawTarget = (reqUrl.searchParams.get('url') || '').trim();
     const rawFilename = (reqUrl.searchParams.get('filename') || 'nodatagpt-media').trim();
     const isProbe = reqUrl.searchParams.get('probe') === '1';
+    const isInline = reqUrl.searchParams.get('inline') === '1';
 
     if (!rawTarget) {
       return Response.json({ ok: false, error: 'Parameter url wajib diisi.' }, { status: 400 });
@@ -272,10 +273,15 @@ export default {
       responseHeaders.set('Content-Type', contentType);
       responseHeaders.set(
         'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${utf8Encoded}`
+        isInline
+          ? `inline; filename="${asciiFallback}"`
+          : `attachment; filename="${asciiFallback}"; filename*=UTF-8''${utf8Encoded}`
       );
       responseHeaders.set('X-Content-Type-Options', 'nosniff');
-      responseHeaders.set('Cache-Control', 'private, max-age=300');
+      responseHeaders.set(
+        'Cache-Control',
+        isInline ? 'public, max-age=86400, s-maxage=86400' : 'private, max-age=300'
+      );
 
       const upstreamLen = upstreamRes.headers.get('content-length');
       if (upstreamLen) {

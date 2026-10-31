@@ -2161,6 +2161,7 @@ export interface RouterResult {
   audioTitle?: string;
   galleryUrls?: string[];
   galleryDownloadUrls?: string[];
+  galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   summarizeTranscript?: string;
 }
@@ -2207,6 +2208,7 @@ export async function sendMultiModelChat({
       audioTitle: toolRes.audioTitle,
       galleryUrls: toolRes.galleryUrls,
       galleryDownloadUrls: toolRes.galleryDownloadUrls,
+      galleryAspect: toolRes.galleryAspect,
       downloadItems: toolRes.downloadItems,
       summarizeTranscript: toolRes.summarizeTranscript,
     };

@@ -317,10 +317,12 @@ function DataSaverAudioCard({
 function DataSaverGalleryGrid({
   urls,
   downloadUrls,
+  aspect = 'square',
   msgId,
 }: {
   urls: string[];
   downloadUrls?: string[];
+  aspect?: 'square' | 'portrait' | 'landscape';
   msgId: string;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -333,15 +335,27 @@ function DataSaverGalleryGrid({
   const visibleUrls = showAll ? urls : urls.slice(0, 30);
   const hiddenCount = urls.length - visibleUrls.length;
 
+  const aspectClass =
+    aspect === 'portrait'
+      ? 'aspect-[9/16]'
+      : aspect === 'landscape'
+        ? 'aspect-video'
+        : 'aspect-square';
+
+  const gridColsClass =
+    aspect === 'portrait'
+      ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
+      : 'grid-cols-2 sm:grid-cols-3';
+
   return (
     <div className="mb-3 space-y-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className={`grid ${gridColsClass} gap-2`}>
         {visibleUrls.map((gUrl, gIdx) => {
           const fullDlUrl = downloadUrls?.[gIdx] || gUrl;
           return (
             <div
               key={`${msgId}-gal-${gIdx}`}
-              className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-black/75"
+              className={`group relative ${aspectClass} overflow-hidden rounded-xl border border-white/10 bg-black/75`}
             >
               <button
                 type="button"
@@ -361,6 +375,16 @@ function DataSaverGalleryGrid({
                   loading="lazy"
                   decoding="async"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const imgEl = e.currentTarget;
+                    if (
+                      imgEl.dataset.proxyRetried !== '1' &&
+                      /^https?:\/\//i.test(gUrl)
+                    ) {
+                      imgEl.dataset.proxyRetried = '1';
+                      imgEl.src = `/api/download?inline=1&url=${encodeURIComponent(gUrl)}`;
+                    }
+                  }}
                   className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                 />
               </button>
@@ -444,6 +468,18 @@ function DataSaverGalleryGrid({
                 alt="Pratinjau penuh"
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const imgEl = e.currentTarget;
+                  if (
+                    imgEl.dataset.proxyRetried !== '1' &&
+                    /^https?:\/\//i.test(lightboxState.previewUrl)
+                  ) {
+                    imgEl.dataset.proxyRetried = '1';
+                    imgEl.src = `/api/download?inline=1&url=${encodeURIComponent(
+                      lightboxState.previewUrl
+                    )}`;
+                  }
+                }}
                 className="max-h-[76dvh] w-auto max-w-full object-contain"
               />
             </div>
@@ -1036,6 +1072,7 @@ export function ChatThread({
                       <DataSaverGalleryGrid
                         urls={msg.galleryUrls}
                         downloadUrls={msg.galleryDownloadUrls}
+                        aspect={msg.galleryAspect}
                         msgId={msg.id}
                       />
                     )}

@@ -2,6 +2,70 @@ import type { MediaDownloadItem } from '../types/chat';
 
 export type WebToolCategoryId = 'A' | 'B' | 'D' | 'E';
 
+export interface WebToolCommandCatalogItem {
+  value: string;
+  label: string;
+  command: string;
+  altCommand?: string;
+}
+
+export const RANDOM_IMAGE_COMMAND_MODES: WebToolCommandCatalogItem[] = [
+  {
+    value: 'random',
+    label: '🎲 Acak Bebas 4K',
+    command: '/randomimg',
+    altCommand: '/randomimage',
+  },
+  {
+    value: 'nature',
+    label: '🌿 Alam & Lanskap',
+    command: '/randomimg nature',
+    altCommand: '/randomimage nature',
+  },
+  {
+    value: 'cyberpunk',
+    label: '🌆 Cyberpunk & Tech',
+    command: '/randomimg cyberpunk',
+    altCommand: '/randomimage cyberpunk',
+  },
+  {
+    value: 'space',
+    label: '🌌 Galaksi & Angkasa',
+    command: '/randomimg space',
+    altCommand: '/randomimage space',
+  },
+  {
+    value: 'city',
+    label: '🏙️ Kota & Arsitektur',
+    command: '/randomimg city',
+    altCommand: '/randomimage city',
+  },
+  {
+    value: 'anime',
+    label: '🎨 Anime & Ilustrasi HD',
+    command: '/randomimg anime',
+    altCommand: '/randomimage anime',
+  },
+  {
+    value: 'minimal',
+    label: '✨ Minimalis & Abstract',
+    command: '/randomimg minimal',
+    altCommand: '/randomimage minimal',
+  },
+  {
+    value: 'portrait',
+    label: '📱 Wallpaper HP (9:16)',
+    command: '/randomimg portrait',
+    altCommand: '/randomimage portrait',
+  },
+  {
+    value: 'mockup',
+    label: '📸 Foto Mockup UI (Unsplash)',
+    command: '/randomimg mockup',
+    altCommand: '/randomimage mockup',
+  },
+];
+
 export interface WebToolDefinition {
   id: string;
   category: WebToolCategoryId;
@@ -33,6 +97,7 @@ export interface WebToolDefinition {
     notes: string;
     examples: string[];
   };
+  commandCatalog?: WebToolCommandCatalogItem[];
 }
 
 export interface WebToolExecutionResult {
@@ -47,6 +112,7 @@ export interface WebToolExecutionResult {
   audioTitle?: string;
   galleryUrls?: string[];
   galleryDownloadUrls?: string[];
+  galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   summarizeTranscript?: string;
 }
@@ -403,27 +469,20 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     name: 'Kreasi Visual Acak & Wallpaper 4K Studio',
     shortName: 'Random Image 4K',
     slashCommand: '/randomimage',
-    badge: 'Tanpa API Key · Atur Jumlah ,N',
+    badge: '9 Mode Lengkap · Atur Jumlah ,N',
     description:
-      'Eksplorasi gambar acak & wallpaper 4K/HD bebas kunci (Alam, Cyberpunk, Galaksi, Kota, Anime, Minimalis, HP Portrait, & Mockup) dengan pengaturan jumlah gambar (,1 s/d ,30), palet warna HEX, & Unduh 4K 1-Klik.',
+      '9 mode visual 4K/HD tanpa API key: Acak Bebas (/randomimg), Alam (/randomimg nature), Cyberpunk (/randomimg cyberpunk), Galaksi (/randomimg space), Kota (/randomimg city), Anime (/randomimg anime), Minimalis (/randomimg minimal), Wallpaper HP 9:16 (/randomimg portrait), & Foto Mockup UI (/randomimg mockup).',
     placeholder:
       'Opsional: ketik tema bebas (mis. samurai neon, ocean sunset) atau kosongkan...',
     exampleInput: 'cyberpunk rain neon',
     requiresInput: false,
     secondarySelect: {
-      label: 'Mode Kreasi Visual',
+      label: 'Pilih Mode Kreasi Visual (9 Mode Resmi)',
       defaultValue: 'random',
-      options: [
-        { value: 'random', label: '🎲 Acak Bebas 4K' },
-        { value: 'anime', label: '🎨 Anime & Ilustrasi HD' },
-        { value: 'nature', label: '🌿 Alam & Lanskap' },
-        { value: 'cyberpunk', label: '🌆 Cyberpunk & Tech' },
-        { value: 'space', label: '🌌 Galaksi & Angkasa' },
-        { value: 'city', label: '🏙️ Kota & Arsitektur' },
-        { value: 'minimal', label: '✨ Minimalis & Abstract' },
-        { value: 'portrait', label: '📱 Wallpaper HP (9:16)' },
-        { value: 'mockup', label: '📸 Foto Mockup UI (Unsplash)' },
-      ],
+      options: RANDOM_IMAGE_COMMAND_MODES.map((m) => ({
+        value: m.value,
+        label: `${m.label} (${m.command})`,
+      })),
     },
     countSelector: {
       label: 'Jumlah Gambar Ditampilkan (1–30)',
@@ -432,17 +491,18 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
       presets: [2, 4, 6, 8, 10, 12, 16, 20, 24, 30],
     },
     usageNotice: {
-      title: 'Panduan Command & Cara Pakai /randomimage',
-      syntax: '/randomimage [mode / tema] ,<jumlah>',
+      title: 'Daftar Command & Cara Pakai /randomimage (/randomimg)',
+      syntax: '/randomimage [mode / tema] ,<jumlah 1–30>',
       notes:
-        'Tambahkan koma + angka di akhir perintah (misal ,10) untuk mengatur jumlah gambar (1–30). Kosongkan tema jika ingin murni acak sesuai mode.',
+        'Bisa memakai /randomimage maupun /randomimg. Tambahkan koma + angka di akhir perintah (misal ,10) untuk mengatur jumlah gambar yang ditampilkan (1–30).',
       examples: [
         '/randomimage anime ,10',
-        '/randomimage cyberpunk ,8',
-        '/randomimage portrait | alya kujou ,6',
-        '/randomimage ,12',
+        '/randomimg cyberpunk ,8',
+        '/randomimg portrait | alya kujou ,6',
+        '/randomimg ,12',
       ],
     },
+    commandCatalog: RANDOM_IMAGE_COMMAND_MODES,
   },
   {
     id: 'pinterest',
@@ -757,15 +817,26 @@ interface ToolHttpResult {
   error?: string;
 }
 
+const PROXY_FIRST_TOOL_HOST_RE =
+  /(?:^|\.)(?:wallhaven\.cc|nominatim\.openstreetmap\.org|finance\.yahoo\.com|wttr\.in)$/i;
+
 async function fetchToolEndpoint(
   targetUrl: string,
   timeoutMs = 28000,
   signal?: AbortSignal
 ): Promise<ToolHttpResult> {
-  // 1. Try browser-direct call first for speed & per-user IP quota isolation
-  if (typeof window !== 'undefined') {
+  let skipBrowserDirect = false;
+  try {
+    const parsedHost = new URL(targetUrl).hostname;
+    skipBrowserDirect = PROXY_FIRST_TOOL_HOST_RE.test(parsedHost);
+  } catch {
+    skipBrowserDirect = false;
+  }
+
+  // 1. Try browser-direct call first for CORS-enabled public APIs (skip known non-CORS / ISP-filtered hosts)
+  if (typeof window !== 'undefined' && !skipBrowserDirect) {
     const directAbort = new AbortController();
-    const timer = window.setTimeout(() => directAbort.abort(), Math.min(timeoutMs, 20000));
+    const timer = window.setTimeout(() => directAbort.abort(), Math.min(timeoutMs, 12000));
     const onParentAbort = () => directAbort.abort();
     signal?.addEventListener('abort', onParentAbort, { once: true });
 
@@ -798,7 +869,11 @@ async function fetchToolEndpoint(
           }
         } else {
           const text = await res.text();
-          if (text.trim().length > 2) {
+          const trimmedText = text.trim();
+          // Guard against ISP DNS block / captive portal HTML pages masquerading as 200 OK on JSON endpoints
+          const looksLikeHtmlBlock =
+            ct.includes('text/html') || /^<!doctype\s+html|^<html\b/i.test(trimmedText);
+          if (trimmedText.length > 2 && !looksLikeHtmlBlock) {
             return { ok: true, kind: 'text', body: text };
           }
         }
@@ -1016,7 +1091,7 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'randomimage':
     case 'wallpaper':
     case 'wall': {
-      // Support "/random image anime ,10" or "/random img anime ,10" as well!
+      // Support "/random image anime ,10" or "/random img portrait ,8" as well!
       const normalizedRest =
         cmd === 'random'
           ? rest.replace(/^(?:image|img|wallpaper|wall)\b\s*/i, '').trim()
@@ -1024,29 +1099,65 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       const parsedRand = extractTrailingImageCount(normalizedRest, 4, 30);
       const bodyText = parsedRand.cleanText;
 
+      const mapRandomModeAlias = (rawMode: string): string => {
+        const m = rawMode.trim().toLowerCase();
+        if (m === 'alam' || m === 'lanskap') return 'nature';
+        if (m === 'galaksi' || m === 'angkasa') return 'space';
+        if (m === 'kota' || m === 'arsitektur') return 'city';
+        if (m === 'minimalis' || m === 'abstract') return 'minimal';
+        if (
+          m === 'hp' ||
+          m === '9:16' ||
+          m === 'vertikal' ||
+          m === 'mobile' ||
+          m === 'phone' ||
+          m === 'wallpaper hp'
+        ) {
+          return 'portrait';
+        }
+        return m;
+      };
+
+      const modePattern =
+        'random|nature|alam|lanskap|cyberpunk|space|galaksi|angkasa|city|kota|arsitektur|anime|minimal|minimalis|abstract|portrait|hp|9:16|vertikal|mobile|phone|wallpaper\\s+hp|mockup';
+
+      // 1. Pipe syntax: "/randomimg portrait | alya kujou ,6"
       const modePipe = bodyText.match(
-        /^(random|nature|cyberpunk|space|city|anime|minimal|portrait|mockup)\s*\|\s*([\s\S]*)$/i
+        new RegExp(`^(${modePattern})\\s*\\|\\s*([\\s\\S]*)$`, 'i')
       );
       if (modePipe) {
         return {
           toolId: 'randomimg',
           arg: modePipe[2].trim(),
-          subOption: modePipe[1].toLowerCase(),
+          subOption: mapRandomModeAlias(modePipe[1]),
           count: parsedRand.count,
         };
       }
-      if (
-        /^(random|nature|cyberpunk|space|city|anime|minimal|portrait|mockup)$/i.test(
-          bodyText
-        )
-      ) {
+
+      // 2. Exact mode only: "/randomimg portrait" or "/randomimage anime ,10"
+      const exactMode = bodyText.match(new RegExp(`^(${modePattern})$`, 'i'));
+      if (exactMode) {
         return {
           toolId: 'randomimg',
           arg: '',
-          subOption: bodyText.toLowerCase(),
+          subOption: mapRandomModeAlias(exactMode[1]),
           count: parsedRand.count,
         };
       }
+
+      // 3. Space-separated mode + custom theme: "/randomimg portrait alya kujou ,6"
+      const spaceMode = bodyText.match(
+        new RegExp(`^(${modePattern})\\s+([\\s\\S]+)$`, 'i')
+      );
+      if (spaceMode) {
+        return {
+          toolId: 'randomimg',
+          arg: spaceMode[2].trim(),
+          subOption: mapRandomModeAlias(spaceMode[1]),
+          count: parsedRand.count,
+        };
+      }
+
       return {
         toolId: 'randomimg',
         arg: bodyText,
@@ -5077,30 +5188,39 @@ export async function executeWebToolCommand({
     const customTheme = arg.trim();
     const requestedCount = Math.min(Math.max(count || 4, 1), 30);
 
+    const allNineModesMarkdown = RANDOM_IMAGE_COMMAND_MODES.map(
+      (m) =>
+        `- **${m.label}** — \`${m.command}\` *(atau \`${m.altCommand}\` · contoh: \`${m.altCommand} ,10\`)*`
+    ).join('\n');
+
     const randomImgCommandNotice = [
       `---`,
-      `#### 📌 Pemberitahuan Command & Cara Pakai \`/randomimage\``,
-      `- **Format Command:** \`/randomimage [mode / tema bebas] ,<jumlah 1–30>\` *(alias: \`/randomimg\`, \`/wallpaper\`, \`/wall\`)*`,
-      `- **Pilihan Mode Cepat:** \`random\` · \`anime\` · \`cyberpunk\` · \`nature\` · \`space\` · \`city\` · \`minimal\` · \`portrait\` *(HP 9:16)* · \`mockup\` *(Unsplash)*`,
-      `- **Contoh Siap Pakai:** \`/randomimage anime ,10\` · \`/randomimage cyberpunk ,8\` · \`/randomimage portrait | samurai neon ,6\` · \`/randomimage ,12\``,
-      `- **Unduh Resolusi Asli 4K/HD:** Klik tombol **Unduh** langsung pada masing-masing kartu gambar **#1–#${requestedCount}** atau perbesar dulu di Lightbox.`,
+      `#### 📌 Pemberitahuan Command & Cara Pakai \`/randomimage\` (\`/randomimg\`)`,
+      `- **Format Command:** \`/randomimage [mode / tema bebas] ,<jumlah 1–30>\` *(bisa juga memakai \`/randomimg\`, \`/wallpaper\`, atau \`/wall\`)*`,
+      `- **Atur Jumlah Gambar:** Tambahkan \`,angka\` di akhir perintah *(contoh: \`/randomimage anime ,10\` atau \`/randomimg cyberpunk ,8\`)*`,
+      `- **Unduh Resolusi Asli 4K/HD:** Klik tombol **Unduh** langsung pada masing-masing kartu **#1–#${requestedCount}** atau perbesar di Lightbox.`,
+      ``,
+      `**📋 Daftar Lengkap 9 Command Mode yang Bisa Digunakan:**`,
+      allNineModesMarkdown,
     ].join('\n');
 
     if (/^(help|cara|panduan|info|command|\?)$/i.test(customTheme)) {
       return {
         content: [
-          `### 📖 Panduan Lengkap Command & Cara Pakai \`/randomimage\``,
+          `### 📖 Panduan Lengkap Command & Daftar Mode \`/randomimage\` (\`/randomimg\`)`,
           `Fitur **Random Image & Wallpaper 4K Studio** berjalan **100% tanpa API key** dan mendukung pengaturan jumlah gambar **1 hingga 30 gambar** sekaligus.`,
           ``,
+          `#### 📋 9 Command Mode Siap Pakai:`,
+          allNineModesMarkdown,
+          ``,
+          `#### 💡 Format & Contoh Kombinasi Lanjutan:`,
           `| Fungsi | Format Command | Contoh Penggunaan |`,
           `| :--- | :--- | :--- |`,
-          `| **Acak Bebas 4K** | \`/randomimage ,<jumlah>\` | \`/randomimage ,10\` |`,
-          `| **Mode Kategori** | \`/randomimage <mode> ,<jumlah>\` | \`/randomimage anime ,10\` |`,
+          `| **Acak Bebas + Jumlah** | \`/randomimage ,<jumlah>\` | \`/randomimage ,10\` atau \`/randomimg ,10\` |`,
+          `| **Mode Kategori + Jumlah** | \`/randomimage <mode> ,<jumlah>\` | \`/randomimage anime ,10\` atau \`/randomimg nature ,8\` |`,
           `| **Tema Kustom Bebas** | \`/randomimage <tema bebas> ,<jumlah>\` | \`/randomimage ocean sunset ,8\` |`,
           `| **Mode + Tema Spesifik** | \`/randomimage <mode> \\| <tema> ,<jumlah>\` | \`/randomimage portrait \\| alya kujou ,6\` |`,
-          `| **Panduan Cepat** | \`/randomimage help\` | \`/randomimage cara\` |`,
-          ``,
-          `**Daftar Mode Resmi:** \`random\`, \`anime\`, \`cyberpunk\`, \`nature\`, \`space\`, \`city\`, \`minimal\`, \`portrait\` *(rasio 9:16 HP)*, \`mockup\` *(fotografi Unsplash HD)*.`,
+          `| **Panduan Cepat** | \`/randomimage help\` | \`/randomimg cara\` |`,
         ].join('\n'),
         answeredById: 'randomimg-guide',
         answeredByName: 'Panduan Command · Random Image 4K',
@@ -5121,7 +5241,22 @@ export async function executeWebToolCommand({
     };
     const activeLabel = modeLabels[mode] || 'Kreasi Visual Acak';
 
-    // Mode Mockup: Unsplash Picsum Curated High-Res Photography (Zero API Key, up to 30 items)
+    // Helper: wrap Wallhaven preview URLs through 1st-party inline stream so Indonesian ISPs (Komdigi/TrustPositif) NEVER block thumbnails!
+    const toSafePreviewUrl = (rawUrl: string): string => {
+      if (/wallhaven\.cc/i.test(rawUrl)) {
+        return `/api/download?inline=1&url=${encodeURIComponent(rawUrl)}`;
+      }
+      return rawUrl;
+    };
+
+    const isPortraitReq =
+      mode === 'portrait' ||
+      /\b(?:portrait|9:16|hp|mobile|vertikal|phone)\b/i.test(customTheme);
+    const targetAspect: 'portrait' | 'landscape' = isPortraitReq
+      ? 'portrait'
+      : 'landscape';
+
+    // Mode Mockup: Unsplash Picsum Curated High-Res Photography (Zero API Key, up to 30 items, supports customTheme via Pinterest fallback if provided)
     if (mode === 'mockup' && !customTheme) {
       onStatus?.({
         toolName: `Random Image Studio (${requestedCount} Foto)`,
@@ -5173,6 +5308,7 @@ export async function executeWebToolCommand({
           usedFallback: false,
           galleryUrls: previews,
           galleryDownloadUrls: fullOriginals,
+          galleryAspect: 'landscape',
           downloadItems:
             shuffled.length <= 6
               ? shuffled.map((p, idx) => ({
@@ -5185,7 +5321,7 @@ export async function executeWebToolCommand({
       }
     }
 
-    // Primary Engine: Wallhaven 4K Curated Random API (Supports custom keywords, categories, ratios, & HEX color palettes, 1..30 items!)
+    // Primary Engine: Wallhaven 4K Curated Random API (Single high-volume canonical tags + ISP-proof 1st-party preview URLs!)
     onStatus?.({
       toolName: `Random Image 4K (${requestedCount} Gambar)`,
       mirrorName: `Wallhaven 4K (${activeLabel})`,
@@ -5193,50 +5329,57 @@ export async function executeWebToolCommand({
       isFallback: false,
     });
 
+    // Single canonical tags with 25,000–120,000+ Wallhaven artworks each (never over-restrictive multi-word AND queries!)
     const presetQueryMap: Record<string, string> = {
-      nature: 'nature landscape',
-      cyberpunk: 'cyberpunk neon futuristic',
-      space: 'space galaxy nebula cosmos',
-      city: 'cityscape night architecture',
-      minimal: 'minimalism abstract',
+      nature: 'landscape',
+      cyberpunk: 'cyberpunk',
+      space: 'space',
+      city: 'cityscape',
+      minimal: 'minimalism',
     };
 
-    const isPortraitReq =
-      mode === 'portrait' || /\b(?:portrait|9:16|hp|mobile|vertikal)\b/i.test(customTheme);
     const cleanedCustom = customTheme
-      .replace(/\b(?:portrait|9:16|landscape|16:9)\b/gi, '')
+      .replace(/\b(?:wallpaper|wall|portrait|9:16|hp|mobile|vertikal|phone|landscape|16:9)\b/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
     const effectiveQuery = cleanedCustom || presetQueryMap[mode] || '';
     const categoriesParam = mode === 'anime' && !cleanedCustom ? '010' : '110';
-    const ratioParam = isPortraitReq ? '&ratios=portrait' : '&ratios=landscape';
+    // True smartphone aspect ratios (9x16, 9x18, 10x16, portrait) for Wallpaper HP!
+    const ratioParam = isPortraitReq
+      ? '&ratios=9x16%2C9x18%2C10x16%2Cportrait'
+      : '&ratios=16x9%2C16x10%2Clandscape';
 
-    const buildWhUrl = (seedVal: string) =>
+    const buildWhUrl = (seedVal: string, qVal: string) =>
       `https://wallhaven.cc/api/v1/search?sorting=random&purity=100` +
       `&categories=${categoriesParam}${ratioParam}&seed=${seedVal}` +
-      (effectiveQuery ? `&q=${encodeURIComponent(effectiveQuery)}` : '');
+      (qVal ? `&q=${encodeURIComponent(qVal)}` : '');
 
-    const seed1 = Math.random().toString(36).slice(2, 8);
-    const whRequests = [fetchToolEndpoint(buildWhUrl(seed1), 18000, signal)];
-    if (requestedCount > 24) {
-      const seed2 = Math.random().toString(36).slice(2, 8);
-      whRequests.push(fetchToolEndpoint(buildWhUrl(seed2), 18000, signal));
-    }
-
-    const whResponses = await Promise.all(whRequests);
-    const seenWhIds = new Set<string>();
-    const whCombined: Array<Record<string, unknown>> = [];
-    for (const rWh of whResponses) {
-      const jWh = safeParseJson(rWh.body);
-      if (rWh.ok && Array.isArray(jWh?.data)) {
-        for (const item of jWh.data as Array<Record<string, unknown>>) {
-          const itemId = String(item.id || item.path || Math.random());
-          if (!seenWhIds.has(itemId)) {
-            seenWhIds.add(itemId);
-            whCombined.push(item);
+    const fetchWhBatch = async (qVal: string): Promise<Array<Record<string, unknown>>> => {
+      const s1 = Math.random().toString(36).slice(2, 8);
+      const reqs = [fetchToolEndpoint(buildWhUrl(s1, qVal), 16000, signal)];
+      if (requestedCount > 24) {
+        const s2 = Math.random().toString(36).slice(2, 8);
+        reqs.push(fetchToolEndpoint(buildWhUrl(s2, qVal), 16000, signal));
+      }
+      const resps = await Promise.all(reqs);
+      const seen = new Set<string>();
+      const items: Array<Record<string, unknown>> = [];
+      for (const r of resps) {
+        const j = safeParseJson(r.body);
+        if (r.ok && Array.isArray(j?.data)) {
+          for (const it of j.data as Array<Record<string, unknown>>) {
+            const id = String(it.id || it.path || Math.random());
+            if (!seen.has(id)) {
+              seen.add(id);
+              items.push(it);
+            }
           }
         }
       }
-    }
+      return items;
+    };
+
+    const whCombined = await fetchWhBatch(effectiveQuery);
 
     if (whCombined.length > 0) {
       const picked = whCombined.slice(0, requestedCount);
@@ -5264,7 +5407,7 @@ export async function executeWebToolCommand({
               .join(' ')
           : '-';
 
-        previewUrls.push(thumbUrl);
+        previewUrls.push(toSafePreviewUrl(thumbUrl));
         fullDownloadUrls.push(fullUrl);
         if (picked.length <= 6) {
           dlItems.push({
@@ -5283,12 +5426,14 @@ export async function executeWebToolCommand({
       if (previewUrls.length > 0) {
         const extraRowsInfo =
           previewUrls.length > 12
-            ? [`*...serta ${previewUrls.length - 12} gambar HD/4K lainnya langsung ditampilkan pada galeri di bawah.*`]
+            ? [
+                `*...serta ${previewUrls.length - 12} gambar HD/4K lainnya langsung ditampilkan pada galeri di bawah.*`,
+              ]
             : [];
         return {
           content: [
-            `### 🎨 Kreasi Visual Acak & Wallpaper 4K — ${activeLabel}${customTheme ? ` (*"${customTheme}"*)` : ''} (${previewUrls.length} Gambar)`,
-            `Menampilkan **${previewUrls.length} visual acak berkualitas tinggi** tanpa API key *(pratinjau hemat kuota + palet warna HEX + tombol **Unduh 4K** pada tiap kartu)*:`,
+            `### 🎨 Kreasi Visual Acak & Wallpaper 4K — ${activeLabel}${cleanedCustom ? ` (*"${cleanedCustom}"*)` : ''} (${previewUrls.length} Gambar)`,
+            `Menampilkan **${previewUrls.length} visual acak berkualitas tinggi** tanpa API key *(pratinjau cepat anti-blokir ISP + palet warna HEX + tombol **Unduh 4K** pada tiap kartu)*:`,
             ``,
             `| Visual | Resolusi & Ukuran Asli | Ekstraksi Palet Warna Desain (HEX) |`,
             `| :--- | :--- | :--- |`,
@@ -5298,17 +5443,18 @@ export async function executeWebToolCommand({
             randomImgCommandNotice,
           ].join('\n'),
           answeredById: 'wallhaven-random-4k',
-          answeredByName: 'Random 4K Studio · Wallhaven',
+          answeredByName: `Random 4K Studio · ${isPortraitReq ? 'Wallpaper HP 9:16' : 'Wallhaven'}`,
           usedFallback: false,
           galleryUrls: previewUrls,
           galleryDownloadUrls: fullDownloadUrls,
+          galleryAspect: targetAspect,
           downloadItems: dlItems.length > 0 ? dlItems : undefined,
         };
       }
     }
 
-    // Fallback 2 (Anime mode): Nekos.best High-Res Artist Illustrations (supports 1..30 via batching!)
-    if (mode === 'anime') {
+    // Fallback 2A (Anime mode without custom query): Nekos.best High-Res Artist Illustrations (1..30 items!)
+    if (mode === 'anime' && !cleanedCustom) {
       onStatus?.({
         toolName: `Random Anime HD (${requestedCount} Gambar)`,
         mirrorName: 'Nekos.best Artist HD',
@@ -5367,6 +5513,7 @@ export async function executeWebToolCommand({
           usedFallback: true,
           galleryUrls: urls,
           galleryDownloadUrls: urls,
+          galleryAspect: targetAspect,
           downloadItems:
             urls.length <= 6
               ? urls.map((u, idx) => ({
@@ -5379,39 +5526,168 @@ export async function executeWebToolCommand({
       }
     }
 
-    // Fallback 3: Pollinations AI Instant Creative Render (100% Keyless, Custom Prompt Capable!)
+    // Fallback 2B (ALL 9 MODES — including Wallpaper HP 9:16, Alam, Cyberpunk, Galaksi, Kota, Minimalis, & Indonesian Custom Keywords!):
+    // Curated Shuffled Pinterest HD Multi-Pin Engine (BintangAPI 49-Pin Original HD + Snow 20-Pin)
+    const fallbackPinQueries: Record<string, string[]> = {
+      portrait: [
+        'aesthetic phone wallpaper 9:16 hd',
+        'amoled lockscreen wallpaper iphone hd',
+        'anime scenery phone wallpaper 4k vertical',
+      ],
+      nature: [
+        'nature landscape mountain wallpaper 4k hd',
+        'ocean forest sunset photography wallpaper hd',
+      ],
+      cyberpunk: [
+        'cyberpunk neon futuristic city wallpaper 4k',
+        'sci fi neon synthwave aesthetic wallpaper hd',
+      ],
+      space: [
+        'galaxy nebula cosmos space wallpaper 4k hd',
+        'astronomy planets deep space aesthetic wallpaper',
+      ],
+      city: [
+        'night city skyline architecture wallpaper 4k',
+        'tokyo urban street night photography wallpaper hd',
+      ],
+      anime: [
+        'anime aesthetic scenery illustration wallpaper 4k',
+        'anime character hd art wallpaper',
+      ],
+      minimal: [
+        'minimalist abstract clean design wallpaper 4k',
+        'dark minimal geometric wallpaper aesthetic',
+      ],
+      mockup: [
+        'minimalist desk setup photography aesthetic hd',
+        'modern architectural interior photography hd',
+      ],
+      random: [
+        'breathtaking 4k wallpaper hd aesthetic photography',
+        'digital art masterpiece landscape wallpaper 4k',
+      ],
+    };
+
+    const modeFallbacks = fallbackPinQueries[mode] || fallbackPinQueries.random;
+    const randomPresetPick =
+      modeFallbacks[Math.floor(Math.random() * modeFallbacks.length)];
+    const pinSearchQuery = cleanedCustom
+      ? isPortraitReq
+        ? `${cleanedCustom} phone wallpaper hd`
+        : `${cleanedCustom} wallpaper hd`
+      : randomPresetPick;
+
     onStatus?.({
-      toolName: 'Random Creative AI',
-      mirrorName: 'Pollinations Flux Creative',
-      attempt: 3,
+      toolName: `Random Image HD (${requestedCount} Gambar)`,
+      mirrorName: `Visual HD Feed (${activeLabel})`,
+      attempt: 2,
       isFallback: true,
     });
-    const creativePrompt =
-      customTheme ||
-      `${presetQueryMap[mode] || 'breathtaking cinematic masterpiece photography'}, ultra detailed 8k lighting`;
-    const pSeed = Math.floor(Math.random() * 900000) + 100000;
-    const w = isPortraitReq ? 720 : 1280;
-    const h = isPortraitReq ? 1280 : 720;
-    const pollUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(creativePrompt)}?width=${w}&height=${h}&nologo=true&seed=${pSeed}`;
-    const rPoll = await fetchToolEndpoint(pollUrl, 24000, signal);
-    if (rPoll.ok && rPoll.imageUrl) {
+
+    const [rBintangFallback, rSnowFallback] = await Promise.all([
+      fetchToolEndpoint(
+        `https://bintangapi.my.id/api/search/pinterest?q=${encodeURIComponent(pinSearchQuery)}`,
+        20000,
+        signal
+      ),
+      fetchToolEndpoint(
+        `https://api.snowping.cfd/api/search/pinterest?query=${encodeURIComponent(pinSearchQuery)}`,
+        20000,
+        signal
+      ),
+    ]);
+
+    const poolUrls: string[] = [];
+    const jBintangFb = safeParseJson(rBintangFallback.body);
+    if (rBintangFallback.ok && Array.isArray(jBintangFb?.data)) {
+      for (const rec of jBintangFb.data as Array<Record<string, unknown>>) {
+        const u = String(rec.image || rec.thumbnail || '').trim();
+        if (/^https?:\/\//i.test(u)) poolUrls.push(u);
+      }
+    }
+    const jSnowFb = safeParseJson(rSnowFallback.body);
+    if (rSnowFallback.ok && Array.isArray(jSnowFb?.result)) {
+      for (const item of jSnowFb.result as unknown[]) {
+        const u =
+          typeof item === 'string'
+            ? item
+            : item && typeof item === 'object'
+              ? String((item as Record<string, unknown>).image || (item as Record<string, unknown>).url || '')
+              : '';
+        if (/^https?:\/\//i.test(u)) poolUrls.push(u);
+      }
+    }
+
+    const dedupedPool = Array.from(new Set(poolUrls))
+      .sort(() => Math.random() - 0.5)
+      .slice(0, requestedCount);
+
+    if (dedupedPool.length > 0) {
       return {
         content: [
-          `### ✨ Kreasi Visual AI Acak Selesai — *${activeLabel}*`,
+          `### 🎨 Kreasi Visual Acak HD — ${activeLabel}${cleanedCustom ? ` (*"${cleanedCustom}"*)` : ''} (${dedupedPool.length} Gambar)`,
+          `Menampilkan **${dedupedPool.length} gambar acak resolusi tinggi** siap pakai *(klik tombol **Unduh** pada tiap kartu untuk menyimpan langsung)*:`,
           ``,
           randomImgCommandNotice,
         ].join('\n'),
-        answeredById: 'pollinations-random-creative',
-        answeredByName: 'Creative Random · Pollinations Flux',
+        answeredById: 'curated-visual-hd-fallback',
+        answeredByName: `Random HD Studio · ${activeLabel}`,
         usedFallback: true,
-        imageUrl: rPoll.imageUrl,
-        downloadItems: [
-          {
-            label: `Unduh Gambar HD (${w}×${h})`,
-            url: pollUrl,
-            kind: 'image',
-          },
-        ],
+        galleryUrls: dedupedPool,
+        galleryDownloadUrls: dedupedPool,
+        galleryAspect: targetAspect,
+        downloadItems:
+          dedupedPool.length <= 6
+            ? dedupedPool.map((u, idx) => ({
+                label: `Unduh Gambar HD #${idx + 1}`,
+                url: u,
+                kind: 'image' as const,
+              }))
+            : undefined,
+      };
+    }
+
+    // Fallback 3 (Guaranteed Multi-Image High-Res Unsplash Picsum — Supports Portrait 1080x1920 & Landscape 1920x1080!)
+    onStatus?.({
+      toolName: `Random Image HD (${requestedCount} Gambar)`,
+      mirrorName: 'Unsplash Picsum Multi-Ratio HD',
+      attempt: 3,
+      isFallback: true,
+    });
+    const fbPage = Math.floor(Math.random() * 25) + 1;
+    const rPicFb = await fetchToolEndpoint(
+      `https://picsum.photos/v2/list?page=${fbPage}&limit=30`,
+      16000,
+      signal
+    );
+    const picFbArr = parseSafeJsonAny(rPicFb.body);
+    if (rPicFb.ok && Array.isArray(picFbArr) && picFbArr.length > 0) {
+      const pickedPics = [...(picFbArr as Array<Record<string, unknown>>)]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, requestedCount);
+      const picPreviews = pickedPics.map((p) =>
+        isPortraitReq
+          ? `https://picsum.photos/id/${String(p.id)}/540/960`
+          : `https://picsum.photos/id/${String(p.id)}/960/540`
+      );
+      const picOriginals = pickedPics.map((p) =>
+        isPortraitReq
+          ? `https://picsum.photos/id/${String(p.id)}/1080/1920`
+          : String(p.download_url || `https://picsum.photos/id/${String(p.id)}/1920/1080`)
+      );
+      return {
+        content: [
+          `### 📸 Kreasi Wallpaper Acak HD — ${activeLabel} (${pickedPics.length} Gambar)`,
+          `Menampilkan **${pickedPics.length} wallpaper fotografi HD** (${isPortraitReq ? 'Rasio Vertikal HP `1080×1920`' : 'Resolusi Penuh HD'}) bebas pakai:`,
+          ``,
+          randomImgCommandNotice,
+        ].join('\n'),
+        answeredById: 'picsum-fallback-hd',
+        answeredByName: `Random HD · Unsplash (${isPortraitReq ? '9:16 HP' : 'HD'})`,
+        usedFallback: true,
+        galleryUrls: picPreviews,
+        galleryDownloadUrls: picOriginals,
+        galleryAspect: targetAspect,
       };
     }
 

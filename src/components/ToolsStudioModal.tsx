@@ -110,10 +110,10 @@ export function ToolsStudioModal({
 
   if (!isOpen) return null;
 
-  const handleChooseTool = (tool: WebToolDefinition) => {
+  const handleChooseTool = (tool: WebToolDefinition, initialMode?: string) => {
     setSelectedTool(tool);
     setInputValue('');
-    setSubOption(tool.secondarySelect?.defaultValue || '');
+    setSubOption(initialMode || tool.secondarySelect?.defaultValue || '');
     setCountValue(tool.countSelector?.defaultCount || 8);
     setUploadError('');
     setUploadedPreviewUrl('');
@@ -329,7 +329,53 @@ export function ToolsStudioModal({
                 </div>
               )}
 
-              {selectedTool.secondarySelect && (
+              {selectedTool.commandCatalog &&
+                selectedTool.commandCatalog.length > 0 && (
+                  <div className="rounded-xl border border-white/12 bg-black/55 p-2.5">
+                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1">
+                      <span className="text-[11px] font-bold text-[#FDBA74]">
+                        📋 Daftar Lengkap {selectedTool.commandCatalog.length} Command yang Bisa Digunakan (Klik untuk Pilih Mode):
+                      </span>
+                      <span className="text-[10px] text-[#94A3B8]">
+                        Mendukung <code className="text-[#67E8F9]">/randomimg</code> &amp;{' '}
+                        <code className="text-[#67E8F9]">/randomimage</code>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {selectedTool.commandCatalog.map((item) => {
+                        const isModeActive = subOption === item.value;
+                        return (
+                          <div
+                            key={item.value}
+                            onClick={() => setSubOption(item.value)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSubOption(item.value);
+                              }
+                            }}
+                            className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all cursor-pointer ${
+                              isModeActive
+                                ? 'border-[#22D3EE] bg-[#22D3EE]/18 text-white shadow-[0_0_10px_rgba(34,211,238,0.18)]'
+                                : 'border-white/10 bg-white/[0.03] text-[#E2E8F0] hover:border-white/25 hover:bg-white/[0.07]'
+                            }`}
+                          >
+                            <span className="truncate text-[11px] font-semibold">
+                              {item.label}
+                            </span>
+                            <code className="shrink-0 rounded border border-[#FB923C]/35 bg-black/65 px-1.5 py-0.5 font-mono-code text-[10px] text-[#FED7AA]">
+                              {item.command}
+                            </code>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              {selectedTool.secondarySelect && !selectedTool.commandCatalog && (
                 <div>
                   <label className="mb-1 block text-[11px] font-medium text-[#CBD5E1]">
                     {selectedTool.secondarySelect.label}
@@ -560,12 +606,25 @@ export function ToolsStudioModal({
               const isChosen = selectedTool?.id === tool.id;
               const isOrange = tool.category === 'B' || tool.category === 'E';
 
+              const hasCatalog = Boolean(
+                tool.commandCatalog && tool.commandCatalog.length > 0
+              );
+
               return (
-                <button
+                <div
                   key={tool.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleChooseTool(tool)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleChooseTool(tool);
+                    }
+                  }}
                   className={`flex flex-col justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                    hasCatalog ? 'sm:col-span-2' : ''
+                  } ${
                     isChosen
                       ? 'border-[#22D3EE] bg-[#22D3EE]/12 shadow-[0_0_18px_rgba(34,211,238,0.14)]'
                       : 'border-white/8 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
@@ -583,16 +642,55 @@ export function ToolsStudioModal({
                         <Icon className="h-3.5 w-3.5" />
                       </span>
                       <span className="rounded-md border border-white/10 bg-black/50 px-1.5 py-0.5 font-mono-code text-[10px] text-[#CBD5E1]">
-                        {tool.slashCommand}
+                        {tool.id === 'randomimg'
+                          ? '/randomimage · /randomimg'
+                          : tool.slashCommand}
                       </span>
                     </div>
 
                     <h3 className="mt-2 font-display text-sm font-bold text-white">
                       {tool.name}
                     </h3>
-                    <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#94A3B8]">
+                    <p
+                      className={`mt-1 text-xs leading-relaxed text-[#94A3B8] ${
+                        hasCatalog ? '' : 'line-clamp-2'
+                      }`}
+                    >
                       {tool.description}
                     </p>
+
+                    {hasCatalog && tool.commandCatalog && (
+                      <div className="mt-2.5 rounded-xl border border-[#22D3EE]/20 bg-black/50 p-2.5">
+                        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1">
+                          <span className="text-[10.5px] font-bold text-[#67E8F9]">
+                            📌 Semua Command Random Image yang Bisa Digunakan (Klik Mode untuk Pakai):
+                          </span>
+                          <span className="font-mono-code text-[10px] text-[#FDBA74]">
+                            Tambah ,jumlah (1–30) · misal ,10
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                          {tool.commandCatalog.map((catItem) => (
+                            <button
+                              key={catItem.value}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleChooseTool(tool, catItem.value);
+                              }}
+                              className="flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-left transition-colors hover:border-[#22D3EE]/45 hover:bg-[#22D3EE]/15 cursor-pointer"
+                            >
+                              <span className="truncate text-[10.5px] font-medium text-[#F1F5F9]">
+                                {catItem.label}
+                              </span>
+                              <code className="shrink-0 rounded bg-black/70 px-1.5 py-0.5 font-mono-code text-[9.5px] text-[#67E8F9]">
+                                {catItem.command}
+                              </code>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
@@ -613,7 +711,7 @@ export function ToolsStudioModal({
                       Pilih →
                     </span>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

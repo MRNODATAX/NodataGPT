@@ -413,6 +413,7 @@ export function App() {
                     audioTitle: result.audioTitle,
                     galleryUrls: result.galleryUrls,
                     galleryDownloadUrls: result.galleryDownloadUrls,
+                    galleryAspect: result.galleryAspect,
                     downloadItems: result.downloadItems,
                     summarizeTranscript: result.summarizeTranscript,
                     status: 'done',

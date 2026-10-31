@@ -19,6 +19,7 @@ import {
   IMAGE_ENGINES,
   type ImageModelOption,
 } from '../services/modelCatalog';
+import { RANDOM_IMAGE_COMMAND_MODES } from '../services/webTools';
 
 interface ChatComposerProps {
   value: string;
@@ -185,29 +186,57 @@ export function ChatComposer({
     textareaRef.current?.focus();
   };
 
+  const applyRandomModeToInput = (cmdText: string) => {
+    const trailingMatch = value.trim().match(/\s*,\s*(\d{1,3})\s*$/);
+    const nextCmd = trailingMatch ? `${cmdText} ,${trailingMatch[1]}` : cmdText;
+    onChange(nextCmd);
+    textareaRef.current?.focus();
+  };
+
   return (
     <div className="pb-safe w-full shrink-0 bg-gradient-to-t from-[#03050B]/95 via-[#03050B]/70 to-transparent px-3 pt-1.5 sm:px-6 sm:pt-2">
       <div className="mx-auto w-full max-w-3xl">
         {(isRandomImageCmd || isPinterestCmd) && (
-          <div className="mb-2 rounded-2xl border border-[#22D3EE]/30 bg-[#07111E]/92 px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-md">
+          <div className="mb-2 max-h-[38dvh] overflow-y-auto rounded-2xl border border-[#22D3EE]/30 bg-[#07111E]/95 px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.6)] backdrop-blur-md">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
               <span className="font-semibold text-[#67E8F9]">
                 📌 Pemberitahuan Command &amp; Cara Pakai{' '}
                 <code className="font-mono-code text-white">
-                  {isRandomImageCmd ? '/randomimage' : '/pinterest'}
+                  {isRandomImageCmd ? '/randomimage · /randomimg' : '/pinterest'}
                 </code>
               </span>
               <code className="rounded border border-[#FB923C]/35 bg-[#FB923C]/12 px-1.5 py-0.5 font-mono-code text-[10px] text-[#FDBA74]">
                 {isRandomImageCmd
-                  ? '/randomimage [mode / tema] ,<jumlah 1–30>'
+                  ? '/randomimg [mode / tema] ,<jumlah 1–30>'
                   : '/pinterest <kata kunci> ,<jumlah 1–30>'}
               </code>
             </div>
             <p className="mt-1 text-[11px] leading-snug text-[#CBD5E1]">
               {isRandomImageCmd
-                ? 'Pilih mode (anime, cyberpunk, nature, space, city, minimal, portrait, mockup) atau ketik tema bebas, lalu akhiri dengan ,jumlah (contoh: /randomimage anime ,10).'
+                ? 'Klik salah satu dari 9 command mode di bawah (atau ketik tema bebas), lalu tambahkan ,jumlah (contoh: /randomimg anime ,10 atau /randomimage portrait ,6).'
                 : 'Ketik kata kunci pencarian lalu akhiri dengan ,jumlah (1–30) untuk mengatur banyak pin (contoh: /pinterest alya kujou ,10).'}
             </p>
+
+            {isRandomImageCmd && (
+              <div className="mt-1.5 grid grid-cols-1 gap-1 sm:grid-cols-3">
+                {RANDOM_IMAGE_COMMAND_MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => applyRandomModeToInput(m.command)}
+                    className="flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-left transition-colors hover:border-[#22D3EE]/45 hover:bg-[#22D3EE]/15 cursor-pointer"
+                  >
+                    <span className="truncate text-[10.5px] font-medium text-[#F1F5F9]">
+                      {m.label}
+                    </span>
+                    <code className="shrink-0 rounded bg-black/70 px-1.5 py-0.5 font-mono-code text-[9.5px] text-[#67E8F9]">
+                      {m.command}
+                    </code>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-semibold text-[#94A3B8]">
                 Atur jumlah cepat:
@@ -222,25 +251,28 @@ export function ChatComposer({
                   ,{cnt}
                 </button>
               ))}
-              <span className="ml-1 text-[10px] font-semibold text-[#94A3B8]">
-                Contoh:
-              </span>
-              {(isRandomImageCmd
-                ? ['/randomimage anime ,10', '/randomimage cyberpunk ,8']
-                : ['/pinterest alya kujou ,10', '/pinterest anime aesthetic ,15']
-              ).map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => {
-                    onChange(ex);
-                    textareaRef.current?.focus();
-                  }}
-                  className="rounded-md border border-white/12 bg-white/[0.05] px-2 py-0.5 font-mono-code text-[10px] text-[#E2E8F0] transition-colors hover:border-[#FB923C]/45 hover:bg-[#FB923C]/15 hover:text-white cursor-pointer"
-                >
-                  {ex}
-                </button>
-              ))}
+              {!isRandomImageCmd && (
+                <>
+                  <span className="ml-1 text-[10px] font-semibold text-[#94A3B8]">
+                    Contoh:
+                  </span>
+                  {['/pinterest alya kujou ,10', '/pinterest anime aesthetic ,15'].map(
+                    (ex) => (
+                      <button
+                        key={ex}
+                        type="button"
+                        onClick={() => {
+                          onChange(ex);
+                          textareaRef.current?.focus();
+                        }}
+                        className="rounded-md border border-white/12 bg-white/[0.05] px-2 py-0.5 font-mono-code text-[10px] text-[#E2E8F0] transition-colors hover:border-[#FB923C]/45 hover:bg-[#FB923C]/15 hover:text-white cursor-pointer"
+                      >
+                        {ex}
+                      </button>
+                    )
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

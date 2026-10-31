@@ -93,6 +93,12 @@ const ALLOWED_HOSTS = new Set([
   'api.open-meteo.com',
   'air-quality-api.open-meteo.com',
   'i.pximg.net',
+  'wallhaven.cc',
+  'w.wallhaven.cc',
+  'th.wallhaven.cc',
+  'picsum.photos',
+  'fastly.picsum.photos',
+  'nekos.best',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [

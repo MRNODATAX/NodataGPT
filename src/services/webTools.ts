@@ -384,6 +384,36 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     },
   },
   {
+    id: 'randomimg',
+    category: 'D',
+    categoryLabel: 'Kreatif, Riset & Info ID',
+    name: 'Kreasi Visual Acak & Wallpaper 4K Studio',
+    shortName: 'Random Image 4K',
+    slashCommand: '/randomimg',
+    badge: 'Tanpa API Key · 4K + Palet HEX',
+    description:
+      'Eksplorasi gambar acak & wallpaper 4K/HD bebas kunci (Alam, Cyberpunk, Galaksi, Kota, Anime, Minimalis, HP Portrait, & Mockup Desain) lengkap dengan ekstraksi palet warna HEX dan Unduh 4K 1-Klik.',
+    placeholder:
+      'Opsional: ketik tema bebas sendiri (mis. ocean sunset, supercar, samurai) atau langsung klik Jalankan...',
+    exampleInput: 'cyberpunk rain neon',
+    requiresInput: false,
+    secondarySelect: {
+      label: 'Mode Kreasi Visual',
+      defaultValue: 'random',
+      options: [
+        { value: 'random', label: '🎲 Acak Bebas 4K' },
+        { value: 'nature', label: '🌿 Alam & Lanskap' },
+        { value: 'cyberpunk', label: '🌆 Cyberpunk & Tech' },
+        { value: 'space', label: '🌌 Galaksi & Angkasa' },
+        { value: 'city', label: '🏙️ Kota & Arsitektur' },
+        { value: 'anime', label: '🎨 Anime & Ilustrasi HD' },
+        { value: 'minimal', label: '✨ Minimalis & Abstract' },
+        { value: 'portrait', label: '📱 Wallpaper HP (9:16)' },
+        { value: 'mockup', label: '📸 Foto Mockup UI (Unsplash)' },
+      ],
+    },
+  },
+  {
     id: 'pinterest',
     category: 'D',
     categoryLabel: 'Kreatif, Riset & Info ID',
@@ -892,6 +922,29 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'pinterest':
     case 'pin':
       return { toolId: 'pinterest', arg: rest };
+    case 'randomimg':
+    case 'randomimage':
+    case 'wallpaper':
+    case 'wall': {
+      const modePipe = rest.match(
+        /^(random|nature|cyberpunk|space|city|anime|minimal|portrait|mockup)\s*\|\s*([\s\S]*)$/i
+      );
+      if (modePipe) {
+        return {
+          toolId: 'randomimg',
+          arg: modePipe[2].trim(),
+          subOption: modePipe[1].toLowerCase(),
+        };
+      }
+      if (
+        /^(random|nature|cyberpunk|space|city|anime|minimal|portrait|mockup)$/i.test(
+          rest
+        )
+      ) {
+        return { toolId: 'randomimg', arg: '', subOption: rest.toLowerCase() };
+      }
+      return { toolId: 'randomimg', arg: rest, subOption: 'random' };
+    }
     case 'gempa':
     case 'bmkg':
       return { toolId: 'gempa', arg: rest };
@@ -1035,6 +1088,12 @@ export function buildSlashCommandFromTool(
   }
   if (tool.id === 'stalker' && subOption) {
     return `/stalk ${subOption} | ${clean}`.trim();
+  }
+  if (tool.id === 'randomimg') {
+    const mode = subOption || 'random';
+    if (!clean && mode === 'random') return '/randomimg';
+    if (!clean) return `/randomimg ${mode}`;
+    return `/randomimg ${mode} | ${clean}`;
   }
   if (!clean) return tool.slashCommand;
   return `${tool.slashCommand} ${clean}`;
@@ -4827,6 +4886,245 @@ export async function executeWebToolCommand({
     }
 
     throw new Error(`Akun TikTok "@${cleanTarget}" tidak ditemukan atau bersifat privat.`);
+  }
+
+  // === 32. KREASI VISUAL ACAK & WALLPAPER 4K STUDIO (100% KEYLESS MULTI-ENGINE) ===
+  if (toolId === 'randomimg') {
+    const mode = (subOption || 'random').toLowerCase();
+    const customTheme = arg.trim();
+
+    const modeLabels: Record<string, string> = {
+      random: 'Acak Bebas 4K/HD',
+      nature: 'Alam & Lanskap',
+      cyberpunk: 'Cyberpunk & Sci-Fi',
+      space: 'Galaksi & Luar Angkasa',
+      city: 'Kota Malam & Arsitektur',
+      anime: 'Anime & Ilustrasi HD',
+      minimal: 'Minimalis & Abstract Desain',
+      portrait: 'Wallpaper HP Portrait (9:16)',
+      mockup: 'Fotografi Mockup Desain (Unsplash HD)',
+    };
+    const activeLabel = modeLabels[mode] || 'Kreasi Visual Acak';
+
+    // Mode Mockup: Unsplash Picsum Curated High-Res Photography (Zero API Key)
+    if (mode === 'mockup' && !customTheme) {
+      onStatus?.({
+        toolName: 'Random Image Studio',
+        mirrorName: 'Unsplash Picsum HD',
+        attempt: 1,
+        isFallback: false,
+      });
+      const randPage = Math.floor(Math.random() * 28) + 1;
+      const rPic = await fetchToolEndpoint(
+        `https://picsum.photos/v2/list?page=${randPage}&limit=24`,
+        16000,
+        signal
+      );
+      const picArr = parseSafeJsonAny(rPic.body);
+      if (rPic.ok && Array.isArray(picArr) && picArr.length > 0) {
+        const shuffled = [...(picArr as Array<Record<string, unknown>>)]
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 4);
+        const previews = shuffled.map(
+          (p) => `https://picsum.photos/id/${String(p.id)}/960/640`
+        );
+        const rows = shuffled
+          .map(
+            (p, idx) =>
+              `| **#${idx + 1}** | **${String(p.author || 'Unsplash Photographer')}** | \`${String(p.width)}×${String(p.height)} px\` | [Sumber Unsplash](${String(p.url || '')}) |`
+          )
+          .join('\n');
+        return {
+          content: [
+            `### 📸 Kreasi Foto Mockup & Desain UI Acak *(Tanpa API Key)*`,
+            `Menampilkan **4 foto resolusi tinggi bebas pakai** (pratinjau hemat kuota + tombol unduh resolusi asli penuh):`,
+            ``,
+            `| Karya | Fotografer | Resolusi Asli | Referensi |`,
+            `| :--- | :--- | :--- | :--- |`,
+            rows,
+          ].join('\n'),
+          answeredById: 'picsum-unsplash-hd',
+          answeredByName: 'Random Mockup HD · Unsplash Picsum',
+          usedFallback: false,
+          galleryUrls: previews,
+          downloadItems: shuffled.map((p, idx) => ({
+            label: `Unduh Original #${idx + 1} (${String(p.width)}×${String(p.height)})`,
+            url: String(p.download_url || previews[idx]),
+            kind: 'image' as const,
+          })),
+        };
+      }
+    }
+
+    // Primary Engine: Wallhaven 4K Curated Random API (Supports custom keywords, categories, ratios, & HEX color palettes!)
+    onStatus?.({
+      toolName: 'Random Image 4K Studio',
+      mirrorName: `Wallhaven 4K (${activeLabel})`,
+      attempt: 1,
+      isFallback: false,
+    });
+
+    const presetQueryMap: Record<string, string> = {
+      nature: 'nature landscape',
+      cyberpunk: 'cyberpunk neon futuristic',
+      space: 'space galaxy nebula cosmos',
+      city: 'cityscape night architecture',
+      minimal: 'minimalism abstract',
+    };
+
+    const isPortraitReq =
+      mode === 'portrait' || /\b(?:portrait|9:16|hp|mobile|vertikal)\b/i.test(customTheme);
+    const cleanedCustom = customTheme
+      .replace(/\b(?:portrait|9:16|landscape|16:9)\b/gi, '')
+      .trim();
+    const effectiveQuery = cleanedCustom || presetQueryMap[mode] || '';
+    const categoriesParam = mode === 'anime' && !cleanedCustom ? '010' : '110';
+    const ratioParam = isPortraitReq ? '&ratios=portrait' : '&ratios=landscape';
+    const seed = Math.random().toString(36).slice(2, 8);
+
+    const whUrl =
+      `https://wallhaven.cc/api/v1/search?sorting=random&purity=100` +
+      `&categories=${categoriesParam}${ratioParam}&seed=${seed}` +
+      (effectiveQuery ? `&q=${encodeURIComponent(effectiveQuery)}` : '');
+
+    const rWh = await fetchToolEndpoint(whUrl, 18000, signal);
+    const jWh = safeParseJson(rWh.body);
+    const whData = Array.isArray(jWh?.data)
+      ? (jWh.data as Array<Record<string, unknown>>)
+      : [];
+
+    if (rWh.ok && whData.length > 0) {
+      const picked = whData.slice(0, 4);
+      const previewUrls: string[] = [];
+      const dlItems: MediaDownloadItem[] = [];
+      const tableRows: string[] = [];
+
+      picked.forEach((item, idx) => {
+        const thumbs = (item.thumbs || {}) as Record<string, unknown>;
+        const thumbUrl = String(
+          thumbs.large || thumbs.original || item.path || ''
+        ).trim();
+        const fullUrl = String(item.path || thumbUrl).trim();
+        if (!thumbUrl.startsWith('http')) return;
+
+        const resStr = String(item.resolution || '-');
+        const bytes = Number(item.file_size || 0);
+        const sizeMb =
+          bytes > 0 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : 'HD';
+        const colors = Array.isArray(item.colors)
+          ? (item.colors as string[])
+              .slice(0, 5)
+              .map((c) => `\`${c.toUpperCase()}\``)
+              .join(' ')
+          : '-';
+
+        previewUrls.push(thumbUrl);
+        dlItems.push({
+          label: `Unduh HD/4K #${idx + 1} (${resStr} · ${sizeMb})`,
+          url: fullUrl,
+          kind: 'image',
+        });
+        tableRows.push(
+          `| **#${idx + 1}** | **${resStr}** *(${sizeMb})* | ${colors} |`
+        );
+      });
+
+      if (previewUrls.length > 0) {
+        return {
+          content: [
+            `### 🎨 Kreasi Visual Acak & Wallpaper 4K — ${activeLabel}${customTheme ? ` (*"${customTheme}"*)` : ''}`,
+            `Menampilkan **${previewUrls.length} visual acak berkualitas tinggi** tanpa API key *(pratinjau ringan hemat kuota + palet warna desain HEX + unduh resolusi penuh 1-klik)*:`,
+            ``,
+            `| Visual | Resolusi & Ukuran Asli | Ekstraksi Palet Warna Desain (HEX) |`,
+            `| :--- | :--- | :--- |`,
+            ...tableRows,
+          ].join('\n'),
+          answeredById: 'wallhaven-random-4k',
+          answeredByName: 'Random 4K Studio · Wallhaven',
+          usedFallback: false,
+          galleryUrls: previewUrls,
+          downloadItems: dlItems,
+        };
+      }
+    }
+
+    // Fallback 2 (Anime mode): Nekos.best High-Res Artist Illustrations
+    if (mode === 'anime') {
+      onStatus?.({
+        toolName: 'Random Anime HD',
+        mirrorName: 'Nekos.best Artist HD',
+        attempt: 2,
+        isFallback: true,
+      });
+      const rNeko = await fetchToolEndpoint(
+        'https://nekos.best/api/v2/waifu?amount=4',
+        16000,
+        signal
+      );
+      const jNeko = safeParseJson(rNeko.body);
+      const nekoList = Array.isArray(jNeko?.results)
+        ? (jNeko.results as Array<Record<string, unknown>>)
+        : [];
+      if (rNeko.ok && nekoList.length > 0) {
+        const urls = nekoList
+          .map((x) => String(x.url || '').trim())
+          .filter((u) => u.startsWith('http'));
+        if (urls.length > 0) {
+          const credits = nekoList
+            .map(
+              (x, idx) =>
+                `${idx + 1}. Ilustrator: **[${String(x.artist_name || 'Artist')}](${String(x.source_url || x.artist_href || '#')})**`
+            )
+            .join('\n');
+          return {
+            content: `### 🎨 Kreasi Ilustrasi Anime Acak HD\n\n${credits}`,
+            answeredById: 'nekos-best-hd',
+            answeredByName: 'Anime HD · Nekos.best',
+            usedFallback: true,
+            galleryUrls: urls,
+            downloadItems: urls.map((u, idx) => ({
+              label: `Unduh Ilustrasi HD #${idx + 1}`,
+              url: u,
+              kind: 'image' as const,
+            })),
+          };
+        }
+      }
+    }
+
+    // Fallback 3: Pollinations AI Instant Creative Render (100% Keyless, Custom Prompt Capable!)
+    onStatus?.({
+      toolName: 'Random Creative AI',
+      mirrorName: 'Pollinations Flux Creative',
+      attempt: 3,
+      isFallback: true,
+    });
+    const creativePrompt =
+      customTheme ||
+      `${presetQueryMap[mode] || 'breathtaking cinematic masterpiece photography'}, ultra detailed 8k lighting`;
+    const pSeed = Math.floor(Math.random() * 900000) + 100000;
+    const w = isPortraitReq ? 720 : 1280;
+    const h = isPortraitReq ? 1280 : 720;
+    const pollUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(creativePrompt)}?width=${w}&height=${h}&nologo=true&seed=${pSeed}`;
+    const rPoll = await fetchToolEndpoint(pollUrl, 24000, signal);
+    if (rPoll.ok && rPoll.imageUrl) {
+      return {
+        content: `### ✨ Kreasi Visual AI Acak Selesai — *${activeLabel}*`,
+        answeredById: 'pollinations-random-creative',
+        answeredByName: 'Creative Random · Pollinations Flux',
+        usedFallback: true,
+        imageUrl: rPoll.imageUrl,
+        downloadItems: [
+          {
+            label: `Unduh Gambar HD (${w}×${h})`,
+            url: pollUrl,
+            kind: 'image',
+          },
+        ],
+      };
+    }
+
+    throw new Error('Gagal memuat gambar acak saat ini. Silakan coba klik Jalankan kembali.');
   }
 
   throw new Error(`Perintah tool "${toolId}" tidak dikenali.`);

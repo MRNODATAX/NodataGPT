@@ -87,6 +87,7 @@ function inferRefererForHost(hostname) {
   }
   if (h.includes('scdn') || h.includes('spotify')) return 'https://open.spotify.com/';
   if (h.includes('pximg') || h.includes('pixiv')) return 'https://www.pixiv.net/';
+  if (h.includes('wallhaven')) return 'https://wallhaven.cc/';
   if (h.includes('mediafire')) return 'https://www.mediafire.com/';
   if (h.includes('terabox') || h.includes('1024tera')) return 'https://www.1024terabox.com/';
   if (h.includes('sndcdn') || h.includes('soundcloud')) return 'https://soundcloud.com/';

@@ -11,7 +11,7 @@ export const config = {
 };
 
 const DEFAULT_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
 function isBlockedInternalHost(hostname) {
   const host = String(hostname || '').trim().toLowerCase();
@@ -87,7 +87,6 @@ function inferRefererForHost(hostname) {
   }
   if (h.includes('scdn') || h.includes('spotify')) return 'https://open.spotify.com/';
   if (h.includes('pximg') || h.includes('pixiv')) return 'https://www.pixiv.net/';
-  if (h.includes('wallhaven')) return 'https://wallhaven.cc/';
   if (h.includes('mediafire')) return 'https://www.mediafire.com/';
   if (h.includes('terabox') || h.includes('1024tera')) return 'https://www.1024terabox.com/';
   if (h.includes('sndcdn') || h.includes('soundcloud')) return 'https://soundcloud.com/';
@@ -161,18 +160,19 @@ export default {
       );
     }
 
-    const upstreamHeaders = {
-      'User-Agent': DEFAULT_UA,
-      Accept: '*/*',
+    const callerUa = (request.headers.get('user-agent') || '').trim();
+    const baseHeaders = {
+      'User-Agent': /^Mozilla\/5\.0\b/i.test(callerUa) ? callerUa : DEFAULT_UA,
+      Accept: 'image/*, video/*, audio/*, application/octet-stream, */*',
     };
     const referer = inferRefererForHost(parsedTarget.hostname);
-    if (referer) {
-      upstreamHeaders['Referer'] = referer;
-    }
+    const upstreamHeaders = referer
+      ? { ...baseHeaders, Referer: referer }
+      : { ...baseHeaders };
 
     if (isProbe) {
       try {
-        const probeRes = await fetch(parsedTarget.toString(), {
+        let probeRes = await fetch(parsedTarget.toString(), {
           method: 'GET',
           headers: {
             ...upstreamHeaders,
@@ -181,6 +181,21 @@ export default {
           redirect: 'follow',
           signal: AbortSignal.timeout(8000),
         });
+
+        // If Cloudflare/CDN rejected spoofed Referer or Range, retry cleanly with bare headers (body is canceled immediately)
+        if (probeRes.status === 403 || probeRes.status === 416) {
+          try {
+            await probeRes.body?.cancel();
+          } catch {
+            // Ignore
+          }
+          probeRes = await fetch(parsedTarget.toString(), {
+            method: 'GET',
+            headers: { ...baseHeaders },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(8000),
+          });
+        }
 
         const ct = (probeRes.headers.get('content-type') || '').toLowerCase();
         const cr = probeRes.headers.get('content-range') || '';
@@ -238,12 +253,26 @@ export default {
         upstreamHeaders['Range'] = rangeHeader;
       }
 
-      const upstreamRes = await fetch(parsedTarget.toString(), {
+      let upstreamRes = await fetch(parsedTarget.toString(), {
         method: 'GET',
         headers: upstreamHeaders,
         redirect: 'follow',
         signal: AbortSignal.timeout(55000),
       });
+
+      if (upstreamRes.status === 403 && (referer || rangeHeader)) {
+        try {
+          await upstreamRes.body?.cancel();
+        } catch {
+          // Ignore
+        }
+        upstreamRes = await fetch(parsedTarget.toString(), {
+          method: 'GET',
+          headers: { ...baseHeaders },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(55000),
+        });
+      }
 
       const contentType =
         upstreamRes.headers.get('content-type') || 'application/octet-stream';

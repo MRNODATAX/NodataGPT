@@ -311,14 +311,14 @@ export function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="nd-glass-sheet animate-sheet-up flex max-h-[88dvh] w-full flex-col rounded-t-[26px] sm:max-w-lg sm:rounded-2xl"
+        className="nd-glass-sheet animate-sheet-up flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-w-lg sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-2.5 sm:hidden">
+        <div className="flex shrink-0 justify-center pt-2.5 sm:hidden">
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5 sm:py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3.5 sm:py-4">
           <h2
             id="nodatagpt-settings-title"
             className="font-display text-base font-bold text-white sm:text-lg"
@@ -335,7 +335,7 @@ export function SettingsModal({
           </button>
         </div>
 
-        <div className="pb-safe flex-1 space-y-4 overflow-y-auto p-5">
+        <div className="pb-safe min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
           {/* Live Starfield & Shooting Stars */}
           <div className="flex items-start justify-between gap-4">
             <div>

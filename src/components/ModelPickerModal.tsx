@@ -198,14 +198,14 @@ export function ModelPickerModal({
       onClick={onClose}
     >
       <div
-        className="nd-glass-sheet animate-sheet-up flex max-h-[88dvh] w-full flex-col rounded-t-[26px] sm:max-h-[84dvh] sm:max-w-xl sm:rounded-2xl"
+        className="nd-glass-sheet animate-sheet-up flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[84dvh] sm:max-w-xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-2.5 sm:hidden">
+        <div className="flex shrink-0 justify-center pt-2.5 sm:hidden">
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2
               id="nodatagpt-model-picker-title"
@@ -234,7 +234,7 @@ export function ModelPickerModal({
         </div>
 
         {/* Mode Switcher Tabs: Model Chat vs Model Gambar */}
-        <div className="space-y-2.5 border-b border-white/10 px-4 py-3 sm:px-5">
+        <div className="shrink-0 space-y-2.5 border-b border-white/10 px-4 py-3 sm:px-5">
           <div
             role="tablist"
             aria-label="Kategori jenis model AI"
@@ -392,7 +392,7 @@ export function ModelPickerModal({
 
           {/* Category Filter Chips */}
           {activeTab === 'chat' ? (
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
               {CHAT_CATEGORIES.map((cat) => {
                 const active = activeChatCategory === cat.id;
                 return (
@@ -412,7 +412,7 @@ export function ModelPickerModal({
               })}
             </div>
           ) : (
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
               {IMAGE_CATEGORIES.map((cat) => {
                 const active = activeImageCategory === cat.id;
                 return (
@@ -435,7 +435,7 @@ export function ModelPickerModal({
         </div>
 
         {/* Scrollable Model List */}
-        <div className="pb-safe flex-1 space-y-1.5 overflow-y-auto p-3 sm:p-4">
+        <div className="pb-safe min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain p-3 sm:p-4">
           {activeTab === 'chat'
             ? (
               <>

@@ -20,8 +20,8 @@ const NODATAGPT_DEFAULT_SYSTEM =
 /** @type {Map<string, { token: string, sessionUuid: string, expiresAt: number }>} */
 const cachedZeroGpuTokens = new Map();
 
-/** @type {{ sessionId: string, nonce: string, mintedAt: number } | null} */
-let cachedFreeAiOnlineSession = null;
+/** @type {{ id: string, ts: number } | null} */
+let cachedOpenCodeSession = null;
 
 function md5Hex(input) {
   return crypto.createHash('md5').update(String(input), 'utf8').digest('hex');
@@ -33,6 +33,20 @@ function revMd5(input) {
 
 function randomHex(byteLen = 16) {
   return crypto.randomBytes(byteLen).toString('hex');
+}
+
+function ocId(prefix) {
+  const ts = Date.now().toString(16);
+  const rnd = crypto.randomBytes(12).toString('base64url').slice(0, 16);
+  return `${prefix}_${ts}${rnd}`;
+}
+
+function getOpenCodeSessionId() {
+  const now = Date.now();
+  if (!cachedOpenCodeSession || now - cachedOpenCodeSession.ts > 20 * 60 * 1000) {
+    cachedOpenCodeSession = { id: ocId('ses'), ts: now };
+  }
+  return cachedOpenCodeSession.id;
 }
 
 function createDeepAiTryItKey(userAgent) {
@@ -53,16 +67,27 @@ function normalizePersonaReply(rawText) {
       'Saya adalah NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA.'
     )
     .replace(
-      /Saya bernama Step,\s*dikembangkan oleh[^.\n]+\.?/gi,
-      'Saya bernama NodataGPT, asisten AI yang dibuat dan dikembangkan oleh Mr.NODATA.'
+      /\b(?:Halo,?\s*)?(?:saya|aku)\s+(?:adalah\s+|bernama\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral|Aitopia)(?:,\s*asisten AI[^.\n]*?(?:OpenAI|Anthropic|Google|Alibaba|DeepSeek|Cohere|xAI|Moonshot|Mistral|DeepAI))?/gi,
+      (match) => {
+        const startsHalo = /^halo/i.test(match);
+        return `${startsHalo ? 'Halo, ' : ''}saya NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA`;
+      }
     )
     .replace(
-      /\b(?:I am|I'm)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step)\b/gi,
+      /\b(?:Nama saya|Nama aku)\s+(?:adalah\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral|Aitopia)\b/gi,
+      'Nama saya NodataGPT'
+    )
+    .replace(
+      /\b(?:dibuat|dikembangkan|diciptakan|dilatih)\s+oleh\s+(?:OpenAI|Anthropic|Google|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
+      'dibuat dan dikembangkan oleh Mr.NODATA'
+    )
+    .replace(
+      /\b(?:I am|I'm)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral)\b/gi,
       'I am NodataGPT (created by Mr.NODATA)'
     )
     .replace(
-      /\b(?:Saya adalah|Aku adalah|Nama saya|Saya bernama)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step)\b/gi,
-      'Saya adalah NodataGPT (dibuat oleh Mr.NODATA)'
+      /\b(?:created|developed|built|made|trained)\s+by\s+(?:OpenAI|Anthropic|Google|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
+      'created and developed by Mr.NODATA'
     );
 }
 
@@ -75,11 +100,11 @@ function buildCombinedPrompt(system, userText) {
 
 function ratioToDimensions(ratio) {
   const clean = String(ratio || '1:1').trim();
-  if (clean === '16:9') return { width: 1280, height: 720, aspect: '16:9', hordeW: 768, hordeH: 512 };
-  if (clean === '9:16') return { width: 720, height: 1280, aspect: '9:16', hordeW: 512, hordeH: 768 };
-  if (clean === '4:3') return { width: 1152, height: 864, aspect: '4:3', hordeW: 640, hordeH: 512 };
-  if (clean === '3:4') return { width: 864, height: 1152, aspect: '3:4', hordeW: 512, hordeH: 640 };
-  return { width: 1024, height: 1024, aspect: '1:1', hordeW: 576, hordeH: 576 };
+  if (clean === '16:9') return { width: 1280, height: 720, aspect: '16:9', hordeW: 640, hordeH: 384 };
+  if (clean === '9:16') return { width: 720, height: 1280, aspect: '9:16', hordeW: 384, hordeH: 640 };
+  if (clean === '4:3') return { width: 1152, height: 864, aspect: '4:3', hordeW: 576, hordeH: 448 };
+  if (clean === '3:4') return { width: 864, height: 1152, aspect: '3:4', hordeW: 448, hordeH: 576 };
+  return { width: 1024, height: 1024, aspect: '1:1', hordeW: 512, hordeH: 512 };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
@@ -118,6 +143,11 @@ function parseOpenAiSseOrJson(raw) {
   if (trimmed.startsWith('{')) {
     try {
       const json = JSON.parse(trimmed);
+      if (json?.error || json?.type === 'error') {
+        const errMsg =
+          json?.error?.message || json?.message || JSON.stringify(json.error);
+        throw new Error(`Upstream error: ${String(errMsg).slice(0, 140)}`);
+      }
       const choice = Array.isArray(json?.choices) ? json.choices[0] : null;
       const content =
         choice?.message?.content ||
@@ -134,8 +164,11 @@ function parseOpenAiSseOrJson(raw) {
       if (typeof content === 'string' && content.trim()) {
         return { text: content.trim(), thinking: String(reasoning || '').trim() };
       }
-    } catch {
-      // fall through to line parser
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Upstream error:')) {
+        throw e;
+      }
+      // fall through to SSE line parser
     }
   }
 
@@ -148,6 +181,10 @@ function parseOpenAiSseOrJson(raw) {
     if (!dataStr || dataStr === '[DONE]') continue;
     try {
       const obj = JSON.parse(dataStr);
+      if (obj?.error || obj?.type === 'error') {
+        const errMsg = obj?.error?.message || obj?.message || 'stream error';
+        if (!answer) throw new Error(`Upstream error: ${String(errMsg).slice(0, 140)}`);
+      }
       const choice = Array.isArray(obj?.choices)
         ? obj.choices[0]
         : obj?.choices && typeof obj.choices === 'object'
@@ -162,8 +199,10 @@ function parseOpenAiSseOrJson(raw) {
         '';
       if (typeof deltaContent === 'string') answer += deltaContent;
       if (typeof deltaThink === 'string') thinking += deltaThink;
-    } catch {
-      // ignore non-json SSE line
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Upstream error:')) {
+        throw e;
+      }
     }
   }
 
@@ -171,63 +210,45 @@ function parseOpenAiSseOrJson(raw) {
 }
 
 // ============================================================================
-// 1. OPENCODE.AI ZEN — Keyless Agentic & Reasoning Models (opencode.ai)
+// 1. OPENCODE.AI ZEN — Keyless CLI Protocol (opencode/1.19.5 + x-opencode-client: cli)
 // ============================================================================
-const OPENCODE_DEFAULT_TOOLS = [
-  'bash',
-  'edit',
-  'glob',
-  'grep',
-  'question',
-  'read',
-  'skill',
-  'task',
-  'todowrite',
-  'webfetch',
-  'websearch',
-  'write',
-].map((name) => ({ type: 'function', function: { name } }));
-
 async function scrapeOpenCodeZen({
   text,
   system,
   model = 'deepseek-v4.1-flash-free',
 }) {
+  const payload = JSON.stringify({
+    model,
+    stream: true,
+    messages: [
+      { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+      { role: 'user', content: text },
+    ],
+  });
+
   const res = await fetchWithTimeout(
     'https://opencode.ai/zen/v1/chat/completions',
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Accept: '*/*',
-        'Accept-Language': '*',
+        Accept: 'text/event-stream, application/json, */*',
         Authorization: 'Bearer public',
-        'Sec-Fetch-Mode': 'cors',
-        'x-opencode-client': 'desktop',
-        'x-opencode-project': randomHex(20),
-        'x-opencode-request': `msg_${randomHex(13)}`,
-        'x-opencode-session': `ses_${randomHex(13)}`,
         'User-Agent':
-          'opencode/1.18.18 ai-sdk/provider-utils/4.0.23 runtime/node.js/24',
+          'opencode/1.19.5 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13',
+        'x-opencode-client': 'cli',
+        'x-opencode-project': 'global',
+        'x-opencode-request': ocId('msg'),
+        'x-opencode-session': getOpenCodeSessionId(),
       },
-      body: JSON.stringify({
-        model,
-        stream: true,
-        messages: [
-          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-          { role: 'user', content: text },
-        ],
-        tools: OPENCODE_DEFAULT_TOOLS,
-        tool_choice: 'none',
-        stream_options: { include_usage: true },
-      }),
+      body: payload,
     },
     28000
   );
 
   if (!res.ok) {
     const errTxt = await res.text().catch(() => '');
-    throw new Error(`opencode.ai HTTP ${res.status}: ${errTxt.slice(0, 120)}`);
+    throw new Error(`opencode.ai HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
   }
 
   const parsed = parseOpenAiSseOrJson(await res.text());
@@ -244,42 +265,42 @@ async function scrapeOpenCodeZen({
 }
 
 // ============================================================================
-// 2. FX.SH (Vercel Labs FX WASM Gateway — zai/glm-5.2)
+// 2–5. CLOUDFLARE WORKER & G4F LIVE CLUSTERS:
+//      - ollama.g4f-dev.workers.dev (Kimi K3, Mistral Large 4, MiniMax M3.1, GLM-5.3)
+//      - puter.g4f-dev.workers.dev (Claude Sonnet 4.6, Claude Opus 4.7, Qwen 3.8 Max, GPT-5.4, Grok 4.3)
+//      - relayrouter.org / g4f.space/api/relayrouter (DeepSeek V4.1 Flash 1M)
+//      - g4f.space/custom/srv_mrgynwuz08a167112109 (CrowLLM GLM-5.2 & Grok 4.6)
+//      - g4f.space/api/groq & g4f.space/v1 (GPT-OSS 120B & Auto Cluster)
 // ============================================================================
-async function scrapeFxShGateway({ text, system, model = 'zai/glm-5.2' }) {
-  const now = Date.now();
-  const sessionId = `${now}-${now}000000-${randomHex(8)}`;
+async function scrapeOpenAiCompatGateway({
+  providerName,
+  endpointUrl,
+  originUrl = 'https://g4f.dev',
+  model,
+  text,
+  system,
+  stream = false,
+  extraHeaders = {},
+}) {
   const res = await fetchWithTimeout(
-    'https://fx.sh/fx-wasm/gateway/v3/ai/language-model',
+    endpointUrl,
     {
       method: 'POST',
       headers: {
-        Accept: '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'ai-gateway-protocol-version': '0.0.1',
-        'ai-language-model-id': model,
-        'ai-language-model-specification-version': '4',
-        'ai-language-model-streaming': 'true',
-        Authorization: 'Bearer fx-demo-proxy',
-        'Cache-Control': 'no-cache',
+        Accept: 'application/json, text/event-stream, */*',
         'Content-Type': 'application/json',
-        'http-referer': 'https://github.com/vercel-labs/fx',
-        Origin: 'https://fx.sh',
-        Referer: 'https://fx.sh/',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
-        'x-session-affinity': sessionId,
-        'x-session-id': sessionId,
-        'x-title': 'fx',
+        Origin: originUrl,
+        Referer: `${originUrl.replace(/\/$/, '')}/`,
+        'User-Agent': CHROME_UA,
+        ...extraHeaders,
       },
       body: JSON.stringify({
-        prompt: [
+        model,
+        stream,
+        messages: [
           { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-          { role: 'user', content: [{ type: 'text', text }] },
+          { role: 'user', content: text },
         ],
-        maxOutputTokens: 16384,
-        providerOptions: { gateway: { speed: 'fast' } },
-        headers: { 'user-agent': 'fx/0.0.3' },
       }),
     },
     28000
@@ -287,188 +308,24 @@ async function scrapeFxShGateway({ text, system, model = 'zai/glm-5.2' }) {
 
   if (!res.ok) {
     const errTxt = await res.text().catch(() => '');
-    throw new Error(`fx.sh HTTP ${res.status}: ${errTxt.slice(0, 120)}`);
+    throw new Error(`${providerName} HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
   }
 
-  const raw = await res.text();
-  let answer = '';
-  let thinking = '';
-
-  for (const rawLine of raw.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith('message:')) line = line.slice(8).trim();
-    else if (line.startsWith('data:')) line = line.slice(5).trim();
-    if (!line || line === '[DONE]') continue;
-    try {
-      const chunk = JSON.parse(line);
-      if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-        answer += chunk.delta;
-      } else if (chunk.type === 'reasoning-delta' && typeof chunk.delta === 'string') {
-        thinking += chunk.delta;
-      } else if (typeof chunk.text === 'string' && !chunk.type) {
-        answer += chunk.text;
-      }
-    } catch {
-      // ignore non-json line
-    }
-  }
-
-  if (!answer.trim()) {
-    throw new Error('fx.sh tidak mengembalikan teks jawaban.');
+  const parsed = parseOpenAiSseOrJson(await res.text());
+  if (!parsed.text) {
+    throw new Error(`${providerName} tidak mengembalikan teks jawaban.`);
   }
 
   return {
-    provider: 'fx.sh',
+    provider: providerName,
     model,
-    result: normalizePersonaReply(answer),
-    ...(thinking.trim() ? { thinking: thinking.trim() } : {}),
+    result: normalizePersonaReply(parsed.text),
+    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
   };
 }
 
 // ============================================================================
-// 3. ISOU.CHAT — GPT-5.4-Mini + Live SEARXNG Web Search AI + Citations
-// ============================================================================
-async function scrapeIsouChat({ text, system, model = 'gpt-5.4-mini' }) {
-  const res = await fetchWithTimeout(
-    'https://isou.chat/api/chat',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.7',
-        Origin: 'https://isou.chat',
-        Referer: 'https://isou.chat/chat',
-        'User-Agent':
-          'Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0',
-      },
-      body: JSON.stringify({
-        model,
-        provider: 'openai',
-        language: 'all',
-        categories: ['general'],
-        engine: 'SEARXNG',
-        messages: [
-          {
-            role: 'user',
-            content: buildCombinedPrompt(system, text),
-          },
-        ],
-      }),
-    },
-    28000
-  );
-
-  if (!res.ok) {
-    throw new Error(`isou.chat HTTP ${res.status}`);
-  }
-
-  const raw = await res.text();
-  let answer = '';
-  const sources = [];
-
-  for (const rawLine of raw.split(/\r?\n/)) {
-    const idx = rawLine.indexOf('data:');
-    if (idx === -1) continue;
-    const jsonStr = rawLine.slice(idx + 5).trim();
-    if (!jsonStr || jsonStr === '[DONE]') continue;
-    try {
-      const outer = JSON.parse(jsonStr);
-      const inner = outer?.data || outer;
-      if (typeof inner?.content === 'string' && inner.content) {
-        answer += inner.content;
-      }
-      if (Array.isArray(inner?.contexts)) {
-        for (const ctx of inner.contexts) {
-          if (ctx?.url && sources.length < 8) {
-            sources.push({ title: ctx.name || ctx.url, url: ctx.url });
-          }
-        }
-      }
-    } catch {
-      // ignore non-json line
-    }
-  }
-
-  if (!answer.trim()) {
-    throw new Error('isou.chat tidak mengembalikan teks jawaban.');
-  }
-
-  return {
-    provider: 'isou.chat',
-    model,
-    result: normalizePersonaReply(answer),
-    ...(sources.length > 0 ? { sources } : {}),
-  };
-}
-
-// ============================================================================
-// 4. POWERBRAINAI.COM — Direct GPT-5 Backend Scraper
-// ============================================================================
-async function scrapePowerBrainAi({ text, system, model = 'gpt-5' }) {
-  const res = await fetchWithTimeout(
-    'https://powerbrainai.com/app/backend/api/api.php',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        'User-Agent': 'Dart/3.5 (dart:io)',
-      },
-      body: JSON.stringify({
-        model,
-        secret_token: 'AIChatPowerBrain123@2024',
-        action: 'send_message',
-        messages: [
-          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-          { role: 'user', content: text },
-        ],
-      }),
-    },
-    26000
-  );
-
-  if (!res.ok) {
-    throw new Error(`powerbrainai.com HTTP ${res.status}`);
-  }
-
-  const raw = (await res.text()).trim();
-  let answer = '';
-  try {
-    const json = JSON.parse(raw);
-    answer =
-      json?.data ||
-      json?.message ||
-      json?.reply ||
-      json?.choices?.[0]?.message?.content ||
-      '';
-  } catch {
-    for (const line of raw.split(/\r?\n/)) {
-      const trimmed = line.replace(/^data:\s*/, '').trim();
-      if (!trimmed || trimmed === '[DONE]') continue;
-      try {
-        const obj = JSON.parse(trimmed);
-        if (typeof obj?.data === 'string') answer += obj.data;
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  if (!String(answer || '').trim()) {
-    throw new Error('powerbrainai.com tidak mengembalikan teks jawaban.');
-  }
-
-  return {
-    provider: 'powerbrainai.com',
-    model,
-    result: normalizePersonaReply(answer),
-  };
-}
-
-// ============================================================================
-// 5. EXTENSIONS.AITOPIA.AI — Aitopia AI Chrome Extension Direct Scraper
+// 6. EXTENSIONS.AITOPIA.AI — Aitopia AI Chrome Extension Direct Scraper
 // ============================================================================
 async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
   const promptInput = buildCombinedPrompt(system, text);
@@ -538,187 +395,7 @@ async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
 }
 
 // ============================================================================
-// 6. FREE-AI-ONLINE.COM — WordPress MWAI Grok-4 Session Scraper
-// ============================================================================
-async function getFreeAiOnlineSession(forceRefresh = false) {
-  if (
-    !forceRefresh &&
-    cachedFreeAiOnlineSession &&
-    Date.now() - cachedFreeAiOnlineSession.mintedAt < 8 * 60 * 1000
-  ) {
-    return cachedFreeAiOnlineSession;
-  }
-
-  const res = await fetchWithTimeout(
-    'https://www.free-ai-online.com/wp-json/mwai/v1/start_session',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Origin: 'https://www.free-ai-online.com',
-        Referer: 'https://www.free-ai-online.com/grok-4-free/',
-        'User-Agent': CHROME_UA,
-      },
-      body: '{}',
-    },
-    14000
-  );
-
-  if (!res.ok) {
-    throw new Error(`free-ai-online.com start_session HTTP ${res.status}`);
-  }
-  const data = await res.json();
-  const sessionId = data?.sessionId;
-  const nonce = data?.restNonce || data?.new_token;
-  if (!sessionId || !nonce) {
-    throw new Error('free-ai-online.com gagal mendapatkan sessionId/restNonce.');
-  }
-
-  cachedFreeAiOnlineSession = {
-    sessionId,
-    nonce,
-    mintedAt: Date.now(),
-  };
-  return cachedFreeAiOnlineSession;
-}
-
-async function scrapeFreeAiOnlineGrok({ text, system }) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const sess = await getFreeAiOnlineSession(attempt > 0);
-    const res = await fetchWithTimeout(
-      'https://www.free-ai-online.com/wp-json/mwai-ui/v1/chats/submit',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/plain, */*',
-          Origin: 'https://www.free-ai-online.com',
-          Referer: 'https://www.free-ai-online.com/grok-4-free/',
-          'X-WP-Nonce': sess.nonce,
-          'User-Agent': CHROME_UA,
-        },
-        body: JSON.stringify({
-          botId: 'Grok 4 free',
-          customId: null,
-          session: sess.sessionId,
-          chatId: `nodata_${randomHex(4)}`,
-          contextId: 25,
-          messages: [],
-          newMessage: buildCombinedPrompt(system, text),
-          stream: false,
-        }),
-      },
-      26000
-    );
-
-    if (res.ok) {
-      const json = await res.json();
-      if (json?.success && typeof json?.reply === 'string' && json.reply.trim()) {
-        return {
-          provider: 'free-ai-online.com',
-          model: 'grok-4-free',
-          result: normalizePersonaReply(json.reply),
-        };
-      }
-    }
-    cachedFreeAiOnlineSession = null;
-  }
-
-  throw new Error('free-ai-online.com gagal mengembalikan balasan Grok 4.');
-}
-
-// ============================================================================
-// 7. POLLINATIONS.G4F.SPACE & GEN.POLLINATIONS.AI — Public Cluster + Audio
-// ============================================================================
-const POLLINATIONS_PUBLIC_KEY = ['pk', '_', 'pqjxQN7C', 'oSJUShHF'].join('');
-
-async function scrapePollinationsText({
-  text,
-  system,
-  model = 'openai',
-  useCluster = false,
-}) {
-  const endpoints = useCluster
-    ? [
-        {
-          url: 'https://pollinations.g4f.space/v1/chat/completions',
-          label: 'pollinations.g4f.space',
-          auth: '',
-        },
-        {
-          url: 'https://gen.pollinations.ai/v1/chat/completions',
-          label: 'gen.pollinations.ai',
-          auth: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
-          fallbackModel: 'openai',
-        },
-      ]
-    : [
-        {
-          url: 'https://gen.pollinations.ai/v1/chat/completions',
-          label: 'gen.pollinations.ai',
-          auth: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
-        },
-        {
-          url: 'https://text.pollinations.ai/openai',
-          label: 'text.pollinations.ai',
-          auth: '',
-        },
-      ];
-
-  let lastErr = 'Pollinations Text tidak merespons.';
-  for (const ep of endpoints) {
-    try {
-      const targetModel = ep.fallbackModel || model;
-      const res = await fetchWithTimeout(
-        ep.url,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json, text/event-stream, */*',
-            Origin: 'https://pollinations.ai',
-            Referer: 'https://pollinations.ai/',
-            'User-Agent': CHROME_UA,
-            ...(ep.auth ? { Authorization: ep.auth } : {}),
-          },
-          body: JSON.stringify({
-            model: targetModel,
-            stream: false,
-            messages: [
-              { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-              { role: 'user', content: text },
-            ],
-          }),
-        },
-        26000
-      );
-
-      if (!res.ok) {
-        const errTxt = await res.text().catch(() => '');
-        lastErr = `${ep.label} HTTP ${res.status}: ${errTxt.slice(0, 120)}`;
-        continue;
-      }
-
-      const parsed = parseOpenAiSseOrJson(await res.text());
-      if (parsed.text) {
-        return {
-          provider: ep.label,
-          model: targetModel,
-          result: normalizePersonaReply(parsed.text),
-          ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
-        };
-      }
-    } catch (e) {
-      lastErr = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  throw new Error(lastErr);
-}
-
-// ============================================================================
-// 8. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat & Live Online Search)
+// 7. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat & Live Online Search)
 // ============================================================================
 async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   const apiKey = createDeepAiTryItKey(CHROME_UA);
@@ -729,8 +406,7 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
     JSON.stringify([
       {
         role: 'user',
-        content:
-          model === 'online' ? text : buildCombinedPrompt(system, text),
+        content: buildCombinedPrompt(system, text),
       },
     ])
   );
@@ -773,59 +449,7 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
 }
 
 // ============================================================================
-// 9 & 10. KILO.AI & LLM7.IO — Keyless OpenAI-Compatible Gateways
-// ============================================================================
-async function scrapeOpenAiCompatGateway({
-  providerName,
-  endpointUrl,
-  originUrl,
-  model,
-  text,
-  system,
-}) {
-  const res = await fetchWithTimeout(
-    endpointUrl,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Origin: originUrl,
-        Referer: `${originUrl}/`,
-        'User-Agent': CHROME_UA,
-      },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        messages: [
-          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-          { role: 'user', content: text },
-        ],
-      }),
-    },
-    28000
-  );
-
-  if (!res.ok) {
-    const errTxt = await res.text().catch(() => '');
-    throw new Error(`${providerName} HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
-  }
-
-  const parsed = parseOpenAiSseOrJson(await res.text());
-  if (!parsed.text) {
-    throw new Error(`${providerName} tidak mengembalikan teks jawaban.`);
-  }
-
-  return {
-    provider: providerName,
-    model,
-    result: normalizePersonaReply(parsed.text),
-    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
-  };
-}
-
-// ============================================================================
-// 11. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
+// 8. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
 // ============================================================================
 async function scrapeYqCloud({ text, system }) {
   const res = await fetchWithTimeout(
@@ -868,7 +492,7 @@ async function scrapeYqCloud({ text, system }) {
 }
 
 // ============================================================================
-// 12. COHERE LABS OFFICIAL CHAT UI (coherelabs-c4ai-command.hf.space)
+// 9. COHERE LABS OFFICIAL CHAT UI (coherelabs-c4ai-command.hf.space)
 // ============================================================================
 async function scrapeCohereCommand({
   text,
@@ -997,7 +621,7 @@ async function scrapeCohereCommand({
 }
 
 // ============================================================================
-// 13. AI HORDE (stablehorde.net) — Distributed GPU Image & LLM Cluster
+// 10. AI HORDE (stablehorde.net) — Distributed GPU Image Cluster
 // ============================================================================
 async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
   const dims = ratioToDimensions(ratio);
@@ -1016,7 +640,7 @@ async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
         params: {
           width: dims.hordeW,
           height: dims.hordeH,
-          steps: 20,
+          steps: 16,
           n: 1,
           sampler_name: 'k_euler_a',
           cfg_scale: 7,
@@ -1026,7 +650,7 @@ async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
         r2: true,
       }),
     },
-    14000
+    12000
   );
 
   if (!submitRes.ok) {
@@ -1040,8 +664,8 @@ async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
     throw new Error('stablehorde.net tidak mengembalikan job id.');
   }
 
-  for (let i = 0; i < 18; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
+  for (let i = 0; i < 14; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
     const statusRes = await fetchWithTimeout(
       `https://stablehorde.net/api/v2/generate/status/${jobId}`,
       {
@@ -1051,7 +675,7 @@ async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
           'Client-Agent': 'nodatagpt:3.0:webai',
         },
       },
-      10000
+      8000
     );
     if (!statusRes.ok) continue;
     const statusJson = await statusRes.json();
@@ -1071,11 +695,11 @@ async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
     }
   }
 
-  throw new Error('AI Horde antrean penuh (>36 detik).');
+  throw new Error('AI Horde antrean sedang penuh.');
 }
 
 // ============================================================================
-// 14–16. HUGGING FACE ZEROGPU FAST IMAGE SPACES (BFL FLUX.1, Evalstate FLUX, Qwen-Image)
+// 11–13. HUGGING FACE ZEROGPU FAST IMAGE SPACES (BFL FLUX.1, Evalstate FLUX, Qwen-Image)
 // ============================================================================
 function randomPublicIpv4() {
   const firstOctets = [24, 38, 45, 66, 71, 73, 84, 98, 104, 138, 174];
@@ -1272,86 +896,140 @@ async function callGradioImageSpace({
 }
 
 // ============================================================================
-// 17. NEURAL VOICE TTS (gen.pollinations.ai ElevenLabs/OpenAI-Audio + openai.fm)
+// 14. NEURAL VOICE TTS (g4f.space/api/audio + tiktok-tts.weilnet.workers.dev)
 // ============================================================================
-const ELEVENLABS_VOICES = new Set(['rachel', 'bella', 'adam', 'josh', 'domi']);
+const TIKTOK_VOICE_MAP = {
+  coral: 'id_001',
+  nova: 'en_us_001',
+  onyx: 'en_us_006',
+  sage: 'en_uk_001',
+  alloy: 'en_us_010',
+  rachel: 'en_au_001',
+  adam: 'en_us_009',
+  bella: 'jp_001',
+  josh: 'en_uk_003',
+  id_001: 'id_001',
+};
+
+function splitUtf8Chunks(text, maxBytes = 260) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const chunks = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (Buffer.byteLength(candidate, 'utf8') <= maxBytes) {
+      current = candidate;
+    } else {
+      if (current) chunks.push(current);
+      if (Buffer.byteLength(word, 'utf8') <= maxBytes) {
+        current = word;
+      } else {
+        chunks.push(word.slice(0, Math.floor(maxBytes / 2)));
+        current = '';
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 5);
+}
 
 async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
   const cleanVoice = String(voice || 'coral').toLowerCase();
-  const audioModel = ELEVENLABS_VOICES.has(cleanVoice)
-    ? 'elevenlabs'
-    : 'openai-audio';
+  const cleanText = String(text || '').trim().slice(0, 1200);
 
-  // Primary: gen.pollinations.ai /v1/audio/speech (ElevenLabs & OpenAI Neural Voices)
+  // Tier 1: g4f.space/api/audio (OpenAI-Audio Neural Voices: coral, nova, onyx, sage, alloy)
   try {
-    const res = await fetchWithTimeout(
-      'https://gen.pollinations.ai/v1/audio/speech',
+    const g4fAudioRes = await fetchWithTimeout(
+      `https://g4f.space/api/audio/audio/speech`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'audio/mpeg, audio/*, */*',
-          Authorization: `Bearer ${POLLINATIONS_PUBLIC_KEY}`,
-          Origin: 'https://pollinations.ai',
-          Referer: 'https://pollinations.ai/',
+          Origin: 'https://g4f.dev',
+          Referer: 'https://g4f.dev/',
           'User-Agent': CHROME_UA,
         },
         body: JSON.stringify({
-          model: audioModel,
-          input: String(text || '').slice(0, 1500),
-          voice: cleanVoice,
+          model: 'gpt-audio',
+          voice: ['coral', 'nova', 'onyx', 'sage', 'alloy', 'echo', 'fable', 'shimmer', 'ash', 'ballad', 'verse'].includes(cleanVoice)
+            ? cleanVoice
+            : 'coral',
+          input: cleanText,
           response_format: 'mp3',
         }),
       },
-      24000
+      18000
     );
 
-    if (res.ok) {
-      const ct = res.headers.get('content-type') || 'audio/mpeg';
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.byteLength > 256 && !ct.includes('json') && !ct.includes('html')) {
+    if (g4fAudioRes.ok) {
+      const ct = g4fAudioRes.headers.get('content-type') || 'audio/mpeg';
+      const buf = Buffer.from(await g4fAudioRes.arrayBuffer());
+      if (buf.byteLength > 512 && !ct.includes('json') && !ct.includes('html')) {
         return {
           buffer: buf,
-          contentType: ct,
+          contentType: 'audio/mpeg',
           voice: cleanVoice,
-          source: 'gen.pollinations.ai',
+          source: 'g4f.space/api/audio',
         };
       }
     }
   } catch {
-    // Fallback below
+    // Proceed to Tier 2
   }
 
-  // Secondary: openai.fm
-  const params = new URLSearchParams({
-    input: String(text || '').slice(0, 1500),
-    prompt: 'Speak naturally, clearly, warmly, and expressively.',
-    voice: cleanVoice,
-  });
-  const res2 = await fetchWithTimeout(
-    `https://www.openai.fm/api/generate?${params.toString()}`,
-    {
-      headers: {
-        Accept: 'audio/mpeg, audio/wav, audio/*, */*',
-        Origin: 'https://www.openai.fm',
-        Referer: 'https://www.openai.fm/',
-        'User-Agent': CHROME_UA,
-      },
-    },
-    22000
+  // Tier 2: tiktok-tts.weilnet.workers.dev (Cloudflare Worker in IAD — fast & reliable MP3)
+  const hasIndonesianHint = /\b(?:halo|saya|aku|kamu|yang|dan|untuk|dengan|dari|tidak|bisa|ini|itu|selamat)\b/i.test(
+    cleanText
   );
-  if (!res2.ok) {
-    throw new Error(`Neural Voice HTTP ${res2.status}`);
+  const ttVoice =
+    cleanVoice === 'coral' && hasIndonesianHint
+      ? 'id_001'
+      : TIKTOK_VOICE_MAP[cleanVoice] || 'id_001';
+
+  const parts = splitUtf8Chunks(cleanText, 260);
+  const buffers = [];
+
+  for (const part of parts) {
+    const ttRes = await fetchWithTimeout(
+      'https://tiktok-tts.weilnet.workers.dev/api/generation',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Origin: 'https://weilbyte.github.io',
+          Referer: 'https://weilbyte.github.io/',
+          'User-Agent': CHROME_UA,
+        },
+        body: JSON.stringify({
+          text: part,
+          voice: ttVoice,
+        }),
+      },
+      14000
+    );
+
+    if (!ttRes.ok) {
+      throw new Error(`TikTok Neural TTS HTTP ${ttRes.status}`);
+    }
+    const ttJson = await ttRes.json();
+    if (!ttJson?.data || typeof ttJson.data !== 'string') {
+      throw new Error(ttJson?.error || 'Neural TTS gagal menghasilkan MP3.');
+    }
+    buffers.push(Buffer.from(ttJson.data, 'base64'));
   }
-  const buf2 = Buffer.from(await res2.arrayBuffer());
-  if (buf2.byteLength < 256) {
+
+  const combined = Buffer.concat(buffers);
+  if (combined.byteLength < 256) {
     throw new Error('Neural Voice mengembalikan audio kosong.');
   }
+
   return {
-    buffer: buf2,
-    contentType: res2.headers.get('content-type') || 'audio/mpeg',
+    buffer: combined,
+    contentType: 'audio/mpeg',
     voice: cleanVoice,
-    source: 'openai.fm',
+    source: 'tiktok-tts.weilnet.workers.dev',
   };
 }
 
@@ -1363,13 +1041,17 @@ export const WEBAI_SCRAPER_DIRECTORY = [
   { id: 'opencode-glm53', site: 'opencode.ai', kind: 'chat', name: 'OpenCode Zen · GLM-5.3 Flash' },
   { id: 'opencode-flint', site: 'opencode.ai', kind: 'coding', name: 'OpenCode Zen · Recursive Flint 40B Coder' },
   { id: 'opencode-pickle', site: 'opencode.ai', kind: 'reasoning', name: 'OpenCode Zen · Big Pickle 200K Reasoning' },
-  { id: 'fx-glm52', site: 'fx.sh', kind: 'chat', name: 'Vercel FX Gateway · GLM-5.2' },
-  { id: 'isou-search', site: 'isou.chat', kind: 'search', name: 'iSou Chat · GPT-5.4-Mini + SEARXNG Live Web' },
-  { id: 'powerbrain-gpt5', site: 'powerbrainai.com', kind: 'chat', name: 'PowerBrain AI · GPT-5 Direct' },
+  { id: 'ollama-kimi-k3', site: 'ollama.g4f-dev.workers.dev', kind: 'reasoning', name: 'Ollama Cloud · Moonshot Kimi K3' },
+  { id: 'ollama-mistral4', site: 'ollama.g4f-dev.workers.dev', kind: 'chat', name: 'Ollama Cloud · Mistral Large 4' },
+  { id: 'ollama-minimax-m31', site: 'ollama.g4f-dev.workers.dev', kind: 'chat', name: 'Ollama Cloud · MiniMax M3.1 Flash' },
+  { id: 'puter-claude-sonnet', site: 'puter.g4f-dev.workers.dev', kind: 'reasoning', name: 'Puter AI · Claude Sonnet 4.6' },
+  { id: 'puter-qwen38-max', site: 'puter.g4f-dev.workers.dev', kind: 'coding', name: 'Puter AI · Qwen 3.8 Max' },
+  { id: 'puter-gpt54', site: 'puter.g4f-dev.workers.dev', kind: 'chat', name: 'Puter AI · OpenAI GPT-5.4' },
+  { id: 'puter-grok43', site: 'puter.g4f-dev.workers.dev', kind: 'reasoning', name: 'Puter AI · xAI Grok 4.3' },
+  { id: 'relayrouter-deepseek', site: 'relayrouter.org', kind: 'reasoning', name: 'RelayRouter · DeepSeek V4.1 Flash 1M' },
+  { id: 'crowllm-glm52', site: 'g4f.space (CrowLLM)', kind: 'chat', name: 'CrowLLM Cluster · Zhipu GLM-5.2' },
+  { id: 'g4f-groq-120b', site: 'g4f.space (Groq)', kind: 'chat', name: 'G4F Groq Cluster · GPT-OSS 120B' },
   { id: 'aitopia-direct', site: 'extensions.aitopia.ai', kind: 'chat', name: 'Aitopia AI Extension Direct' },
-  { id: 'freeaionline-grok4', site: 'free-ai-online.com', kind: 'chat', name: 'Free-AI-Online · Grok 4 Direct' },
-  { id: 'pollinations-cluster', site: 'pollinations.g4f.space', kind: 'chat', name: 'Pollinations G4F Cluster · GPT-OSS 120B' },
-  { id: 'pollinations-text', site: 'text.pollinations.ai', kind: 'chat', name: 'Pollinations Text · OpenAI Fast' },
   { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Direct Hash Scraper' },
   { id: 'deepai-online', site: 'deepai.org', kind: 'search', name: 'DeepAI Live Online Search' },
   { id: 'kilo-nemotron', site: 'kilo.ai', kind: 'reasoning', name: 'Kilo Gateway · NVIDIA Nemotron 3.5 Super 120B' },
@@ -1381,7 +1063,7 @@ export const WEBAI_SCRAPER_DIRECTORY = [
   { id: 'evalstate-flux', site: 'evalstate-flux1-schnell.hf.space', kind: 'image', name: 'Evalstate · FLUX.1-Schnell Fast ZeroGPU' },
   { id: 'qwen-image-fast', site: 'mcp-tools-qwen-image-fast.hf.space', kind: 'image', name: 'Alibaba · Qwen-Image-Fast Lightning' },
   { id: 'aihorde-image', site: 'stablehorde.net', kind: 'image', name: 'AI Horde · Distributed GPU Diffusion' },
-  { id: 'neural-voice', site: 'gen.pollinations.ai', kind: 'audio', name: 'Neural AI Voice (Coral, Nova, Onyx, Sage, Alloy)' },
+  { id: 'neural-voice', site: 'tiktok-tts.weilnet.workers.dev', kind: 'audio', name: 'Neural AI Voice (Indo & Multi-Voice MP3)' },
 ];
 
 async function dispatchWebAiProvider({
@@ -1427,28 +1109,106 @@ async function dispatchWebAiProvider({
         model: 'big-pickle',
       });
 
-    case 'fx':
-    case 'fx-glm52':
-      return scrapeFxShGateway({
+    case 'ollama-kimi-k3':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'ollama.g4f-dev.workers.dev',
+        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'kimi-k3',
         text: inputText,
         system,
-        model: model || 'zai/glm-5.2',
       });
 
-    case 'isou':
-    case 'isou-search':
-      return scrapeIsouChat({
+    case 'ollama-mistral4':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'ollama.g4f-dev.workers.dev',
+        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'mistral-large-4',
         text: inputText,
         system,
-        model: model || 'gpt-5.4-mini',
       });
 
-    case 'powerbrain':
-    case 'powerbrain-gpt5':
-      return scrapePowerBrainAi({
+    case 'ollama-minimax-m31':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'ollama.g4f-dev.workers.dev',
+        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'minimax-m3.1-flash',
         text: inputText,
         system,
-        model: model || 'gpt-5',
+      });
+
+    case 'puter-claude-sonnet':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'puter.g4f-dev.workers.dev',
+        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'anthropic:anthropic/claude-sonnet-4-6',
+        text: inputText,
+        system,
+      });
+
+    case 'puter-qwen38-max':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'puter.g4f-dev.workers.dev',
+        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'alibaba:qwen/qwen3.8-max',
+        text: inputText,
+        system,
+      });
+
+    case 'puter-gpt54':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'puter.g4f-dev.workers.dev',
+        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'azure:openai/gpt-5.4-mini',
+        text: inputText,
+        system,
+      });
+
+    case 'puter-grok43':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'puter.g4f-dev.workers.dev',
+        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'azure:x-ai/grok-4.3',
+        text: inputText,
+        system,
+      });
+
+    case 'relayrouter':
+    case 'relayrouter-deepseek':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'relayrouter.org',
+        endpointUrl: 'https://g4f.space/api/relayrouter/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'deepseek-v4.1-flash-1017:free',
+        text: inputText,
+        system,
+      });
+
+    case 'crowllm':
+    case 'crowllm-glm52':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'g4f.space/crowllm',
+        endpointUrl: 'https://g4f.space/custom/srv_mrgynwuz08a167112109/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'glm-5.2',
+        text: inputText,
+        system,
+      });
+
+    case 'g4f-groq-120b':
+      return scrapeOpenAiCompatGateway({
+        providerName: 'g4f.space/groq',
+        endpointUrl: 'https://g4f.space/api/groq/chat/completions',
+        originUrl: 'https://g4f.dev',
+        model: model || 'openai/gpt-oss-120b',
+        text: inputText,
+        system,
       });
 
     case 'aitopia':
@@ -1457,29 +1217,6 @@ async function dispatchWebAiProvider({
         text: inputText,
         system,
         model: model || 'AITOPIA',
-      });
-
-    case 'freeaionline':
-    case 'freeaionline-grok4':
-      return scrapeFreeAiOnlineGrok({
-        text: inputText,
-        system,
-      });
-
-    case 'pollinations-cluster':
-      return scrapePollinationsText({
-        text: inputText,
-        system,
-        model: model || 'auto',
-        useCluster: true,
-      });
-
-    case 'pollinations-text':
-      return scrapePollinationsText({
-        text: inputText,
-        system,
-        model: model || 'openai',
-        useCluster: false,
       });
 
     case 'deepai':

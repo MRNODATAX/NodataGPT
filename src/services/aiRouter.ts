@@ -953,13 +953,15 @@ export function buildModelRequests(
     case 'webai-opencode-glm53':
     case 'webai-opencode-flint':
     case 'webai-opencode-pickle':
-    case 'webai-fx-glm52':
-    case 'webai-isou-search':
-    case 'webai-powerbrain-gpt5':
+    case 'webai-ollama-kimi-k3':
+    case 'webai-ollama-mistral4':
+    case 'webai-puter-claude-sonnet':
+    case 'webai-puter-qwen38':
+    case 'webai-puter-grok43':
+    case 'webai-relayrouter-deepseek':
+    case 'webai-crowllm-glm52':
+    case 'webai-g4f-groq-120b':
     case 'webai-aitopia':
-    case 'webai-freeaionline-grok4':
-    case 'webai-pollinations-cluster':
-    case 'webai-pollinations-text':
     case 'webai-deepai-chat':
     case 'webai-deepai-online':
     case 'webai-cohere-command':
@@ -968,24 +970,26 @@ export function buildModelRequests(
     case 'webai-llm7-codestral':
     case 'webai-yqcloud': {
       const webAiProviderChains: Record<string, string[]> = {
-        'webai-opencode-deepseek': ['opencode-deepseek', 'kilo-nemotron', 'cohere-command-a'],
-        'webai-opencode-glm53': ['opencode-glm53', 'fx-glm52', 'deepai-chat'],
+        'webai-opencode-deepseek': ['opencode-deepseek', 'relayrouter-deepseek', 'kilo-nemotron'],
+        'webai-opencode-glm53': ['opencode-glm53', 'crowllm-glm52', 'deepai-chat'],
         'webai-opencode-flint': ['opencode-flint', 'kilo-beam', 'llm7-direct'],
         'webai-opencode-pickle': ['opencode-pickle', 'kilo-nemotron', 'cohere-command-a'],
-        'webai-fx-glm52': ['fx-glm52', 'opencode-glm53', 'cohere-command-a'],
-        'webai-isou-search': ['isou-search', 'deepai-online', 'yqcloud'],
-        'webai-powerbrain-gpt5': ['powerbrain-gpt5', 'aitopia-direct', 'deepai-chat'],
-        'webai-aitopia': ['aitopia-direct', 'powerbrain-gpt5', 'cohere-command-a'],
-        'webai-freeaionline-grok4': ['freeaionline-grok4', 'kilo-nemotron', 'deepai-chat'],
-        'webai-pollinations-cluster': ['pollinations-cluster', 'pollinations-text', 'kilo-nemotron'],
-        'webai-pollinations-text': ['pollinations-text', 'pollinations-cluster', 'deepai-chat'],
-        'webai-deepai-chat': ['deepai-chat', 'cohere-command-a', 'kilo-nemotron'],
-        'webai-deepai-online': ['deepai-online', 'isou-search', 'yqcloud'],
-        'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'deepai-chat'],
+        'webai-ollama-kimi-k3': ['ollama-kimi-k3', 'kilo-nemotron', 'cohere-command-a'],
+        'webai-ollama-mistral4': ['ollama-mistral4', 'llm7-direct', 'cohere-command-a'],
+        'webai-puter-claude-sonnet': ['puter-claude-sonnet', 'kilo-beam', 'cohere-command-a'],
+        'webai-puter-qwen38': ['puter-qwen38-max', 'kilo-nemotron', 'aitopia-direct'],
+        'webai-puter-grok43': ['puter-grok43', 'g4f-groq-120b', 'aitopia-direct'],
+        'webai-relayrouter-deepseek': ['relayrouter-deepseek', 'opencode-deepseek', 'kilo-nemotron'],
+        'webai-crowllm-glm52': ['crowllm-glm52', 'opencode-glm53', 'cohere-command-a'],
+        'webai-g4f-groq-120b': ['g4f-groq-120b', 'kilo-nemotron', 'aitopia-direct'],
+        'webai-aitopia': ['aitopia-direct', 'cohere-command-a', 'deepai-chat'],
+        'webai-deepai-chat': ['deepai-chat', 'aitopia-direct', 'cohere-command-a'],
+        'webai-deepai-online': ['deepai-online', 'yqcloud', 'deepai-chat'],
+        'webai-cohere-command': ['cohere-command-a', 'kilo-nemotron', 'aitopia-direct'],
         'webai-kilo-nemotron': ['kilo-nemotron', 'kilo-auto', 'cohere-command-a'],
         'webai-kilo-beam': ['kilo-beam', 'llm7-direct', 'opencode-flint'],
         'webai-llm7-codestral': ['llm7-direct', 'kilo-beam', 'cohere-command-a'],
-        'webai-yqcloud': ['yqcloud', 'deepai-online', 'cohere-command-a'],
+        'webai-yqcloud': ['yqcloud', 'deepai-online', 'aitopia-direct'],
       };
       const providers = webAiProviderChains[model.id] || ['kilo-nemotron'];
       return [

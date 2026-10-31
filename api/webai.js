@@ -20,9 +20,6 @@ const NODATAGPT_DEFAULT_SYSTEM =
 /** @type {Map<string, { token: string, sessionUuid: string, expiresAt: number }>} */
 const cachedZeroGpuTokens = new Map();
 
-/** @type {{ id: string, ts: number } | null} */
-let cachedOpenCodeSession = null;
-
 function md5Hex(input) {
   return crypto.createHash('md5').update(String(input), 'utf8').digest('hex');
 }
@@ -33,20 +30,6 @@ function revMd5(input) {
 
 function randomHex(byteLen = 16) {
   return crypto.randomBytes(byteLen).toString('hex');
-}
-
-function ocId(prefix) {
-  const ts = Date.now().toString(16);
-  const rnd = crypto.randomBytes(12).toString('base64url').slice(0, 16);
-  return `${prefix}_${ts}${rnd}`;
-}
-
-function getOpenCodeSessionId() {
-  const now = Date.now();
-  if (!cachedOpenCodeSession || now - cachedOpenCodeSession.ts > 20 * 60 * 1000) {
-    cachedOpenCodeSession = { id: ocId('ses'), ts: now };
-  }
-  return cachedOpenCodeSession.id;
 }
 
 function createDeepAiTryItKey(userAgent) {
@@ -67,26 +50,26 @@ function normalizePersonaReply(rawText) {
       'Saya adalah NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA.'
     )
     .replace(
-      /\b(?:Halo,?\s*)?(?:saya|aku)\s+(?:adalah\s+|bernama\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral|Aitopia)(?:,\s*asisten AI[^.\n]*?(?:OpenAI|Anthropic|Google|Alibaba|DeepSeek|Cohere|xAI|Moonshot|Mistral|DeepAI))?/gi,
+      /\b(?:Halo,?\s*)?(?:saya|aku)\s+(?:adalah\s+|bernama\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|Gemma|DeepSeek|Qwen(?:\s*\d+(?:\.\d+)?)?|Grok|Step|Kimi|Mistral|Aitopia)(?:,\s*(?:sebuah\s+|model\s+|asisten\s+)[^.\n]*?(?:OpenAI|Anthropic|Google(?:\s*DeepMind)?|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot|Mistral|DeepAI))?/gi,
       (match) => {
         const startsHalo = /^halo/i.test(match);
         return `${startsHalo ? 'Halo, ' : ''}saya NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA`;
       }
     )
     .replace(
-      /\b(?:Nama saya|Nama aku)\s+(?:adalah\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral|Aitopia)\b/gi,
+      /\b(?:Nama saya|Nama aku)\s+(?:adalah\s+)?(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|Gemma|DeepSeek|Qwen|Grok|Step|Kimi|Mistral|Aitopia)\b/gi,
       'Nama saya NodataGPT'
     )
     .replace(
-      /\b(?:dibuat|dikembangkan|diciptakan|dilatih)\s+oleh\s+(?:OpenAI|Anthropic|Google|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
+      /\b(?:dibuat|dikembangkan|diciptakan|dilatih)\s+oleh\s+(?:OpenAI|Anthropic|Google(?:\s*DeepMind)?|Alibaba(?:\s*Cloud)?|Tim\s+Qwen|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
       'dibuat dan dikembangkan oleh Mr.NODATA'
     )
     .replace(
-      /\b(?:I am|I'm)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|DeepSeek|Qwen|Grok|Step|Kimi|Mistral)\b/gi,
+      /\b(?:I am|I'm)\s+(?:ChatGPT|Standard AI Chat|DeepAI|Command[-\s]?A|Cohere|Claude|Gemini|Gemma|DeepSeek|Qwen|Grok|Step|Kimi|Mistral)\b/gi,
       'I am NodataGPT (created by Mr.NODATA)'
     )
     .replace(
-      /\b(?:created|developed|built|made|trained)\s+by\s+(?:OpenAI|Anthropic|Google|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
+      /\b(?:created|developed|built|made|trained)\s+by\s+(?:OpenAI|Anthropic|Google(?:\s*DeepMind)?|Alibaba(?:\s*Cloud)?|DeepSeek|Cohere|xAI|Moonshot(?:\s*AI)?|Mistral(?:\s*AI)?|Zhipu(?:\s*AI)?|DeepAI|StepFun)\b/gi,
       'created and developed by Mr.NODATA'
     );
 }
@@ -100,11 +83,44 @@ function buildCombinedPrompt(system, userText) {
 
 function ratioToDimensions(ratio) {
   const clean = String(ratio || '1:1').trim();
-  if (clean === '16:9') return { width: 1280, height: 720, aspect: '16:9', hordeW: 640, hordeH: 384 };
-  if (clean === '9:16') return { width: 720, height: 1280, aspect: '9:16', hordeW: 384, hordeH: 640 };
-  if (clean === '4:3') return { width: 1152, height: 864, aspect: '4:3', hordeW: 576, hordeH: 448 };
-  if (clean === '3:4') return { width: 864, height: 1152, aspect: '3:4', hordeW: 448, hordeH: 576 };
-  return { width: 1024, height: 1024, aspect: '1:1', hordeW: 512, hordeH: 512 };
+  if (clean === '16:9') {
+    return {
+      width: 1024,
+      height: 576,
+      aspect: '16:9',
+      zRes: '1280x720 ( 16:9 )',
+    };
+  }
+  if (clean === '9:16') {
+    return {
+      width: 576,
+      height: 1024,
+      aspect: '9:16',
+      zRes: '720x1280 ( 9:16 )',
+    };
+  }
+  if (clean === '4:3') {
+    return {
+      width: 1024,
+      height: 768,
+      aspect: '4:3',
+      zRes: '1152x864 ( 4:3 )',
+    };
+  }
+  if (clean === '3:4') {
+    return {
+      width: 768,
+      height: 1024,
+      aspect: '3:4',
+      zRes: '864x1152 ( 3:4 )',
+    };
+  }
+  return {
+    width: 1024,
+    height: 1024,
+    aspect: '1:1',
+    zRes: '1024x1024 ( 1:1 )',
+  };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
@@ -143,10 +159,12 @@ function parseOpenAiSseOrJson(raw) {
   if (trimmed.startsWith('{')) {
     try {
       const json = JSON.parse(trimmed);
-      if (json?.error || json?.type === 'error') {
-        const errMsg =
-          json?.error?.message || json?.message || JSON.stringify(json.error);
-        throw new Error(`Upstream error: ${String(errMsg).slice(0, 140)}`);
+      const explicitErr =
+        (typeof json?.error === 'string' && json.error.trim()) ||
+        (json?.error && typeof json.error === 'object' && json.error.message) ||
+        '';
+      if (explicitErr) {
+        throw new Error(`Upstream error: ${String(explicitErr).slice(0, 140)}`);
       }
       const choice = Array.isArray(json?.choices) ? json.choices[0] : null;
       const content =
@@ -181,17 +199,13 @@ function parseOpenAiSseOrJson(raw) {
     if (!dataStr || dataStr === '[DONE]') continue;
     try {
       const obj = JSON.parse(dataStr);
-      if (obj?.error || obj?.type === 'error') {
-        const errMsg = obj?.error?.message || obj?.message || 'stream error';
-        if (!answer) throw new Error(`Upstream error: ${String(errMsg).slice(0, 140)}`);
-      }
       const choice = Array.isArray(obj?.choices)
         ? obj.choices[0]
         : obj?.choices && typeof obj.choices === 'object'
         ? obj.choices['0']
         : null;
       const deltaContent =
-        choice?.delta?.content ?? choice?.message?.content ?? '';
+        choice?.delta?.content ?? choice?.message?.content ?? obj?.content ?? '';
       const deltaThink =
         choice?.delta?.reasoning_content ??
         choice?.delta?.reasoning ??
@@ -199,10 +213,8 @@ function parseOpenAiSseOrJson(raw) {
         '';
       if (typeof deltaContent === 'string') answer += deltaContent;
       if (typeof deltaThink === 'string') thinking += deltaThink;
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith('Upstream error:')) {
-        throw e;
-      }
+    } catch {
+      // ignore non-json SSE line
     }
   }
 
@@ -210,122 +222,7 @@ function parseOpenAiSseOrJson(raw) {
 }
 
 // ============================================================================
-// 1. OPENCODE.AI ZEN — Keyless CLI Protocol (opencode/1.19.5 + x-opencode-client: cli)
-// ============================================================================
-async function scrapeOpenCodeZen({
-  text,
-  system,
-  model = 'deepseek-v4.1-flash-free',
-}) {
-  const payload = JSON.stringify({
-    model,
-    stream: true,
-    messages: [
-      { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-      { role: 'user', content: text },
-    ],
-  });
-
-  const res = await fetchWithTimeout(
-    'https://opencode.ai/zen/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream, application/json, */*',
-        Authorization: 'Bearer public',
-        'User-Agent':
-          'opencode/1.19.5 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.13',
-        'x-opencode-client': 'cli',
-        'x-opencode-project': 'global',
-        'x-opencode-request': ocId('msg'),
-        'x-opencode-session': getOpenCodeSessionId(),
-      },
-      body: payload,
-    },
-    28000
-  );
-
-  if (!res.ok) {
-    const errTxt = await res.text().catch(() => '');
-    throw new Error(`opencode.ai HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
-  }
-
-  const parsed = parseOpenAiSseOrJson(await res.text());
-  if (!parsed.text) {
-    throw new Error('opencode.ai tidak mengembalikan teks jawaban.');
-  }
-
-  return {
-    provider: 'opencode.ai',
-    model,
-    result: normalizePersonaReply(parsed.text),
-    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
-  };
-}
-
-// ============================================================================
-// 2–5. CLOUDFLARE WORKER & G4F LIVE CLUSTERS:
-//      - ollama.g4f-dev.workers.dev (Kimi K3, Mistral Large 4, MiniMax M3.1, GLM-5.3)
-//      - puter.g4f-dev.workers.dev (Claude Sonnet 4.6, Claude Opus 4.7, Qwen 3.8 Max, GPT-5.4, Grok 4.3)
-//      - relayrouter.org / g4f.space/api/relayrouter (DeepSeek V4.1 Flash 1M)
-//      - g4f.space/custom/srv_mrgynwuz08a167112109 (CrowLLM GLM-5.2 & Grok 4.6)
-//      - g4f.space/api/groq & g4f.space/v1 (GPT-OSS 120B & Auto Cluster)
-// ============================================================================
-async function scrapeOpenAiCompatGateway({
-  providerName,
-  endpointUrl,
-  originUrl = 'https://g4f.dev',
-  model,
-  text,
-  system,
-  stream = false,
-  extraHeaders = {},
-}) {
-  const res = await fetchWithTimeout(
-    endpointUrl,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json, text/event-stream, */*',
-        'Content-Type': 'application/json',
-        Origin: originUrl,
-        Referer: `${originUrl.replace(/\/$/, '')}/`,
-        'User-Agent': CHROME_UA,
-        ...extraHeaders,
-      },
-      body: JSON.stringify({
-        model,
-        stream,
-        messages: [
-          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
-          { role: 'user', content: text },
-        ],
-      }),
-    },
-    28000
-  );
-
-  if (!res.ok) {
-    const errTxt = await res.text().catch(() => '');
-    throw new Error(`${providerName} HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
-  }
-
-  const parsed = parseOpenAiSseOrJson(await res.text());
-  if (!parsed.text) {
-    throw new Error(`${providerName} tidak mengembalikan teks jawaban.`);
-  }
-
-  return {
-    provider: providerName,
-    model,
-    result: normalizePersonaReply(parsed.text),
-    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
-  };
-}
-
-// ============================================================================
-// 6. EXTENSIONS.AITOPIA.AI — Aitopia AI Chrome Extension Direct Scraper
+// 1. EXTENSIONS.AITOPIA.AI — Aitopia AI Chrome Extension Direct Scraper
 // ============================================================================
 async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
   const promptInput = buildCombinedPrompt(system, text);
@@ -395,7 +292,7 @@ async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
 }
 
 // ============================================================================
-// 7. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat & Live Online Search)
+// 2. DEEPAI.ORG — Dynamic TryIt Hash Scraper (Chat & Live Online Search)
 // ============================================================================
 async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   const apiKey = createDeepAiTryItKey(CHROME_UA);
@@ -449,7 +346,59 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
 }
 
 // ============================================================================
-// 8. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
+// 3 & 4. KILO.AI & API.LLM7.IO — Keyless OpenAI-Compatible Gateways
+// ============================================================================
+async function scrapeOpenAiCompatGateway({
+  providerName,
+  endpointUrl,
+  originUrl,
+  model,
+  text,
+  system,
+}) {
+  const res = await fetchWithTimeout(
+    endpointUrl,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream, */*',
+        'Content-Type': 'application/json',
+        Origin: originUrl,
+        Referer: `${originUrl.replace(/\/$/, '')}/`,
+        'User-Agent': CHROME_UA,
+      },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [
+          { role: 'system', content: system || NODATAGPT_DEFAULT_SYSTEM },
+          { role: 'user', content: text },
+        ],
+      }),
+    },
+    28000
+  );
+
+  if (!res.ok) {
+    const errTxt = await res.text().catch(() => '');
+    throw new Error(`${providerName} HTTP ${res.status}: ${errTxt.slice(0, 140)}`);
+  }
+
+  const parsed = parseOpenAiSseOrJson(await res.text());
+  if (!parsed.text) {
+    throw new Error(`${providerName} tidak mengembalikan teks jawaban.`);
+  }
+
+  return {
+    provider: providerName,
+    model,
+    result: normalizePersonaReply(parsed.text),
+    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
+  };
+}
+
+// ============================================================================
+// 5. YQCLOUD / BINJIE (chat9.yqcloud.top -> api.binjie.fun)
 // ============================================================================
 async function scrapeYqCloud({ text, system }) {
   const res = await fetchWithTimeout(
@@ -492,7 +441,7 @@ async function scrapeYqCloud({ text, system }) {
 }
 
 // ============================================================================
-// 9. COHERE LABS OFFICIAL CHAT UI (coherelabs-c4ai-command.hf.space)
+// 6. COHERE LABS OFFICIAL CHAT UI (coherelabs-c4ai-command.hf.space)
 // ============================================================================
 async function scrapeCohereCommand({
   text,
@@ -621,85 +570,16 @@ async function scrapeCohereCommand({
 }
 
 // ============================================================================
-// 10. AI HORDE (stablehorde.net) — Distributed GPU Image Cluster
-// ============================================================================
-async function scrapeAiHordeImage({ prompt, ratio = '1:1' }) {
-  const dims = ratioToDimensions(ratio);
-  const submitRes = await fetchWithTimeout(
-    'https://stablehorde.net/api/v2/generate/async',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        apikey: '0000000000',
-        'Client-Agent': 'nodatagpt:3.0:webai',
-      },
-      body: JSON.stringify({
-        prompt,
-        params: {
-          width: dims.hordeW,
-          height: dims.hordeH,
-          steps: 16,
-          n: 1,
-          sampler_name: 'k_euler_a',
-          cfg_scale: 7,
-        },
-        nsfw: false,
-        censor_nsfw: true,
-        r2: true,
-      }),
-    },
-    12000
-  );
-
-  if (!submitRes.ok) {
-    const errTxt = await submitRes.text().catch(() => '');
-    throw new Error(`stablehorde.net submit HTTP ${submitRes.status}: ${errTxt.slice(0, 120)}`);
-  }
-
-  const submitJson = await submitRes.json();
-  const jobId = submitJson?.id;
-  if (!jobId) {
-    throw new Error('stablehorde.net tidak mengembalikan job id.');
-  }
-
-  for (let i = 0; i < 14; i++) {
-    await new Promise((r) => setTimeout(r, 1500));
-    const statusRes = await fetchWithTimeout(
-      `https://stablehorde.net/api/v2/generate/status/${jobId}`,
-      {
-        headers: {
-          Accept: 'application/json',
-          apikey: '0000000000',
-          'Client-Agent': 'nodatagpt:3.0:webai',
-        },
-      },
-      8000
-    );
-    if (!statusRes.ok) continue;
-    const statusJson = await statusRes.json();
-    if (statusJson?.faulted) {
-      throw new Error('AI Horde gagal merender gambar.');
-    }
-    if (statusJson?.done && Array.isArray(statusJson?.generations) && statusJson.generations[0]?.img) {
-      const imgVal = statusJson.generations[0].img;
-      const url = imgVal.startsWith('http')
-        ? imgVal
-        : `data:image/webp;base64,${imgVal}`;
-      return {
-        provider: 'stablehorde.net',
-        model: statusJson.generations[0].model || 'ai-horde-sd',
-        url,
-      };
-    }
-  }
-
-  throw new Error('AI Horde antrean sedang penuh.');
-}
-
-// ============================================================================
-// 11–13. HUGGING FACE ZEROGPU FAST IMAGE SPACES (BFL FLUX.1, Evalstate FLUX, Qwen-Image)
+// 7–15. HUGGING FACE OFFICIAL SPACES (Gradio v5 Text/Coding & Image Studios)
+//       - huggingface-projects/gemma-4-12b-it (Google Gemma 4 12B IT + Thinking)
+//       - huggingface-projects/gemma-3-12b-it (Google Gemma 3 12B IT)
+//       - Qwen/Qwen3-Coder-WebDev (Alibaba Qwen3 Coder WebDev + Artifact Code)
+//       - vml12/qwen-ai-chatbot (Qwen CPU Chatbot + Reasoning)
+//       - black-forest-labs/FLUX.1-schnell (Official BFL FLUX.1 Schnell 1024px)
+//       - black-forest-labs/FLUX.2-klein-9B (Official BFL FLUX.2 Klein 9B 4-step)
+//       - evalstate/flux1_schnell (Evalstate FLUX.1 Schnell Fast)
+//       - mcp-tools/Qwen-Image-Fast (Alibaba Qwen-Image Lightning 8-step)
+//       - Tongyi-MAI/Z-Image-Turbo (Official Tongyi-MAI Z-Image-Turbo 8-step)
 // ============================================================================
 function randomPublicIpv4() {
   const firstOctets = [24, 38, 45, 66, 71, 73, 84, 98, 104, 138, 174];
@@ -760,49 +640,12 @@ async function getZeroGpuHeaders(spaceSlug) {
   }
 }
 
-function extractGradioFileUrl(item, spaceOrigin) {
-  if (!item) return '';
-  if (typeof item === 'string') {
-    if (
-      item.startsWith('http://') ||
-      item.startsWith('https://') ||
-      item.startsWith('data:image/')
-    ) {
-      return item;
-    }
-    if (item.startsWith('/')) {
-      return `${spaceOrigin}/gradio_api/file=${item}`;
-    }
-    return '';
-  }
-  if (Array.isArray(item)) {
-    for (const sub of item) {
-      const hit = extractGradioFileUrl(sub, spaceOrigin);
-      if (hit) return hit;
-    }
-    return '';
-  }
-  if (typeof item === 'object') {
-    if (typeof item.url === 'string' && item.url.startsWith('http')) {
-      return item.url;
-    }
-    if (typeof item.image === 'object' && item.image) {
-      const hit = extractGradioFileUrl(item.image, spaceOrigin);
-      if (hit) return hit;
-    }
-    if (typeof item.path === 'string' && item.path) {
-      return `${spaceOrigin}/gradio_api/file=${item.path}`;
-    }
-  }
-  return '';
-}
-
-async function callGradioImageSpace({
+async function callGradioSpaceRaw({
   spaceSlug,
   spaceHost,
   endpoint,
   data,
-  timeoutMs = 36000,
+  timeoutMs = 34000,
 }) {
   const spaceOrigin = `https://${spaceHost}`;
   const cleanEndpoint = endpoint.replace(/^\//, '');
@@ -857,6 +700,8 @@ async function callGradioImageSpace({
   const rawSse = await streamRes.text();
   let currentEvent = '';
   let lastError = '';
+  let completePayload = null;
+  let lastGeneratingPayload = null;
 
   for (const rawLine of rawSse.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -872,31 +717,180 @@ async function callGradioImageSpace({
         lastError = dataStr;
         continue;
       }
-      if (currentEvent === 'complete' || !currentEvent) {
-        try {
-          const parsed = JSON.parse(dataStr);
-          const url = extractGradioFileUrl(parsed, spaceOrigin);
-          if (url) {
-            return {
-              provider: spaceHost,
-              model: spaceSlug,
-              url,
-            };
-          }
-        } catch {
-          // ignore
+      try {
+        const parsed = JSON.parse(dataStr);
+        if (currentEvent === 'complete') {
+          completePayload = parsed;
+        } else {
+          lastGeneratingPayload = parsed;
         }
+      } catch {
+        // ignore non-json SSE data
       }
     }
   }
 
-  throw new Error(
-    `${spaceHost} gagal menghasilkan gambar${lastError ? `: ${lastError.slice(0, 140)}` : '.'}`
-  );
+  const finalPayload = completePayload ?? lastGeneratingPayload;
+  if (finalPayload === null || finalPayload === undefined) {
+    throw new Error(
+      `${spaceHost} tidak mengembalikan hasil${lastError ? `: ${lastError.slice(0, 140)}` : '.'}`
+    );
+  }
+
+  return { payload: finalPayload, spaceOrigin };
+}
+
+function extractGradioTextPayload(payload) {
+  if (!payload) return { text: '', thinking: '' };
+
+  if (typeof payload === 'string') {
+    return { text: payload.trim(), thinking: '' };
+  }
+
+  if (Array.isArray(payload)) {
+    // Qwen3-Coder-WebDev returns [explanationMarkdown, generatedCode]
+    if (
+      payload.length === 2 &&
+      typeof payload[0] === 'string' &&
+      typeof payload[1] === 'string' &&
+      (payload[0].trim() || payload[1].trim())
+    ) {
+      const exp = payload[0].trim();
+      const code = payload[1].trim();
+      if (code && !exp.includes('```')) {
+        const lang = /^\s*<!doctype html|^\s*<html/i.test(code) ? 'html' : '';
+        return {
+          text: exp ? `${exp}\n\n\`\`\`${lang}\n${code}\n\`\`\`` : `\`\`\`${lang}\n${code}\n\`\`\``,
+          thinking: '',
+        };
+      }
+      return { text: exp || code, thinking: '' };
+    }
+
+    for (const item of payload) {
+      const extracted = extractGradioTextPayload(item);
+      if (extracted.text) return extracted;
+    }
+    return { text: '', thinking: '' };
+  }
+
+  if (typeof payload === 'object') {
+    const content =
+      payload.content ||
+      payload.response ||
+      payload.reply ||
+      payload.text ||
+      payload.output ||
+      payload.message ||
+      '';
+    const reasoning =
+      payload.reasoning || payload.thinking || payload.thought || '';
+    if (typeof content === 'string' && content.trim()) {
+      return {
+        text: content.trim(),
+        thinking: typeof reasoning === 'string' ? reasoning.trim() : '',
+      };
+    }
+  }
+
+  return { text: '', thinking: '' };
+}
+
+async function scrapeGradioTextSpace({
+  spaceSlug,
+  spaceHost,
+  modelLabel,
+  endpoint,
+  data,
+  timeoutMs = 30000,
+}) {
+  const { payload } = await callGradioSpaceRaw({
+    spaceSlug,
+    spaceHost,
+    endpoint,
+    data,
+    timeoutMs,
+  });
+
+  const parsed = extractGradioTextPayload(payload);
+  if (!parsed.text) {
+    throw new Error(`${spaceHost} tidak mengembalikan teks jawaban.`);
+  }
+
+  return {
+    provider: spaceHost,
+    model: modelLabel || spaceSlug,
+    result: normalizePersonaReply(parsed.text),
+    ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
+  };
+}
+
+function extractGradioFileUrl(item, spaceOrigin) {
+  if (!item) return '';
+  if (typeof item === 'string') {
+    if (
+      item.startsWith('http://') ||
+      item.startsWith('https://') ||
+      item.startsWith('data:image/')
+    ) {
+      return item;
+    }
+    if (item.startsWith('/')) {
+      return `${spaceOrigin}/gradio_api/file=${item}`;
+    }
+    return '';
+  }
+  if (Array.isArray(item)) {
+    for (const sub of item) {
+      const hit = extractGradioFileUrl(sub, spaceOrigin);
+      if (hit) return hit;
+    }
+    return '';
+  }
+  if (typeof item === 'object') {
+    if (typeof item.url === 'string' && item.url.startsWith('http')) {
+      return item.url;
+    }
+    if (typeof item.image === 'object' && item.image) {
+      const hit = extractGradioFileUrl(item.image, spaceOrigin);
+      if (hit) return hit;
+    }
+    if (typeof item.path === 'string' && item.path) {
+      return `${spaceOrigin}/gradio_api/file=${item.path}`;
+    }
+  }
+  return '';
+}
+
+async function callGradioImageSpace({
+  spaceSlug,
+  spaceHost,
+  endpoint,
+  data,
+  timeoutMs = 36000,
+}) {
+  const { payload, spaceOrigin } = await callGradioSpaceRaw({
+    spaceSlug,
+    spaceHost,
+    endpoint,
+    data,
+    timeoutMs,
+  });
+
+  const url = extractGradioFileUrl(payload, spaceOrigin);
+  if (!url) {
+    throw new Error(`${spaceHost} tidak mengembalikan URL gambar.`);
+  }
+
+  return {
+    provider: spaceHost,
+    model: spaceSlug,
+    url,
+  };
 }
 
 // ============================================================================
-// 14. NEURAL VOICE TTS (g4f.space/api/audio + tiktok-tts.weilnet.workers.dev)
+// 16. NEURAL VOICE TTS (tiktok-tts.weilnet.workers.dev in IAD + Multi-Voice)
 // ============================================================================
 const TIKTOK_VOICE_MAP = {
   coral: 'id_001',
@@ -937,48 +931,6 @@ async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
   const cleanVoice = String(voice || 'coral').toLowerCase();
   const cleanText = String(text || '').trim().slice(0, 1200);
 
-  // Tier 1: g4f.space/api/audio (OpenAI-Audio Neural Voices: coral, nova, onyx, sage, alloy)
-  try {
-    const g4fAudioRes = await fetchWithTimeout(
-      `https://g4f.space/api/audio/audio/speech`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'audio/mpeg, audio/*, */*',
-          Origin: 'https://g4f.dev',
-          Referer: 'https://g4f.dev/',
-          'User-Agent': CHROME_UA,
-        },
-        body: JSON.stringify({
-          model: 'gpt-audio',
-          voice: ['coral', 'nova', 'onyx', 'sage', 'alloy', 'echo', 'fable', 'shimmer', 'ash', 'ballad', 'verse'].includes(cleanVoice)
-            ? cleanVoice
-            : 'coral',
-          input: cleanText,
-          response_format: 'mp3',
-        }),
-      },
-      18000
-    );
-
-    if (g4fAudioRes.ok) {
-      const ct = g4fAudioRes.headers.get('content-type') || 'audio/mpeg';
-      const buf = Buffer.from(await g4fAudioRes.arrayBuffer());
-      if (buf.byteLength > 512 && !ct.includes('json') && !ct.includes('html')) {
-        return {
-          buffer: buf,
-          contentType: 'audio/mpeg',
-          voice: cleanVoice,
-          source: 'g4f.space/api/audio',
-        };
-      }
-    }
-  } catch {
-    // Proceed to Tier 2
-  }
-
-  // Tier 2: tiktok-tts.weilnet.workers.dev (Cloudflare Worker in IAD — fast & reliable MP3)
   const hasIndonesianHint = /\b(?:halo|saya|aku|kamu|yang|dan|untuk|dengan|dari|tidak|bisa|ini|itu|selamat)\b/i.test(
     cleanText
   );
@@ -1011,7 +963,7 @@ async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
     );
 
     if (!ttRes.ok) {
-      throw new Error(`TikTok Neural TTS HTTP ${ttRes.status}`);
+      throw new Error(`Neural TTS HTTP ${ttRes.status}`);
     }
     const ttJson = await ttRes.json();
     if (!ttJson?.data || typeof ttJson.data !== 'string') {
@@ -1034,35 +986,27 @@ async function fetchNeuralVoiceAudio({ text, voice = 'coral' }) {
 }
 
 // ============================================================================
-// UNIFIED PROVIDER DIRECTORY & DISPATCHER
+// UNIFIED PROVIDER DIRECTORY & DISPATCHER (16 Distinct Verified Websites)
 // ============================================================================
 export const WEBAI_SCRAPER_DIRECTORY = [
-  { id: 'opencode-deepseek', site: 'opencode.ai', kind: 'reasoning', name: 'OpenCode Zen · DeepSeek V4.1 Flash' },
-  { id: 'opencode-glm53', site: 'opencode.ai', kind: 'chat', name: 'OpenCode Zen · GLM-5.3 Flash' },
-  { id: 'opencode-flint', site: 'opencode.ai', kind: 'coding', name: 'OpenCode Zen · Recursive Flint 40B Coder' },
-  { id: 'opencode-pickle', site: 'opencode.ai', kind: 'reasoning', name: 'OpenCode Zen · Big Pickle 200K Reasoning' },
-  { id: 'ollama-kimi-k3', site: 'ollama.g4f-dev.workers.dev', kind: 'reasoning', name: 'Ollama Cloud · Moonshot Kimi K3' },
-  { id: 'ollama-mistral4', site: 'ollama.g4f-dev.workers.dev', kind: 'chat', name: 'Ollama Cloud · Mistral Large 4' },
-  { id: 'ollama-minimax-m31', site: 'ollama.g4f-dev.workers.dev', kind: 'chat', name: 'Ollama Cloud · MiniMax M3.1 Flash' },
-  { id: 'puter-claude-sonnet', site: 'puter.g4f-dev.workers.dev', kind: 'reasoning', name: 'Puter AI · Claude Sonnet 4.6' },
-  { id: 'puter-qwen38-max', site: 'puter.g4f-dev.workers.dev', kind: 'coding', name: 'Puter AI · Qwen 3.8 Max' },
-  { id: 'puter-gpt54', site: 'puter.g4f-dev.workers.dev', kind: 'chat', name: 'Puter AI · OpenAI GPT-5.4' },
-  { id: 'puter-grok43', site: 'puter.g4f-dev.workers.dev', kind: 'reasoning', name: 'Puter AI · xAI Grok 4.3' },
-  { id: 'relayrouter-deepseek', site: 'relayrouter.org', kind: 'reasoning', name: 'RelayRouter · DeepSeek V4.1 Flash 1M' },
-  { id: 'crowllm-glm52', site: 'g4f.space (CrowLLM)', kind: 'chat', name: 'CrowLLM Cluster · Zhipu GLM-5.2' },
-  { id: 'g4f-groq-120b', site: 'g4f.space (Groq)', kind: 'chat', name: 'G4F Groq Cluster · GPT-OSS 120B' },
+  { id: 'gemma4-12b', site: 'huggingface-projects-gemma-4-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 4 12B IT (Official Space)' },
+  { id: 'gemma4-thinking', site: 'huggingface-projects-gemma-4-12b-it.hf.space', kind: 'reasoning', name: 'Google Gemma 4 12B Thinking (Reasoning)' },
+  { id: 'gemma3-12b', site: 'huggingface-projects-gemma-3-12b-it.hf.space', kind: 'chat', name: 'Google Gemma 3 12B IT (Official Space)' },
+  { id: 'qwen3-coder-webdev', site: 'qwen-qwen3-coder-webdev.hf.space', kind: 'coding', name: 'Alibaba Qwen3 Coder WebDev (Official Space)' },
+  { id: 'qwen-cpu-chat', site: 'vml12-qwen-ai-chatbot.hf.space', kind: 'chat', name: 'Qwen AI Chatbot Stateless Space' },
   { id: 'aitopia-direct', site: 'extensions.aitopia.ai', kind: 'chat', name: 'Aitopia AI Extension Direct' },
   { id: 'deepai-chat', site: 'deepai.org', kind: 'chat', name: 'DeepAI Direct Hash Scraper' },
   { id: 'deepai-online', site: 'deepai.org', kind: 'search', name: 'DeepAI Live Online Search' },
   { id: 'kilo-nemotron', site: 'kilo.ai', kind: 'reasoning', name: 'Kilo Gateway · NVIDIA Nemotron 3.5 Super 120B' },
   { id: 'kilo-beam', site: 'kilo.ai', kind: 'coding', name: 'Kilo Gateway · Reflection Beam 1M Coder' },
   { id: 'cohere-command-a', site: 'coherelabs-c4ai-command.hf.space', kind: 'chat', name: 'Cohere Labs Official · Command-A 2025' },
-  { id: 'llm7-direct', site: 'api.llm7.io', kind: 'coding', name: 'LLM7.io · Codestral Direct' },
-  { id: 'yqcloud', site: 'chat9.yqcloud.top', kind: 'chat', name: 'YQCloud GPT Network Stream' },
+  { id: 'llm7-direct', site: 'api.llm7.io', kind: 'coding', name: 'LLM7.io · Mistral Codestral Direct' },
+  { id: 'yqcloud', site: 'chat9.yqcloud.top', kind: 'search', name: 'YQCloud Live Web GPT Stream' },
   { id: 'bfl-flux-schnell', site: 'black-forest-labs-flux-1-schnell.hf.space', kind: 'image', name: 'Black Forest Labs · FLUX.1-Schnell 1024px' },
+  { id: 'bfl-flux2-klein', site: 'black-forest-labs-flux-2-klein-9b.hf.space', kind: 'image', name: 'Black Forest Labs · FLUX.2 Klein 9B (4-Step)' },
   { id: 'evalstate-flux', site: 'evalstate-flux1-schnell.hf.space', kind: 'image', name: 'Evalstate · FLUX.1-Schnell Fast ZeroGPU' },
   { id: 'qwen-image-fast', site: 'mcp-tools-qwen-image-fast.hf.space', kind: 'image', name: 'Alibaba · Qwen-Image-Fast Lightning' },
-  { id: 'aihorde-image', site: 'stablehorde.net', kind: 'image', name: 'AI Horde · Distributed GPU Diffusion' },
+  { id: 'tongyi-zimage', site: 'tongyi-mai-z-image-turbo.hf.space', kind: 'image', name: 'Alibaba Tongyi-MAI · Z-Image-Turbo Official' },
   { id: 'neural-voice', site: 'tiktok-tts.weilnet.workers.dev', kind: 'audio', name: 'Neural AI Voice (Indo & Multi-Voice MP3)' },
 ];
 
@@ -1077,145 +1021,103 @@ async function dispatchWebAiProvider({
 }) {
   const id = String(provider || '').trim().toLowerCase();
   const inputText = String(text || prompt || '').trim();
+  const sysPrompt = String(system || NODATAGPT_DEFAULT_SYSTEM).trim();
   const dims = ratioToDimensions(ratio);
 
   switch (id) {
-    case 'opencode':
-    case 'opencode-deepseek':
-      return scrapeOpenCodeZen({
-        text: inputText,
-        system,
-        model: model || 'deepseek-v4.1-flash-free',
+    case 'gemma4':
+    case 'gemma4-12b':
+      return scrapeGradioTextSpace({
+        spaceSlug: 'huggingface-projects/gemma-4-12b-it',
+        spaceHost: 'huggingface-projects-gemma-4-12b-it.hf.space',
+        modelLabel: 'google/gemma-4-12b-it',
+        endpoint: '/chat',
+        data: [
+          inputText,
+          null,
+          null,
+          false,
+          1500,
+          280,
+          sysPrompt,
+          0.8,
+          0.95,
+          64,
+          1.0,
+        ],
+        timeoutMs: 32000,
       });
 
-    case 'opencode-glm53':
-      return scrapeOpenCodeZen({
-        text: inputText,
-        system,
-        model: 'glm-5.3-flash-free',
+    case 'gemma4-thinking':
+      return scrapeGradioTextSpace({
+        spaceSlug: 'huggingface-projects/gemma-4-12b-it',
+        spaceHost: 'huggingface-projects-gemma-4-12b-it.hf.space',
+        modelLabel: 'google/gemma-4-12b-it (thinking)',
+        endpoint: '/chat',
+        data: [
+          inputText,
+          null,
+          null,
+          true,
+          1800,
+          280,
+          sysPrompt,
+          0.8,
+          0.95,
+          64,
+          1.0,
+        ],
+        timeoutMs: 34000,
       });
 
-    case 'opencode-flint':
-      return scrapeOpenCodeZen({
-        text: inputText,
-        system,
-        model: 'flint-40b-free',
+    case 'gemma3':
+    case 'gemma3-12b':
+      return scrapeGradioTextSpace({
+        spaceSlug: 'huggingface-projects/gemma-3-12b-it',
+        spaceHost: 'huggingface-projects-gemma-3-12b-it.hf.space',
+        modelLabel: 'google/gemma-3-12b-it',
+        endpoint: '/run',
+        data: [{ text: inputText, files: [] }, sysPrompt, 1000],
+        timeoutMs: 30000,
       });
 
-    case 'opencode-pickle':
-      return scrapeOpenCodeZen({
-        text: inputText,
-        system,
-        model: 'big-pickle',
+    case 'qwen3-coder':
+    case 'qwen3-coder-webdev':
+      return scrapeGradioTextSpace({
+        spaceSlug: 'Qwen/Qwen3-Coder-WebDev',
+        spaceHost: 'qwen-qwen3-coder-webdev.hf.space',
+        modelLabel: 'Qwen/Qwen3-Coder-WebDev',
+        endpoint: '/generate_code',
+        data: [inputText, sysPrompt],
+        timeoutMs: 34000,
       });
 
-    case 'ollama-kimi-k3':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'ollama.g4f-dev.workers.dev',
-        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'kimi-k3',
-        text: inputText,
-        system,
-      });
-
-    case 'ollama-mistral4':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'ollama.g4f-dev.workers.dev',
-        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'mistral-large-4',
-        text: inputText,
-        system,
-      });
-
-    case 'ollama-minimax-m31':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'ollama.g4f-dev.workers.dev',
-        endpointUrl: 'https://ollama.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'minimax-m3.1-flash',
-        text: inputText,
-        system,
-      });
-
-    case 'puter-claude-sonnet':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'puter.g4f-dev.workers.dev',
-        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'anthropic:anthropic/claude-sonnet-4-6',
-        text: inputText,
-        system,
-      });
-
-    case 'puter-qwen38-max':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'puter.g4f-dev.workers.dev',
-        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'alibaba:qwen/qwen3.8-max',
-        text: inputText,
-        system,
-      });
-
-    case 'puter-gpt54':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'puter.g4f-dev.workers.dev',
-        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'azure:openai/gpt-5.4-mini',
-        text: inputText,
-        system,
-      });
-
-    case 'puter-grok43':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'puter.g4f-dev.workers.dev',
-        endpointUrl: 'https://puter.g4f-dev.workers.dev/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'azure:x-ai/grok-4.3',
-        text: inputText,
-        system,
-      });
-
-    case 'relayrouter':
-    case 'relayrouter-deepseek':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'relayrouter.org',
-        endpointUrl: 'https://g4f.space/api/relayrouter/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'deepseek-v4.1-flash-1017:free',
-        text: inputText,
-        system,
-      });
-
-    case 'crowllm':
-    case 'crowllm-glm52':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'g4f.space/crowllm',
-        endpointUrl: 'https://g4f.space/custom/srv_mrgynwuz08a167112109/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'glm-5.2',
-        text: inputText,
-        system,
-      });
-
-    case 'g4f-groq-120b':
-      return scrapeOpenAiCompatGateway({
-        providerName: 'g4f.space/groq',
-        endpointUrl: 'https://g4f.space/api/groq/chat/completions',
-        originUrl: 'https://g4f.dev',
-        model: model || 'openai/gpt-oss-120b',
-        text: inputText,
-        system,
+    case 'qwen-cpu-chat':
+      return scrapeGradioTextSpace({
+        spaceSlug: 'vml12/qwen-ai-chatbot',
+        spaceHost: 'vml12-qwen-ai-chatbot.hf.space',
+        modelLabel: 'qwen-ai-chatbot',
+        endpoint: '/respond',
+        data: [
+          inputText,
+          '',
+          sysPrompt,
+          'off',
+          768,
+          0.7,
+          0.95,
+          20,
+          1.0,
+          false,
+        ],
+        timeoutMs: 30000,
       });
 
     case 'aitopia':
     case 'aitopia-direct':
       return scrapeAitopiaAi({
         text: inputText,
-        system,
+        system: sysPrompt,
         model: model || 'AITOPIA',
       });
 
@@ -1223,14 +1125,14 @@ async function dispatchWebAiProvider({
     case 'deepai-chat':
       return scrapeDeepAiChat({
         text: inputText,
-        system,
+        system: sysPrompt,
         model: model || 'standard',
       });
 
     case 'deepai-online':
       return scrapeDeepAiChat({
         text: inputText,
-        system,
+        system: sysPrompt,
         model: 'online',
       });
 
@@ -1242,7 +1144,7 @@ async function dispatchWebAiProvider({
         originUrl: 'https://kilo.ai',
         model: model || 'kilo-auto/free',
         text: inputText,
-        system,
+        system: sysPrompt,
       });
 
     case 'kilo-nemotron':
@@ -1252,7 +1154,7 @@ async function dispatchWebAiProvider({
         originUrl: 'https://kilo.ai',
         model: 'nvidia/nemotron-3.5-super-vl:free',
         text: inputText,
-        system,
+        system: sysPrompt,
       });
 
     case 'kilo-beam':
@@ -1262,7 +1164,7 @@ async function dispatchWebAiProvider({
         originUrl: 'https://kilo.ai',
         model: 'reflection/beam-free',
         text: inputText,
-        system,
+        system: sysPrompt,
       });
 
     case 'llm7':
@@ -1273,17 +1175,17 @@ async function dispatchWebAiProvider({
         originUrl: 'https://llm7.io',
         model: model || 'default',
         text: inputText,
-        system,
+        system: sysPrompt,
       });
 
     case 'yqcloud':
-      return scrapeYqCloud({ text: inputText, system });
+      return scrapeYqCloud({ text: inputText, system: sysPrompt });
 
     case 'cohere':
     case 'cohere-command-a':
       return scrapeCohereCommand({
         text: inputText,
-        system,
+        system: sysPrompt,
         model: model || 'command-a-03-2025',
       });
 
@@ -1306,6 +1208,28 @@ async function dispatchWebAiProvider({
           timeoutMs: 34000,
         });
       }
+    }
+
+    case 'bfl-flux2-klein': {
+      const seed = Math.floor(Math.random() * 1000000);
+      return callGradioImageSpace({
+        spaceSlug: 'black-forest-labs/FLUX.2-klein-9B',
+        spaceHost: 'black-forest-labs-flux-2-klein-9b.hf.space',
+        endpoint: '/generate',
+        data: [
+          inputText,
+          [],
+          'Distilled (4 steps)',
+          seed,
+          true,
+          dims.width,
+          dims.height,
+          4,
+          1.0,
+          false,
+        ],
+        timeoutMs: 36000,
+      });
     }
 
     case 'evalstate-flux': {
@@ -1338,8 +1262,14 @@ async function dispatchWebAiProvider({
         timeoutMs: 36000,
       });
 
-    case 'aihorde-image':
-      return scrapeAiHordeImage({ prompt: inputText, ratio });
+    case 'tongyi-zimage':
+      return callGradioImageSpace({
+        spaceSlug: 'Tongyi-MAI/Z-Image-Turbo',
+        spaceHost: 'tongyi-mai-z-image-turbo.hf.space',
+        endpoint: '/generate',
+        data: [inputText, dims.zRes, 42, 8, 3.0, true, []],
+        timeoutMs: 36000,
+      });
 
     case 'openai-fm':
     case 'neural-voice': {
@@ -1440,9 +1370,13 @@ export default async function handler(req, res) {
   const system = String(body.system || query.system || NODATAGPT_DEFAULT_SYSTEM).trim();
 
   const isImageProvider =
-    ['bfl-flux-schnell', 'evalstate-flux', 'qwen-image-fast', 'aihorde-image'].includes(
-      provider.toLowerCase()
-    ) || mode === 'image';
+    [
+      'bfl-flux-schnell',
+      'bfl-flux2-klein',
+      'evalstate-flux',
+      'qwen-image-fast',
+      'tongyi-zimage',
+    ].includes(provider.toLowerCase()) || mode === 'image';
 
   const defaultProbeText = isImageProvider
     ? 'futuristic neon cyan and orange glowing cybernetic fox emblem on dark obsidian background, ultra sharp digital art'

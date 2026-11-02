@@ -20,7 +20,13 @@ import { ToolsStudioModal } from './components/ToolsStudioModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AccessGateModal } from './components/AccessGateModal';
-import { WaifuBannerBar } from './components/WaifuBannerBar';
+import {
+  WaifuBannerBar,
+  WaifuInlineDockedPill,
+  loadInitialWaifuCardMode,
+  saveWaifuCardMode,
+  type WaifuCardMode,
+} from './components/WaifuBannerBar';
 import { WaifuStudioModal } from './components/WaifuStudioModal';
 import {
   DEFAULT_MIKU_ID,
@@ -114,6 +120,10 @@ export function App() {
     loadWaifuStore()
   );
   const [waifuStudioOpen, setWaifuStudioOpen] = useState(false);
+  const [waifuCardMode, setWaifuCardMode] = useState<WaifuCardMode>(() =>
+    loadInitialWaifuCardMode()
+  );
+  const lastOpenWaifuModeRef = useRef<'compact' | 'expanded'>('compact');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [gateState, setGateState] = useState<AccessGateState>(() =>
@@ -353,6 +363,33 @@ export function App() {
       : undefined;
     return matched || activeConversation.waifuProfileSnapshot || activeWaifu;
   }, [activeConversation, waifuStore.profiles, activeWaifu]);
+
+  const activeWaifuAllMessageLists = useMemo<ChatMessage[][] | undefined>(() => {
+    if (!activeConversationWaifu) return undefined;
+    return conversations
+      .filter(
+        (c) =>
+          c.mode === 'waifu' &&
+          (c.waifuId === activeConversationWaifu.id ||
+            c.waifuProfileSnapshot?.id === activeConversationWaifu.id)
+      )
+      .map((c) => c.messages);
+  }, [conversations, activeConversationWaifu]);
+
+  const handleChangeWaifuCardMode = useCallback((nextMode: WaifuCardMode) => {
+    if (nextMode === 'compact' || nextMode === 'expanded') {
+      lastOpenWaifuModeRef.current = nextMode;
+    }
+    setWaifuCardMode(nextMode);
+    saveWaifuCardMode(nextMode);
+  }, []);
+
+  const hasActiveWaifuThread = Boolean(
+    activeConversation &&
+      activeConversation.messages.length > 0 &&
+      activeConversationWaifu
+  );
+  const isWaifuDockedInline = hasActiveWaifuThread && waifuCardMode === 'docked';
 
   const activeModel = useMemo(
     () => getModelById(settings.selectedModelId, settings),
@@ -1328,9 +1365,9 @@ export function App() {
           </div>
         </header>
 
-        {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header */}
+        {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header (+ Inline Docked Waifu Pill when minimized) */}
         <div
-          className={`flex shrink-0 items-center justify-center px-3 ${
+          className={`z-20 flex shrink-0 flex-wrap items-center justify-center gap-1.5 px-3 ${
             activeConversationWaifu ? 'pt-1.5 pb-0.5' : 'pt-2 pb-1'
           }`}
         >
@@ -1344,7 +1381,7 @@ export function App() {
                   ? 'Status kunci API pribadi aktif'
                   : `Kuota uji coba gratis tersisa ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari ${FREE_TRIAL_LIMIT}`
             }
-            className={`group inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all cursor-pointer sm:px-3.5 ${
+            className={`group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all cursor-pointer sm:gap-2 sm:px-3.5 ${
               gateState.unlocked || hasByokKey
                 ? 'border-emerald-400/35 bg-[#061512]/90 text-emerald-200 hover:border-emerald-400/60'
                 : gateState.used >= FREE_TRIAL_LIMIT - 1
@@ -1355,12 +1392,29 @@ export function App() {
             {gateState.unlocked || hasByokKey ? (
               <>
                 <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                <span className="truncate font-medium">
-                  {gateState.unlocked
-                    ? 'Akses VIP Aktif · Tanpa Batas'
-                    : 'Mode BYOK · Kunci Pribadi Aktif'}
-                </span>
-                <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300">
+                {isWaifuDockedInline ? (
+                  <>
+                    <span className="truncate font-medium sm:hidden">
+                      {gateState.unlocked ? 'VIP Aktif' : 'BYOK Aktif'}
+                    </span>
+                    <span className="hidden truncate font-medium sm:inline">
+                      {gateState.unlocked
+                        ? 'Akses VIP Aktif · Tanpa Batas'
+                        : 'Mode BYOK · Kunci Pribadi Aktif'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="truncate font-medium">
+                    {gateState.unlocked
+                      ? 'Akses VIP Aktif · Tanpa Batas'
+                      : 'Mode BYOK · Kunci Pribadi Aktif'}
+                  </span>
+                )}
+                <span
+                  className={`rounded-full bg-emerald-400/15 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300 ${
+                    isWaifuDockedInline ? 'hidden md:inline' : ''
+                  }`}
+                >
                   Ekosistem ›
                 </span>
               </>
@@ -1374,7 +1428,12 @@ export function App() {
                   }`}
                 />
                 <span className="truncate font-medium text-[#CBD5E1]">
-                  Uji Coba Gratis:{' '}
+                  <span className={isWaifuDockedInline ? 'hidden sm:inline' : ''}>
+                    Uji Coba Gratis:{' '}
+                  </span>
+                  <span className={isWaifuDockedInline ? 'sm:hidden' : 'hidden'}>
+                    Gratis{' '}
+                  </span>
                   <strong className="font-mono-code font-bold text-white">
                     {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/{FREE_TRIAL_LIMIT}
                   </strong>
@@ -1402,6 +1461,8 @@ export function App() {
                 </span>
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
+                    isWaifuDockedInline ? 'hidden sm:inline' : ''
+                  } ${
                     gateState.used >= FREE_TRIAL_LIMIT - 1
                       ? 'bg-[#FB923C]/20 text-[#FED7AA] group-hover:bg-[#FB923C]/30'
                       : 'bg-[#22D3EE]/16 text-[#67E8F9] group-hover:bg-[#22D3EE]/26'
@@ -1412,6 +1473,18 @@ export function App() {
               </>
             )}
           </button>
+
+          {isWaifuDockedInline && activeConversationWaifu && activeConversation && (
+            <WaifuInlineDockedPill
+              profile={activeConversationWaifu}
+              messages={activeConversation.messages}
+              allWaifuMessageLists={activeWaifuAllMessageLists}
+              onExpandCard={() =>
+                handleChangeWaifuCardMode(lastOpenWaifuModeRef.current)
+              }
+              onOpenEditor={() => setWaifuStudioOpen(true)}
+            />
+          )}
         </div>
 
         {/* Main Conversation Area */}
@@ -1450,6 +1523,9 @@ export function App() {
                 <WaifuBannerBar
                   profile={activeConversationWaifu}
                   messages={activeConversation.messages}
+                  allWaifuMessageLists={activeWaifuAllMessageLists}
+                  mode={waifuCardMode}
+                  onChangeMode={handleChangeWaifuCardMode}
                   onOpenEditor={() => setWaifuStudioOpen(true)}
                   onSelectScenario={handleSelectWaifuScenario}
                 />

@@ -470,10 +470,110 @@ export function importWaifuFromTavernJson(rawJson: string): WaifuProfile {
   });
 }
 
-export function analyzeWaifuMoodAndAffection(
+export interface WaifuExpTier {
+  level: number;
+  label: string;
+  minTotalExp: number;
+  spanExp: number;
+}
+
+export const WAIFU_EXP_TIERS: WaifuExpTier[] = [
+  { level: 1, label: 'Mulai Kenal', minTotalExp: 0, spanExp: 100 },
+  { level: 2, label: 'Mulai Terbuka', minTotalExp: 100, spanExp: 180 },
+  { level: 3, label: 'Teman Belajar', minTotalExp: 280, spanExp: 280 },
+  { level: 4, label: 'Nyaman Berdua', minTotalExp: 560, spanExp: 420 },
+  { level: 5, label: 'Sangat Akrab', minTotalExp: 980, spanExp: 600 },
+  { level: 6, label: 'Saling Percaya', minTotalExp: 1580, spanExp: 820 },
+  { level: 7, label: 'Tempat Pulang', minTotalExp: 2400, spanExp: 1100 },
+  { level: 8, label: 'Ikatan Spesial', minTotalExp: 3500, spanExp: 1400 },
+  { level: 9, label: 'Belahan Hati', minTotalExp: 4900, spanExp: 1800 },
+  { level: 10, label: 'Sangat Spesial', minTotalExp: 6700, spanExp: 2000 },
+];
+
+function computeExchangeExp(
+  userTextRaw: string,
+  assistantTextRaw: string
+): number {
+  const userText = userTextRaw.trim();
+  const assistantText = assistantTextRaw.trim();
+  if (!userText || !assistantText) return 0;
+
+  // Base EXP per completed exchange: +6 for ultra-short chat, +8 for normal chat
+  let exp = userText.length < 5 ? 6 : 8;
+
+  if (userText.length >= 28) exp += 2;
+  if (userText.length >= 90) exp += 2;
+
+  // Roleplay *action* bonus
+  if (/\*[^*\n]{3,}\*/.test(userText)) {
+    exp += 2;
+  }
+
+  // Attentive / warm dialogue bonus
+  if (
+    /(terima kasih|makasih|matcha|belajar|semangat|suka|sayang|manis|lucu|hebat|keren|senang|nyaman|temani|maaf|hati-hati|istirahat|sengoku|roti)/i.test(
+      userText
+    )
+  ) {
+    exp += 2;
+  }
+
+  // Emotional resonance in Waifu's reply
+  if (
+    /(tersenyum|senang|bahagia|hangat|nyaman|berbinar|tertawa|lembut|merona|pipi.*merah|suka)/i.test(
+      assistantText
+    )
+  ) {
+    exp += 2;
+  }
+
+  // Max +18 EXP per chat so Lv.1 -> Lv.2 (100 EXP) takes ~7-10 chats, Lv.2 -> Lv.3 (180 EXP) takes ~12-16 chats, etc.
+  return Math.max(6, Math.min(18, exp));
+}
+
+function calculateExpFromMessageList(
   messages: ChatMessage[]
+): { totalExp: number; lastGainExp: number; completedTurns: number } {
+  let totalExp = 0;
+  let lastGainExp = 0;
+  let completedTurns = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role !== 'user' || msg.isError || !msg.content.trim()) continue;
+
+    let pairedReply = '';
+    for (let j = i + 1; j < messages.length; j++) {
+      const next = messages[j];
+      if (next.role === 'user') break;
+      if (
+        next.role === 'assistant' &&
+        !next.isError &&
+        next.status !== 'waiting' &&
+        next.status !== 'error' &&
+        next.content.trim()
+      ) {
+        pairedReply = next.content;
+        break;
+      }
+    }
+
+    if (pairedReply) {
+      const gain = computeExchangeExp(msg.content, pairedReply);
+      totalExp += gain;
+      lastGainExp = gain;
+      completedTurns += 1;
+    }
+  }
+
+  return { totalExp, lastGainExp, completedTurns };
+}
+
+export function analyzeWaifuMoodAndAffection(
+  messages: ChatMessage[],
+  allWaifuMessageLists?: ChatMessage[][]
 ): WaifuMoodState {
-  const userTurns = messages.filter((m) => m.role === 'user' && !m.isError).length;
+  const activeStats = calculateExpFromMessageList(messages);
   const lastAssistant = [...messages]
     .reverse()
     .find((m) => m.role === 'assistant' && !m.isError && m.content.trim().length > 0);
@@ -504,7 +604,7 @@ export function analyzeWaifuMoodAndAffection(
     moodId = 'happy';
     moodLabel = 'Senang & Cerah';
   } else if (
-    userTurns >= 4 &&
+    activeStats.completedTurns >= 4 &&
     /\b(?:nyaman|tenang|hangat|tersenyum\s+lembut|percaya|betah)\b/.test(sample)
   ) {
     moodId = 'warm';
@@ -516,30 +616,47 @@ export function analyzeWaifuMoodAndAffection(
     moodLabel = 'Tersipu Malu';
   }
 
-  // Affection progression based on meaningful user turns
-  const rawScore = Math.min(100, 18 + userTurns * 11);
-  let affectionLevel = 1;
-  let affectionLabel = 'Mulai Kenal';
+  // Total EXP accumulates across all conversations for the same Waifu (when provided)
+  const totalExp =
+    allWaifuMessageLists && allWaifuMessageLists.length > 0
+      ? allWaifuMessageLists.reduce(
+          (sum, list) => sum + calculateExpFromMessageList(list).totalExp,
+          0
+        )
+      : activeStats.totalExp;
 
-  if (rawScore >= 88) {
-    affectionLevel = 5;
-    affectionLabel = 'Sangat Spesial';
-  } else if (rawScore >= 68) {
-    affectionLevel = 4;
-    affectionLabel = 'Sangat Akrab';
-  } else if (rawScore >= 48) {
-    affectionLevel = 3;
-    affectionLabel = 'Nyaman Berdua';
-  } else if (rawScore >= 30) {
-    affectionLevel = 2;
-    affectionLabel = 'Mulai Terbuka';
+  let currentTier = WAIFU_EXP_TIERS[0];
+  for (const tier of WAIFU_EXP_TIERS) {
+    if (totalExp >= tier.minTotalExp) {
+      currentTier = tier;
+    } else {
+      break;
+    }
   }
+
+  const isMaxTier =
+    currentTier.level === WAIFU_EXP_TIERS[WAIFU_EXP_TIERS.length - 1].level;
+  const rawInTier = Math.max(0, totalExp - currentTier.minTotalExp);
+  const currentLevelExp = isMaxTier
+    ? Math.min(rawInTier, currentTier.spanExp)
+    : rawInTier;
+  const nextLevelExp = currentTier.spanExp;
+  const affectionProgress = isMaxTier
+    ? 100
+    : Math.min(
+        99,
+        Math.max(0, Math.round((currentLevelExp / nextLevelExp) * 100))
+      );
 
   return {
     id: moodId,
     label: moodLabel,
-    affectionLevel,
-    affectionLabel,
-    affectionProgress: rawScore,
+    affectionLevel: currentTier.level,
+    affectionLabel: currentTier.label,
+    affectionProgress,
+    totalExp,
+    currentLevelExp,
+    nextLevelExp,
+    lastGainExp: activeStats.lastGainExp,
   };
 }

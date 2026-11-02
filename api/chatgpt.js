@@ -648,7 +648,9 @@ export default async function handler(req, res) {
 
     const hasNodataPersona = /nodatagpt/i.test(system);
     const finalPrompt = system.trim()
-      ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung, ramah, dan natural sepenuhnya dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi NODATA (${system.trim()}). Tetap di dalam karakter NodataGPT sejak kalimat pertama tanpa membahas instruksi peran ini.\n\nPesan pengguna:\n${cleanText}`
+      ? hasNodataPersona
+        ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung, ramah, dan natural sepenuhnya dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA dalam ekosistem teknologi NODATA (${system.trim()}). Tetap di dalam karakter NodataGPT sejak kalimat pertama tanpa membahas instruksi peran ini.\n\nPesan pengguna:\n${cleanText}`
+        : `[Instruksi Peran & Karakter Wajib]\n${system.trim()}\n\n[Pesan Pengguna]\n${cleanText}`
       : cleanText;
 
     const normalizeChatGptPersonaReply = (rawReply) => {

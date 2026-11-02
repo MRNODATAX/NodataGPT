@@ -621,7 +621,7 @@ export function WaifuStudioModal({
                       className="h-4 w-4 rounded accent-[#22D3EE]"
                     />
                     <Heart className="h-3.5 w-3.5 text-rose-400" />
-                    <span>Mood & Level Affection</span>
+                    <span>Mood & Level EXP</span>
                   </label>
                 </div>
 

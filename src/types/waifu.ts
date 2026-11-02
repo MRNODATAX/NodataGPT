@@ -11,9 +11,13 @@ export type WaifuMoodId = 'shy' | 'happy' | 'pout' | 'focused' | 'warm';
 export interface WaifuMoodState {
   id: WaifuMoodId;
   label: string;
-  affectionLevel: number; // 1..5
+  affectionLevel: number; // 1..10 progressive RPG levels
   affectionLabel: string;
-  affectionProgress: number; // 0..100
+  affectionProgress: number; // 0..100 (% inside current level)
+  totalExp: number;
+  currentLevelExp: number;
+  nextLevelExp: number;
+  lastGainExp: number;
 }
 
 export interface WaifuScenarioPreset {

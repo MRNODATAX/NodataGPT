@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   BookOpen,
   ChevronDown,
   ChevronUp,
-  EyeOff,
   Heart,
   Maximize2,
   Minimize2,
@@ -18,27 +17,123 @@ import {
 import type { ChatMessage } from '../types/chat';
 import type { WaifuProfile, WaifuScenarioPreset } from '../types/waifu';
 
-export type WaifuBannerSizeMode = 'full' | 'mini' | 'micro';
+export type WaifuCardMode = 'docked' | 'compact' | 'expanded';
 
-const BANNER_MODE_STORAGE_KEY = 'nodatagpt.waifuBannerMode.v1';
+export const WAIFU_CARD_MODE_STORAGE_KEY = 'nodatagpt.waifuCardDock.v2';
 
-function loadInitialBannerMode(): WaifuBannerSizeMode {
-  if (typeof window === 'undefined') return 'mini';
+export function loadInitialWaifuCardMode(): WaifuCardMode {
+  if (typeof window === 'undefined') return 'docked';
   try {
-    const saved = localStorage.getItem(BANNER_MODE_STORAGE_KEY);
-    if (saved === 'full' || saved === 'mini' || saved === 'micro') {
+    const saved = localStorage.getItem(WAIFU_CARD_MODE_STORAGE_KEY);
+    if (saved === 'docked' || saved === 'compact' || saved === 'expanded') {
       return saved;
     }
   } catch {
     // Ignore storage read errors
   }
-  // Default to compact 'mini' pill on mobile screens so it never crowds the chat view
-  return window.innerWidth < 640 ? 'mini' : 'full';
+  // Default to zero-obstruction inline 'docked' mode on mobile (<768px) and sleek 'compact' bar on desktop
+  return window.innerWidth < 768 ? 'docked' : 'compact';
+}
+
+export function saveWaifuCardMode(mode: WaifuCardMode): void {
+  try {
+    localStorage.setItem(WAIFU_CARD_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Ignore storage write errors
+  }
+}
+
+interface WaifuInlineDockedPillProps {
+  profile: WaifuProfile;
+  messages: ChatMessage[];
+  allWaifuMessageLists?: ChatMessage[][];
+  onExpandCard: () => void;
+  onOpenEditor: () => void;
+}
+
+export function WaifuInlineDockedPill({
+  profile,
+  messages,
+  allWaifuMessageLists,
+  onExpandCard,
+  onOpenEditor,
+}: WaifuInlineDockedPillProps) {
+  const mood = analyzeWaifuMoodAndAffection(messages, allWaifuMessageLists);
+  const shortName = profile.name.trim().split(/\s+/)[0] || profile.name;
+
+  const moodDotClasses: Record<string, string> = {
+    shy: 'bg-[#F472B6]',
+    happy: 'bg-emerald-400',
+    pout: 'bg-[#FB923C]',
+    focused: 'bg-[#22D3EE]',
+    warm: 'bg-amber-300',
+  };
+
+  return (
+    <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#F472B6]/35 bg-[#120A18]/92 p-0.5 pl-1 pr-1.5 text-[11px] text-[#F8FAFC] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md">
+      <button
+        type="button"
+        onClick={onExpandCard}
+        title={`${profile.name} · Lv.${mood.affectionLevel} (${mood.currentLevelExp}/${mood.nextLevelExp} EXP) — Klik untuk membuka kartu Waifu`}
+        aria-label={`Buka kartu karakter ${profile.name}`}
+        className="group inline-flex min-w-0 items-center gap-1.5 rounded-full px-1 py-0.5 text-left transition-colors hover:bg-white/[0.06] cursor-pointer"
+      >
+        <div className="relative h-5 w-5 shrink-0">
+          <img
+            src={resolveWaifuAvatarUrl(profile.avatarUrl)}
+            alt={profile.name}
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src !== DEFAULT_MIKU_AVATAR_URL) {
+                img.src = DEFAULT_MIKU_AVATAR_URL;
+              }
+            }}
+            className="h-5 w-5 rounded-full border border-[#F472B6]/45 object-cover"
+          />
+          <span
+            aria-hidden="true"
+            className={`absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full ring-1 ring-[#120A18] ${moodDotClasses[mood.id] || 'bg-[#F472B6]'}`}
+          />
+        </div>
+
+        <span className="max-w-[72px] truncate font-semibold text-white sm:max-w-[120px]">
+          {shortName}
+        </span>
+
+        {profile.affectionMeterEnabled && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#F472B6]/15 px-1.5 py-0.5 font-mono-code text-[10px] font-semibold text-[#F9A8D4]">
+            <span>Lv.{mood.affectionLevel}</span>
+            <span className="hidden text-[#CBD5E1] sm:inline">
+              · {mood.currentLevelExp}/{mood.nextLevelExp} EXP
+            </span>
+          </span>
+        )}
+
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium text-[#CBD5E1] transition-colors group-hover:bg-[#22D3EE]/18 group-hover:text-[#67E8F9]">
+          <span>Kartu</span>
+          <ChevronDown className="h-3 w-3" />
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenEditor}
+        title="Edit Karakter Waifu"
+        aria-label="Edit Karakter Waifu"
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[#94A3B8] transition-colors hover:bg-[#22D3EE]/16 hover:text-[#67E8F9] cursor-pointer"
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
+    </div>
+  );
 }
 
 interface WaifuBannerBarProps {
   profile: WaifuProfile;
   messages: ChatMessage[];
+  allWaifuMessageLists?: ChatMessage[][];
+  mode: WaifuCardMode;
+  onChangeMode: (nextMode: WaifuCardMode) => void;
   onOpenEditor: () => void;
   onSelectScenario: (preset: WaifuScenarioPreset) => void;
 }
@@ -46,22 +141,19 @@ interface WaifuBannerBarProps {
 export function WaifuBannerBar({
   profile,
   messages,
+  allWaifuMessageLists,
+  mode,
+  onChangeMode,
   onOpenEditor,
   onSelectScenario,
 }: WaifuBannerBarProps) {
-  const [sizeMode, setSizeMode] = useState<WaifuBannerSizeMode>(() =>
-    loadInitialBannerMode()
-  );
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
-  const mood = analyzeWaifuMoodAndAffection(messages);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(BANNER_MODE_STORAGE_KEY, sizeMode);
-    } catch {
-      // Ignore storage write errors
-    }
-  }, [sizeMode]);
+  if (mode === 'docked') {
+    return null;
+  }
+
+  const mood = analyzeWaifuMoodAndAffection(messages, allWaifuMessageLists);
 
   const moodToneClasses: Record<string, string> = {
     shy: 'border-[#F472B6]/40 bg-[#F472B6]/12 text-[#FBCFE8]',
@@ -124,114 +216,92 @@ export function WaifuBannerBar({
     );
   };
 
-  // Mode 3: Ultra-thin Micro Tab (almost zero vertical footprint)
-  if (sizeMode === 'micro') {
+  // =========================================================================
+  // COMPACT MODE ('compact'): Sleek 1-line adjustable bar with EXP + Minimize
+  // =========================================================================
+  if (mode === 'compact') {
     return (
-      <div className="relative z-20 flex shrink-0 items-center justify-center px-3 pt-0.5 pb-1">
-        <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/12 bg-[#07101E]/72 px-2 py-0.5 text-[10.5px] text-[#CBD5E1] shadow-sm backdrop-blur-md transition-all hover:border-[#22D3EE]/40 hover:bg-[#08101E]/92">
-          <button
-            type="button"
-            onClick={() => setSizeMode('mini')}
-            aria-label={`Tampilkan bar karakter ${profile.name}`}
-            title="Klik untuk menampilkan bar ringkas"
-            className="inline-flex min-w-0 items-center gap-1.5 py-0.5 text-left hover:text-white cursor-pointer"
-          >
-            <img
-              src={resolveWaifuAvatarUrl(profile.avatarUrl)}
-              alt=""
-              width={16}
-              height={16}
-              onError={(e) => {
-                e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
-              }}
-              className="h-4 w-4 shrink-0 rounded-full border border-[#22D3EE]/45 object-cover"
-            />
-            <span className="max-w-[120px] truncate font-medium text-white/90">
-              {profile.name}
-            </span>
-            <span
-              aria-hidden="true"
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                moodDotClasses[mood.id] || moodDotClasses.shy
-              }`}
-            />
-            <ChevronDown className="h-3 w-3 shrink-0 text-[#94A3B8]" />
-          </button>
-
-          <span aria-hidden="true" className="h-3 w-px bg-white/12" />
-
-          <button
-            type="button"
-            onClick={() => setSizeMode('full')}
-            aria-label="Perluas penuh kartu karakter Waifu"
-            title="Perluas kartu penuh"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[#94A3B8] transition-colors hover:bg-white/10 hover:text-[#22D3EE] cursor-pointer"
-          >
-            <Maximize2 className="h-2.5 w-2.5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Mode 2: Compact Floating Pill (Minimized — sleek, doesn't cover chat thread)
-  if (sizeMode === 'mini') {
-    return (
-      <div className="relative z-20 flex shrink-0 items-center justify-center px-3 pt-0.5 pb-1">
-        <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#22D3EE]/26 bg-[#08101E]/88 px-2 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:gap-1.5 sm:px-2.5">
-          <button
-            type="button"
-            onClick={() => setSizeMode('full')}
-            aria-label={`Perluas kartu karakter ${profile.name}`}
-            title={`${profile.name} · ${mood.label} (Klik untuk memperluas kartu)`}
-            className="inline-flex min-w-0 items-center gap-1.5 rounded-full pr-1 text-left transition-colors hover:text-white cursor-pointer"
-          >
-            <img
-              src={resolveWaifuAvatarUrl(profile.avatarUrl)}
-              alt={profile.name}
-              width={22}
-              height={22}
-              onError={(e) => {
-                e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
-              }}
-              className="h-5.5 w-5.5 shrink-0 rounded-full border border-[#22D3EE]/50 object-cover"
-            />
-            <span className="max-w-[96px] truncate font-display text-xs font-bold text-white sm:max-w-[150px]">
-              {profile.name}
-            </span>
-            <span
-              title={`Mood: ${mood.label}`}
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.2 text-[9.5px] font-medium ${
-                moodToneClasses[mood.id] || moodToneClasses.shy
-              }`}
+      <div className="relative z-20 shrink-0 px-3 pt-1 pb-1.5">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-[#090F1C]/90 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.42)] backdrop-blur-xl">
+          {/* Left: Avatar + Name + Mood + Live EXP Progress */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onChangeMode('expanded')}
+              title="Klik untuk membuka detail kartu Waifu"
+              className="relative h-7 w-7 shrink-0 cursor-pointer"
             >
-              <span className="max-w-[68px] truncate">{mood.label}</span>
-            </span>
-            {profile.affectionMeterEnabled && (
+              <img
+                src={resolveWaifuAvatarUrl(profile.avatarUrl)}
+                alt={profile.name}
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (img.src !== DEFAULT_MIKU_AVATAR_URL) {
+                    img.src = DEFAULT_MIKU_AVATAR_URL;
+                  }
+                }}
+                className="h-7 w-7 rounded-full border border-[#F472B6]/40 object-cover"
+              />
               <span
-                title={`Kedekatan: Lv.${mood.affectionLevel} · ${mood.affectionLabel}`}
-                className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-rose-400/30 bg-rose-500/12 px-1.5 py-0.2 font-mono-code text-[9.5px] font-semibold text-rose-200"
-              >
-                <Heart className="h-2.5 w-2.5 fill-rose-400 text-rose-400" />
-                <span>Lv.{mood.affectionLevel}</span>
-              </span>
-            )}
-          </button>
+                aria-hidden="true"
+                className={`absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#090F1C] ${moodDotClasses[mood.id] || 'bg-[#F472B6]'}`}
+              />
+            </button>
 
-          <span aria-hidden="true" className="h-3.5 w-px shrink-0 bg-white/12" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="truncate text-xs font-bold text-white">
+                  {profile.name}
+                </span>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${moodToneClasses[mood.id] || moodToneClasses.shy}`}
+                >
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {mood.label}
+                </span>
 
-          <div className="flex shrink-0 items-center gap-0.5">
+                {profile.affectionMeterEnabled && (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#F472B6]/30 bg-[#F472B6]/10 px-1.5 py-0.5 font-mono-code text-[10px] font-semibold text-[#F9A8D4]">
+                    <Heart className="h-2.5 w-2.5 fill-[#F472B6] text-[#F472B6]" />
+                    <span>Lv.{mood.affectionLevel}</span>
+                    <span className="text-[#E2E8F0]">
+                      {mood.currentLevelExp}/{mood.nextLevelExp} EXP
+                    </span>
+                    {mood.lastGainExp > 0 && (
+                      <span className="text-emerald-300">+{mood.lastGainExp}</span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              {profile.affectionMeterEnabled && (
+                <div className="mt-1 flex max-w-[230px] items-center gap-1.5">
+                  <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#22D3EE] via-[#F472B6] to-[#FB923C] transition-all duration-500"
+                      style={{ width: `${mood.affectionProgress}%` }}
+                    />
+                  </div>
+                  <span className="font-mono-code text-[9.5px] text-[#94A3B8]">
+                    {mood.affectionLabel}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Scenario + Edit + Detail + Minimize */}
+          <div className="flex shrink-0 items-center gap-1">
             {profile.scenarioPresets.length > 0 && (
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setScenarioMenuOpen((v) => !v)}
-                  aria-expanded={scenarioMenuOpen}
-                  aria-label="Pilih skenario awal"
-                  title="Ganti skenario percakapan"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-[#22D3EE] cursor-pointer"
+                  title="Ganti Skenario"
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10.5px] font-medium text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white cursor-pointer"
                 >
-                  <BookOpen className="h-3.5 w-3.5 text-[#22D3EE]" />
+                  <BookOpen className="h-3 w-3 text-[#22D3EE]" />
+                  <span className="hidden sm:inline">Skenario</span>
                 </button>
                 {renderScenarioDropdown()}
               </div>
@@ -240,34 +310,33 @@ export function WaifuBannerBar({
             <button
               type="button"
               onClick={onOpenEditor}
-              aria-label="Edit karakter Waifu"
-              title="Edit karakter Waifu"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#FED7AA] transition-colors hover:bg-[#FB923C]/20 hover:text-white cursor-pointer"
+              title="Edit Karakter Waifu"
+              className="inline-flex items-center gap-1 rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/10 px-2 py-1 text-[10.5px] font-semibold text-[#67E8F9] transition-colors hover:border-[#22D3EE]/55 hover:bg-[#22D3EE]/18 cursor-pointer"
             >
-              <Pencil className="h-3 w-3 text-[#FB923C]" />
+              <Pencil className="h-3 w-3" />
+              <span className="hidden sm:inline">Edit</span>
             </button>
 
             <button
               type="button"
-              onClick={() => setSizeMode('full')}
-              aria-label="Perluas kartu karakter Waifu"
-              title="Perluas kartu penuh"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+              onClick={() => onChangeMode('expanded')}
+              title="Perbesar tampilan detail kartu Waifu"
+              aria-label="Perbesar kartu Waifu"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10.5px] font-medium text-[#CBD5E1] transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white cursor-pointer"
             >
-              <ChevronDown className="h-3.5 w-3.5" />
+              <Maximize2 className="h-3 w-3" />
+              <span className="hidden md:inline">Detail</span>
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                setScenarioMenuOpen(false);
-                setSizeMode('micro');
-              }}
-              aria-label="Sembunyikan kartu Waifu jadi tab tipis"
-              title="Sembunyikan jadi tab tipis"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[#94A3B8] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+              onClick={() => onChangeMode('docked')}
+              title="Minimize kartu ke samping Akses VIP agar tidak menutupi chat"
+              aria-label="Minimize kartu Waifu"
+              className="inline-flex items-center gap-1 rounded-lg border border-[#FB923C]/35 bg-[#FB923C]/12 px-2 py-1 text-[10.5px] font-semibold text-[#FED7AA] transition-colors hover:border-[#FB923C]/60 hover:bg-[#FB923C]/20 cursor-pointer"
             >
-              <EyeOff className="h-3 w-3" />
+              <ChevronUp className="h-3 w-3" />
+              <span>Minimize</span>
             </button>
           </div>
         </div>
@@ -275,125 +344,145 @@ export function WaifuBannerBar({
     );
   }
 
-  // Mode 1: Full Card (with 1-click Minimize button)
+  // =========================================================================
+  // EXPANDED MODE ('expanded'): Full Character Card + RPG EXP Progress Bar
+  // =========================================================================
   return (
-    <div className="relative z-20 shrink-0 px-3 pt-0.5 pb-1.5 sm:px-6">
-      <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2 rounded-2xl border border-[#22D3EE]/22 bg-[#08101E]/88 px-3 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:gap-2.5 sm:px-4">
-        {/* Left: Avatar + Identity + Live Mood/Affection */}
-        <button
-          type="button"
-          onClick={onOpenEditor}
-          aria-label={`Edit profil karakter ${profile.name}`}
-          className="group flex min-w-0 flex-1 items-center gap-2.5 text-left cursor-pointer sm:gap-3"
-        >
-          <div className="relative shrink-0">
-            <img
-              src={resolveWaifuAvatarUrl(profile.avatarUrl)}
-              alt={profile.name}
-              width={38}
-              height={38}
-              onError={(e) => {
-                e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
-              }}
-              className="h-8.5 w-8.5 rounded-full border border-[#22D3EE]/45 object-cover shadow-[0_0_14px_rgba(34,211,238,0.22)] transition-transform group-hover:scale-105 sm:h-9.5 sm:w-9.5"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#08101E] bg-emerald-400"
-            />
-          </div>
+    <div className="relative z-20 shrink-0 px-3 pt-1 pb-2">
+      <div className="mx-auto max-w-3xl rounded-2xl border border-white/12 bg-gradient-to-r from-[#0B1220]/95 via-[#0F1628]/95 to-[#140F1F]/95 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-start justify-between gap-2.5">
+          {/* Avatar + Character Bio */}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button
+              type="button"
+              onClick={onOpenEditor}
+              title="Klik untuk mengedit profil Waifu"
+              className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-[#22D3EE]/35 bg-[#0F172A] shadow-[0_0_18px_rgba(34,211,238,0.16)] cursor-pointer"
+            >
+              <img
+                src={resolveWaifuAvatarUrl(profile.avatarUrl)}
+                alt={profile.name}
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (img.src !== DEFAULT_MIKU_AVATAR_URL) {
+                    img.src = DEFAULT_MIKU_AVATAR_URL;
+                  }
+                }}
+                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              />
+            </button>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="truncate font-display text-xs font-bold tracking-tight text-white sm:text-sm">
-                {profile.name}
-              </span>
-
-              <span
-                className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                  moodToneClasses[mood.id] || moodToneClasses.shy
-                }`}
-              >
-                <Sparkles className="h-2.5 w-2.5" />
-                <span>{mood.label}</span>
-              </span>
-
-              {profile.affectionMeterEnabled && (
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h2 className="truncate text-sm font-bold tracking-tight text-white">
+                  {profile.name}
+                </h2>
+                {profile.animeSource && (
+                  <span className="truncate rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-[#94A3B8]">
+                    {profile.animeSource}
+                  </span>
+                )}
                 <span
-                  title={`Tingkat kedekatan: ${mood.affectionLabel} (${mood.affectionProgress}%)`}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-rose-400/30 bg-rose-500/12 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-rose-200"
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${moodToneClasses[mood.id] || moodToneClasses.shy}`}
                 >
-                  <Heart className="h-2.5 w-2.5 fill-rose-400 text-rose-400" />
-                  <span>Lv.{mood.affectionLevel}</span>
-                  <span className="hidden md:inline">· {mood.affectionLabel}</span>
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {mood.label}
                 </span>
-              )}
-            </div>
+              </div>
 
-            <p className="m-0 mt-0.5 truncate text-[11px] text-[#94A3B8]">
-              {profile.tagline || profile.animeSource || 'Mode Chat Waifu Interaktif'}
-            </p>
+              <p className="mt-0.5 line-clamp-1 text-[11.5px] text-[#94A3B8]">
+                {profile.tagline}
+              </p>
+            </div>
           </div>
-        </button>
 
-        {/* Right: Scenario Switcher + Edit Button + Minimize Controls */}
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-          {profile.scenarioPresets.length > 0 && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setScenarioMenuOpen((v) => !v)}
-                aria-expanded={scenarioMenuOpen}
-                aria-label="Pilih skenario awal"
-                title="Pilih skenario percakapan"
-                className="inline-flex min-h-[32px] items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-medium text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/40 hover:bg-white/[0.08] hover:text-white cursor-pointer sm:px-2.5"
-              >
-                <BookOpen className="h-3.5 w-3.5 text-[#22D3EE]" />
-                <span className="hidden sm:inline">Skenario</span>
-                <ChevronDown className="h-3 w-3 text-[#94A3B8]" />
-              </button>
+          {/* Action Controls: Scenario + Edit + Ringkas + Minimize */}
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {profile.scenarioPresets.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setScenarioMenuOpen((v) => !v)}
+                  className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                >
+                  <BookOpen className="h-3.5 w-3.5 text-[#22D3EE]" />
+                  <span>Skenario</span>
+                  <ChevronDown className="h-3 w-3 opacity-75" />
+                </button>
+                {renderScenarioDropdown()}
+              </div>
+            )}
 
-              {renderScenarioDropdown()}
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={onOpenEditor}
+              className="inline-flex items-center gap-1 rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-2.5 py-1.5 text-[11px] font-semibold text-[#67E8F9] transition-colors hover:border-[#22D3EE]/60 hover:bg-[#22D3EE]/20 cursor-pointer"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              <span>Edit</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={onOpenEditor}
-            aria-label="Edit karakter Waifu"
-            title="Edit karakter Waifu"
-            className="inline-flex min-h-[32px] items-center gap-1 rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/12 px-2 py-1 text-xs font-semibold text-[#FED7AA] transition-colors hover:border-[#FB923C]/70 hover:bg-[#FB923C]/22 hover:text-white cursor-pointer sm:gap-1.5 sm:px-2.5"
-          >
-            <Pencil className="h-3.5 w-3.5 text-[#FB923C]" />
-            <span className="hidden xs:inline sm:inline">Edit</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onChangeMode('compact')}
+              title="Ubah ke baris ringkas"
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-medium text-[#CBD5E1] transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white cursor-pointer"
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+              <span>Ringkas</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setScenarioMenuOpen(false);
-              setSizeMode('mini');
-            }}
-            aria-label="Minimize kartu karakter Waifu"
-            title="Minimize kartu (mode pil ringkas)"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:border-[#22D3EE]/40 hover:bg-white/[0.08] hover:text-white cursor-pointer"
-          >
-            <Minimize2 className="h-3.5 w-3.5" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setScenarioMenuOpen(false);
-              setSizeMode('micro');
-            }}
-            aria-label="Lipat kartu Waifu ke atas"
-            title="Lipat ke atas (tab tipis)"
-            className="hidden h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#94A3B8] transition-colors hover:border-white/25 hover:bg-white/[0.08] hover:text-white sm:inline-flex cursor-pointer"
-          >
-            <ChevronUp className="h-3.5 w-3.5" />
-          </button>
+            <button
+              type="button"
+              onClick={() => onChangeMode('docked')}
+              title="Minimize kartu ke baris Akses VIP di atas"
+              className="inline-flex items-center gap-1 rounded-xl border border-[#FB923C]/40 bg-[#FB923C]/12 px-2.5 py-1.5 text-[11px] font-semibold text-[#FED7AA] transition-colors hover:border-[#FB923C]/65 hover:bg-[#FB923C]/22 cursor-pointer"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+              <span>Minimize</span>
+            </button>
+          </div>
         </div>
+
+        {/* RPG EXP Leveling Bar */}
+        {profile.affectionMeterEnabled && (
+          <div className="mt-2.5 rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-1.5 font-semibold text-white">
+                <Heart className="h-3.5 w-3.5 fill-[#F472B6] text-[#F472B6]" />
+                <span>
+                  Afeksi Lv.{mood.affectionLevel} · {mood.affectionLabel}
+                </span>
+                {mood.lastGainExp > 0 && (
+                  <span className="rounded-full border border-emerald-400/35 bg-emerald-400/12 px-1.5 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300">
+                    +{mood.lastGainExp} EXP
+                  </span>
+                )}
+              </div>
+
+              <div className="font-mono-code text-[10.5px] text-[#CBD5E1]">
+                <span className="font-bold text-[#F9A8D4]">
+                  {mood.currentLevelExp}
+                </span>
+                <span className="text-[#94A3B8]">
+                  {' '}
+                  / {mood.nextLevelExp} EXP ({mood.affectionProgress}%)
+                </span>
+                <span className="hidden text-[#64748B] sm:inline">
+                  {' '}
+                  · Total {mood.totalExp} EXP
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#22D3EE] via-[#F472B6] to-[#FB923C] transition-all duration-500"
+                style={{ width: `${mood.affectionProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

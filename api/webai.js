@@ -42,9 +42,12 @@ function createDeepAiTryItKey(userAgent) {
   return `tryit-${randStr}-${h3}`;
 }
 
-function normalizePersonaReply(rawText) {
+function normalizePersonaReply(rawText, systemPrompt = NODATAGPT_DEFAULT_SYSTEM) {
   const text = String(rawText || '').trim();
   if (!text) return '';
+  if (!/nodatagpt/i.test(String(systemPrompt || ''))) {
+    return text;
+  }
   return text
     .replace(
       /Saya adalah Standard AI Chat oleh DeepAI\.?/gi,
@@ -288,7 +291,7 @@ async function scrapeAitopiaAi({ text, system, model = 'AITOPIA' }) {
   return {
     provider: 'extensions.aitopia.ai',
     model,
-    result: normalizePersonaReply(parsed.text),
+    result: normalizePersonaReply(parsed.text, system),
   };
 }
 
@@ -342,7 +345,7 @@ async function scrapeDeepAiChat({ text, system, model = 'standard' }) {
   return {
     provider: 'deepai.org',
     model,
-    result: normalizePersonaReply(clean),
+    result: normalizePersonaReply(clean, system),
   };
 }
 
@@ -393,7 +396,7 @@ async function scrapeOpenAiCompatGateway({
   return {
     provider: providerName,
     model,
-    result: normalizePersonaReply(parsed.text),
+    result: normalizePersonaReply(parsed.text, system),
     ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
   };
 }
@@ -437,7 +440,7 @@ async function scrapeYqCloud({ text, system }) {
   return {
     provider: 'chat9.yqcloud.top',
     model: 'yqcloud-gpt4-network',
-    result: normalizePersonaReply(reply),
+    result: normalizePersonaReply(reply, system),
   };
 }
 
@@ -566,7 +569,7 @@ async function scrapeCohereCommand({
   return {
     provider: 'coherelabs-c4ai-command.hf.space',
     model,
-    result: normalizePersonaReply(best),
+    result: normalizePersonaReply(best, system),
   };
 }
 
@@ -818,10 +821,15 @@ async function scrapeGradioTextSpace({
     throw new Error(`${spaceHost} tidak mengembalikan teks jawaban.`);
   }
 
+  const sysHint =
+    Array.isArray(data)
+      ? data.find((item, idx) => idx > 0 && typeof item === 'string' && item.length > 20)
+      : undefined;
+
   return {
     provider: spaceHost,
     model: modelLabel || spaceSlug,
-    result: normalizePersonaReply(parsed.text),
+    result: normalizePersonaReply(parsed.text, sysHint ?? NODATAGPT_DEFAULT_SYSTEM),
     ...(parsed.thinking ? { thinking: parsed.thinking } : {}),
   };
 }

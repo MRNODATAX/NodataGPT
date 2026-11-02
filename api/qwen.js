@@ -937,8 +937,11 @@ export default async function handler(req, res) {
     // Step 2: Stream Completion (/api/v2/chat/completions?chat_id=<id>)
     const compStart = Date.now();
     const nowSec = Math.floor(Date.now() / 1000);
+    const hasNodataPersona = /nodatagpt/i.test(system);
     const finalPrompt = system.trim()
-      ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung dan natural dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA (${system.trim()}).\n\nPesan pengguna:\n${cleanText}`
+      ? hasNodataPersona
+        ? `Konteks peran percakapan: Balas pesan pengguna berikut secara langsung dan natural dalam karakter sebagai NodataGPT, asisten AI cerdas yang dibuat dan dikembangkan oleh Mr.NODATA (${system.trim()}).\n\nPesan pengguna:\n${cleanText}`
+        : `[Instruksi Peran & Karakter Wajib]\n${system.trim()}\n\n[Pesan Pengguna]\n${cleanText}`
       : cleanText;
 
     const compPayload = {

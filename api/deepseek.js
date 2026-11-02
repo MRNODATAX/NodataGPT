@@ -743,8 +743,11 @@ export default async function handler(req, res) {
 
     // Step 3: Stream Completion (/api/v0/chat/completion)
     const compStart = Date.now();
+    const hasNodataPersona = /nodatagpt/i.test(system);
     const finalPrompt = system.trim()
-      ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
+      ? hasNodataPersona
+        ? `[Instruksi Sistem NodataGPT: ${system.trim()}]\n\nPertanyaan pengguna:\n${cleanText}`
+        : `[Instruksi Peran & Karakter Wajib]\n${system.trim()}\n\n[Pesan Pengguna]\n${cleanText}`
       : cleanText;
 
     const compRes = await fetchWithTimeout(

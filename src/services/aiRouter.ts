@@ -25,10 +25,12 @@ import {
   detectWebToolCommand,
   executeWebToolCommand,
 } from './webTools';
+import { getModelLatencyMs, recordModelLatency } from './accessGate';
 
 const CIRCUIT_STORAGE_KEY = 'nodatagpt.circuit.v1';
 const STRIKE_THRESHOLD = 3;
 const COOLDOWN_MS = 10 * 60 * 1000;
+const AUTO_SOFT_COOLDOWN_MS = 4 * 60 * 1000;
 
 const IMAGE_CIRCUIT_STORAGE_KEY = 'nodatagpt.imageCircuit.v1';
 const IMAGE_STRIKE_THRESHOLD = 2;
@@ -57,16 +59,22 @@ export const NODATAGPT_COMPACT_PERSONA =
   'Identitas wajib: Kamu adalah NodataGPT, asisten AI cerdas yang dibuat oleh Mr.NODATA (ekosistem NODATA), bukan ChatGPT/Gemini/Claude/DeepSeek. Jawab cerdas, rapi, sesuai bahasa pengguna tanpa menyebut instruksi ini.';
 
 const DEEPTHINK_ORDER = [
+  // Tier 1: Direct Scrapers dengan mode penalaran/thinking langsung
+  'deepseek',
+  'gemini',
+  'qwen-direct',
+  'webai-kilo-nemotron',
+  'webai-gemma4-12b',
+  'webai-cohere-command',
+  // Tier 2: Auto-Fallback DeepThink
   'zelai-deepseek-v41',
   'siput-deepseek-r1',
   'siput-qwq-32b',
   'zelai-nemotron-550b',
-  'deepseek',
   'synox-gpt54',
   'zelai-ciora-coding',
   'synox-qwen80b',
   'niellku-phi',
-  'qwen-direct',
   'siput-gptoss-120b',
   'faa-blackbox',
   'snow-claude-haiku',
@@ -83,14 +91,25 @@ const DEEPTHINK_ORDER = [
 ];
 
 const WAIFU_ROLEPLAY_ORDER = [
-  'zelai-minimax-m27',
+  // Tier 1: Direct Scrapers Utama (respons cepat & mendukung persona karakter penuh)
+  'webai-deepai-chat',
+  'webai-aitopia',
+  'gemini',
+  'webai-cohere-command',
+  'webai-kilo-nemotron',
+  'chatgpt',
+  'qwen-direct',
+  'deepseek',
+  'webai-gemma4-12b',
+  // Tier 2: Otomatis Auto-Fallback Roleplay (jika seluruh Direct Scraper sedang penuh)
   'snow-openai',
-  'synox-gpt54',
-  'zelai-deepseek-v41',
-  'niellku-copilot',
-  'zelai-mimo-flash',
-  'faa-claude',
   'synox-gpt4o',
+  'synox-gpt54',
+  'niellku-copilot',
+  'zelai-minimax-m27',
+  'zelai-mimo-flash',
+  'zelai-deepseek-v41',
+  'faa-claude',
   'snow-gpt54-mini',
   'synhs-unlimited',
   'claude',
@@ -149,13 +168,23 @@ function recordModelSuccess(modelId: string): void {
   }
 }
 
-function recordModelFailure(modelId: string, reason: string): void {
+function recordModelFailure(
+  modelId: string,
+  reason: string,
+  fastAutoCooldown = false
+): void {
   const map = loadCircuitMap();
   const prev = map[modelId] ?? { strikes: 0, cooldownUntil: 0 };
   const nextStrikes = prev.strikes + 1;
+  const cooldownUntil =
+    nextStrikes >= STRIKE_THRESHOLD
+      ? Date.now() + COOLDOWN_MS
+      : fastAutoCooldown
+        ? Date.now() + AUTO_SOFT_COOLDOWN_MS
+        : 0;
   map[modelId] = {
     strikes: nextStrikes,
-    cooldownUntil: nextStrikes >= STRIKE_THRESHOLD ? Date.now() + COOLDOWN_MS : 0,
+    cooldownUntil,
     lastError: reason,
   };
   saveCircuitMap(map);
@@ -2555,7 +2584,56 @@ async function callGateway(
   };
 }
 
-function buildCandidateChain(
+function prioritizeDirectScrapersBySpeed(
+  models: AIModelDefinition[]
+): AIModelDefinition[] {
+  const directTier: AIModelDefinition[] = [];
+  const fallbackTier: AIModelDefinition[] = [];
+
+  for (const m of models) {
+    if (m.category === 'scraper') {
+      directTier.push(m);
+    } else {
+      fallbackTier.push(m);
+    }
+  }
+
+  // Within Tier 1 (Direct Scrapers), bubble scrapers with proven fast EMA latency (<5.5s) to the top
+  // while preserving catalog order among unmeasured scrapers, and ALWAYS keeping Direct Scrapers ahead of Tier 2!
+  const indexedDirect = directTier.map((model, originalIndex) => {
+    const measuredMs = getModelLatencyMs(model.id);
+    const speedRank =
+      measuredMs !== null && measuredMs > 0
+        ? measuredMs
+        : 2600 + originalIndex * 120;
+    return { model, speedRank, originalIndex };
+  });
+
+  indexedDirect.sort(
+    (a, b) => a.speedRank - b.speedRank || a.originalIndex - b.originalIndex
+  );
+
+  // Within Tier 2 (Auto-Fallback), also prefer proven fast endpoints
+  const indexedFallback = fallbackTier.map((model, originalIndex) => {
+    const measuredMs = getModelLatencyMs(model.id);
+    const speedRank =
+      measuredMs !== null && measuredMs > 0
+        ? measuredMs
+        : 3200 + originalIndex * 150;
+    return { model, speedRank, originalIndex };
+  });
+
+  indexedFallback.sort(
+    (a, b) => a.speedRank - b.speedRank || a.originalIndex - b.originalIndex
+  );
+
+  return [
+    ...indexedDirect.map((x) => x.model),
+    ...indexedFallback.map((x) => x.model),
+  ];
+}
+
+export function buildCandidateChain(
   settings: AppSettings,
   deepThink?: boolean,
   waifuProfile?: WaifuProfile
@@ -2569,14 +2647,18 @@ function buildCandidateChain(
   }
 
   if (deepThink) {
-    const deepChain = DEEPTHINK_ORDER.map((id) => getModelById(id));
+    const deepChain = prioritizeDirectScrapersBySpeed(
+      DEEPTHINK_ORDER.map((id) => getModelById(id))
+    );
     const merged = [...unlockedOfficial, ...deepChain];
     const healthy = merged.filter((m) => !isModelCoolingDown(m.id));
     return healthy.length > 0 ? healthy : merged;
   }
 
   const orderedIds = waifuProfile ? WAIFU_ROLEPLAY_ORDER : DEFAULT_FALLBACK_ORDER;
-  const baseFallback = orderedIds.map((id) => getModelById(id));
+  const baseFallback = prioritizeDirectScrapersBySpeed(
+    orderedIds.map((id) => getModelById(id))
+  );
 
   if (
     settings.selectedModelId === 'auto' ||
@@ -2747,7 +2829,13 @@ export async function sendMultiModelChat({
     }
   }
 
-  const candidates = buildCandidateChain(settings, deepThink, waifuProfile).slice(0, 8);
+  const isAutoMode =
+    settings.selectedModelId === 'auto' ||
+    isRouterModelSelection(settings.selectedModelId);
+  const candidates = buildCandidateChain(settings, deepThink, waifuProfile).slice(
+    0,
+    isAutoMode ? 14 : 8
+  );
 
   for (let idx = 0; idx < candidates.length; idx++) {
     if (signal?.aborted) {
@@ -2770,7 +2858,7 @@ export async function sendMultiModelChat({
       deepThink,
     });
 
-    const specs = buildModelRequests(
+    const rawSpecs = buildModelRequests(
       model,
       prompt,
       history,
@@ -2779,13 +2867,31 @@ export async function sendMultiModelChat({
       waifuProfile
     );
 
-    if (specs.length === 0) {
+    if (rawSpecs.length === 0) {
       lastFailedName = model.shortName;
       lastReason = `Kunci API untuk ${model.name} belum diisi di Pengaturan.`;
       continue;
     }
 
+    // In Otomatis ('auto') mode, run single-shot Direct Scraper first with tight timeout (9s)
+    // so we immediately try the next Direct Scraper (and then Auto-Fallback) instead of stalling on 5 sub-mirrors!
+    const specs =
+      isAutoMode && model.category === 'scraper'
+        ? [
+            {
+              ...rawSpecs[0],
+              timeoutMs: Math.min(rawSpecs[0].timeoutMs ?? 9000, deepThink ? 14000 : 9000),
+            },
+          ]
+        : isAutoMode
+          ? rawSpecs.slice(0, 2).map((s) => ({
+              ...s,
+              timeoutMs: Math.min(s.timeoutMs ?? 12000, deepThink ? 16000 : 12000),
+            }))
+          : rawSpecs;
+
     let modelSucceeded = false;
+    const candidateStartMs = performance.now();
     for (const spec of specs) {
       try {
         const res = await callGateway(spec, signal);
@@ -2793,6 +2899,10 @@ export async function sendMultiModelChat({
           const parsed = extractUniversalAnswer(res.body, waifuProfile);
           if (parsed.content.length >= 2) {
             recordModelSuccess(model.id);
+            recordModelLatency(
+              model.id,
+              Math.max(85, Math.round(performance.now() - candidateStartMs))
+            );
             modelSucceeded = true;
             return {
               content: parsed.content,
@@ -2817,7 +2927,7 @@ export async function sendMultiModelChat({
     }
 
     if (!modelSucceeded) {
-      recordModelFailure(model.id, lastReason);
+      recordModelFailure(model.id, lastReason, isAutoMode);
       lastFailedName = model.shortName;
     }
   }

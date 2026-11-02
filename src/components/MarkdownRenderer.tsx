@@ -227,12 +227,22 @@ function SmartMarkdownLink({
 export function MarkdownRenderer({
   content,
   isStreaming,
+  waifuMode,
 }: {
   content: string;
   isStreaming?: boolean;
+  waifuMode?: boolean;
 }) {
+  const proseClasses = [
+    'nodata-prose',
+    isStreaming ? 'nodata-prose-streaming' : '',
+    waifuMode ? 'nodata-prose-waifu' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className={isStreaming ? 'nodata-prose nodata-prose-streaming' : 'nodata-prose'}>
+    <div className={proseClasses}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

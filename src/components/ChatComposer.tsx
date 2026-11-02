@@ -40,6 +40,7 @@ interface ChatComposerProps {
   onToggleImageMode: () => void;
   onOpenModelPicker: () => void;
   onOpenImageModelPicker: () => void;
+  waifuName?: string;
 }
 
 interface SpeechRecognitionInstance {
@@ -69,6 +70,7 @@ export function ChatComposer({
   onToggleImageMode,
   onOpenModelPicker,
   onOpenImageModelPicker,
+  waifuName,
 }: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -509,7 +511,9 @@ export function ChatComposer({
                 ? 'Deskripsikan gambar AI yang ingin dibuat...'
                 : deepThink
                   ? 'Tanyakan masalah kompleks untuk dianalisis DeepThink...'
-                  : 'Tanya NodataGPT apa saja...'
+                  : waifuName
+                    ? `Kirim pesan ke ${waifuName}...`
+                    : 'Tanya NodataGPT apa saja...'
             }
             className="nd-composer-textarea block max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[15px] leading-relaxed text-[#F8FAFC] caret-[#22D3EE] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none sm:text-base"
           />

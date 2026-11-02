@@ -27,7 +27,9 @@ import {
   X,
 } from 'lucide-react';
 import type { ChatMessage } from '../types/chat';
+import type { WaifuProfile } from '../types/waifu';
 import type { RouterStatusUpdate } from '../services/aiRouter';
+import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
 import {
   formatBytesShort,
   getCachedMediaBlobUrl,
@@ -41,6 +43,7 @@ interface ChatThreadProps {
   isLoading: boolean;
   elapsedMs: number;
   routerStatus: RouterStatusUpdate | null;
+  waifuProfile?: WaifuProfile;
   onRegenerate: (assistantMessageId: string) => void;
   onEditMessage: (messageId: string, updatedContent: string) => void;
   onEditAndResendUserMessage: (userMessageId: string, updatedContent: string) => void;
@@ -495,6 +498,7 @@ export function ChatThread({
   isLoading,
   elapsedMs,
   routerStatus,
+  waifuProfile,
   onRegenerate,
   onEditMessage,
   onEditAndResendUserMessage,
@@ -596,13 +600,20 @@ export function ChatThread({
     }
 
     window.speechSynthesis.cancel();
-    const plainText = msg.content
+    const spokenSource = waifuProfile
+      ? msg.content.replace(/\*[^*\n]+\*/g, ' ').trim() || msg.content
+      : msg.content;
+    const plainText = spokenSource
       .replace(/```[\s\S]*?```/g, ' blok kode. ')
-      .replace(/[#*`_~[\]()>-]/g, ' ')
+      .replace(/[#*`_~[\]()>"“”-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = 'id-ID';
+    if (waifuProfile) {
+      utterance.pitch = 1.15;
+      utterance.rate = 0.96;
+    }
     utterance.onend = () => setSpeakingId(null);
     utterance.onerror = () => setSpeakingId(null);
     setSpeakingId(msg.id);
@@ -795,34 +806,68 @@ export function ChatThread({
           return (
             <article
               key={msg.id}
-              aria-label="Respons NodataGPT"
+              aria-label={
+                waifuProfile ? `Respons ${waifuProfile.name}` : 'Respons NodataGPT'
+              }
               className="flex items-start gap-2.5 sm:gap-3.5"
             >
-              <div
-                className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-black/85 p-1 shadow-md transition-colors sm:h-8 sm:w-8 ${
-                  isActiveTurn
-                    ? 'border-[#22D3EE]/65 shadow-[0_0_14px_rgba(34,211,238,0.28)]'
-                    : 'border-white/12'
-                }`}
-              >
-                <img
-                  src="/logo-transparent.png"
-                  alt="NodataGPT"
-                  width={24}
-                  height={24}
-                  className={`h-full w-full object-contain ${
-                    isActiveTurn ? 'animate-orbit-fast' : ''
+              {waifuProfile ? (
+                <div
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-black/85 shadow-md transition-colors sm:h-9 sm:w-9 ${
+                    isActiveTurn
+                      ? 'border-[#22D3EE]/75 shadow-[0_0_16px_rgba(34,211,238,0.32)]'
+                      : 'border-[#22D3EE]/35'
                   }`}
-                />
-              </div>
+                >
+                  <img
+                    src={waifuProfile.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                    alt={waifuProfile.name}
+                    width={36}
+                    height={36}
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                    }}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-black/85 p-1 shadow-md transition-colors sm:h-8 sm:w-8 ${
+                    isActiveTurn
+                      ? 'border-[#22D3EE]/65 shadow-[0_0_14px_rgba(34,211,238,0.28)]'
+                      : 'border-white/12'
+                  }`}
+                >
+                  <img
+                    src="/logo-transparent.png"
+                    alt="NodataGPT"
+                    width={24}
+                    height={24}
+                    className={`h-full w-full object-contain ${
+                      isActiveTurn ? 'animate-orbit-fast' : ''
+                    }`}
+                  />
+                </div>
+              )}
 
               <div className="min-w-0 flex-1">
                 {/* Sender + Model Pill + Live Writing Seconds Badge */}
                 <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="font-display text-xs font-bold tracking-tight">
-                    <span className="text-[#22D3EE]">Nodata</span>
-                    <span className="text-[#FB923C]">GPT</span>
-                  </span>
+                  {waifuProfile ? (
+                    <>
+                      <span className="font-display text-xs font-bold tracking-tight text-white">
+                        {waifuProfile.name}
+                      </span>
+                      <span className="inline-flex items-center rounded-md border border-[#F472B6]/35 bg-[#F472B6]/12 px-1.5 py-0.5 font-mono-code text-[9.5px] font-semibold text-[#FBCFE8]">
+                        Waifu
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-display text-xs font-bold tracking-tight">
+                      <span className="text-[#22D3EE]">Nodata</span>
+                      <span className="text-[#FB923C]">GPT</span>
+                    </span>
+                  )}
 
                   {msg.answeredByName && (
                     <span className="inline-flex items-center rounded-md border border-white/10 bg-black/45 px-2 py-0.5 font-mono-code text-[10px] text-[#CBD5E1] backdrop-blur-sm">
@@ -884,7 +929,9 @@ export function ChatThread({
                           </>
                         ) : (
                           <>
-                            NodataGPT sedang menyusun jawaban
+                            {waifuProfile
+                              ? `${waifuProfile.name} sedang mengetik balasan`
+                              : 'NodataGPT sedang menyusun jawaban'}
                             {routerStatus?.modelName
                               ? ` (${routerStatus.modelName})`
                               : ''}
@@ -1080,6 +1127,7 @@ export function ChatThread({
                     <MarkdownRenderer
                       content={msg.content}
                       isStreaming={isTypingContent}
+                      waifuMode={Boolean(waifuProfile)}
                     />
 
                     {/* Extra Download Pills & 1-Click Transcript AI Summary */}

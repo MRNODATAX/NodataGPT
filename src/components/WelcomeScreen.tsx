@@ -7,11 +7,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ToolsIcon } from './ToolsIcon';
+import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
 import type { AIModelDefinition } from '../types/chat';
+import type { WaifuProfile } from '../types/waifu';
 import { IMAGE_ENGINES } from '../services/modelCatalog';
 
 interface WelcomeScreenProps {
   activeModel: AIModelDefinition;
+  activeWaifu: WaifuProfile;
   autoFallback: boolean;
   healthyCount: number;
   deepThink: boolean;
@@ -25,6 +28,7 @@ interface WelcomeScreenProps {
   ) => void;
   onOpenModelPicker: () => void;
   onOpenToolsStudio: () => void;
+  onStartWaifuChat: () => void;
 }
 
 interface StarterItem {
@@ -90,6 +94,7 @@ const STARTERS: StarterItem[] = [
 ];
 
 export function WelcomeScreen({
+  activeWaifu,
   deepThink,
   imageMode,
   onToggleDeepThink,
@@ -97,6 +102,7 @@ export function WelcomeScreen({
   onSelectModelDirect,
   onSelectStarter,
   onOpenToolsStudio,
+  onStartWaifuChat,
 }: WelcomeScreenProps) {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-4 sm:px-6 sm:py-9">
@@ -145,6 +151,24 @@ export function WelcomeScreen({
           >
             <ImageIcon className="h-3.5 w-3.5 text-[#FB923C]" />
             <span>Buat Gambar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onStartWaifuChat}
+            className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-[#FB923C]/40 bg-gradient-to-r from-[#22D3EE]/12 to-[#FB923C]/14 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md transition-all hover:border-[#FB923C]/70 cursor-pointer"
+          >
+            <img
+              src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+              alt=""
+              width={18}
+              height={18}
+              onError={(e) => {
+                e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+              }}
+              className="h-[18px] w-[18px] rounded-full border border-[#22D3EE]/50 object-cover"
+            />
+            <span>Chat Waifu · {activeWaifu.name.split(' ')[0]}</span>
           </button>
 
           <button

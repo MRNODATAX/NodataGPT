@@ -1,3 +1,5 @@
+import type { WaifuProfile } from './waifu';
+
 export type MessageRole = 'user' | 'assistant';
 
 export type AssistantMessageStatus = 'waiting' | 'typing' | 'done' | 'error';
@@ -49,6 +51,9 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   pinned?: boolean;
+  mode?: 'assistant' | 'waifu';
+  waifuId?: string;
+  waifuProfileSnapshot?: WaifuProfile;
   messages: ChatMessage[];
 }
 

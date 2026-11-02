@@ -328,6 +328,11 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
+.nodata-prose-waifu em {
+  color: #a5f3fc;
+  font-style: italic;
+}
+
 .nodata-prose a {
   color: var(--brand-cyan);
   text-decoration: underline;

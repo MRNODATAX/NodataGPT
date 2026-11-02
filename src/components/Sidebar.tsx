@@ -5,6 +5,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Pin,
   Plus,
   Search,
@@ -13,11 +14,14 @@ import {
   X,
 } from 'lucide-react';
 import { ToolsIcon } from './ToolsIcon';
+import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
 import type { Conversation } from '../types/chat';
+import type { WaifuProfile } from '../types/waifu';
 
 interface SidebarProps {
   conversations: Conversation[];
   activeChatId: string | null;
+  activeWaifu: WaifuProfile;
   collapsed: boolean;
   mobileOpen: boolean;
   isPwaInstalled: boolean;
@@ -25,6 +29,8 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   onCloseMobile: () => void;
   onNewChat: () => void;
+  onStartWaifuChat: () => void;
+  onOpenWaifuStudio: () => void;
   onSelectChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
   onTogglePinChat: (id: string) => void;
@@ -37,6 +43,7 @@ interface SidebarProps {
 export function Sidebar({
   conversations,
   activeChatId,
+  activeWaifu,
   collapsed,
   mobileOpen,
   isPwaInstalled,
@@ -44,6 +51,8 @@ export function Sidebar({
   onToggleCollapse,
   onCloseMobile,
   onNewChat,
+  onStartWaifuChat,
+  onOpenWaifuStudio,
   onSelectChat,
   onDeleteChat,
   onTogglePinChat,
@@ -103,6 +112,21 @@ export function Sidebar({
           >
             {chat.pinned ? (
               <Pin className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+            ) : chat.mode === 'waifu' ? (
+              <img
+                src={
+                  chat.waifuProfileSnapshot?.avatarUrl ||
+                  activeWaifu.avatarUrl ||
+                  DEFAULT_MIKU_AVATAR_URL
+                }
+                alt=""
+                width={18}
+                height={18}
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                }}
+                className="h-[18px] w-[18px] shrink-0 rounded-full border border-[#22D3EE]/40 object-cover"
+              />
             ) : (
               <MessageSquare
                 className={`h-4 w-4 shrink-0 ${
@@ -198,8 +222,8 @@ export function Sidebar({
           )}
         </div>
 
-        {/* New Chat Primary Action */}
-        <div className="px-3 py-1.5">
+        {/* New Chat + Chat Waifu Primary Actions */}
+        <div className="space-y-1.5 px-3 py-1.5">
           <button
             type="button"
             onClick={() => {
@@ -215,6 +239,79 @@ export function Sidebar({
             <Plus className="h-5 w-5 shrink-0 text-[#22D3EE]" />
             {showExpanded && <span>Percakapan Baru</span>}
           </button>
+
+          {showExpanded ? (
+            <div className="flex min-h-[44px] w-full items-center justify-between gap-1.5 rounded-xl border border-[#FB923C]/30 bg-gradient-to-r from-[#22D3EE]/[0.08] via-[#0B1324]/90 to-[#FB923C]/[0.1] p-1.5 transition-colors hover:border-[#22D3EE]/50">
+              <button
+                type="button"
+                onClick={() => {
+                  onStartWaifuChat();
+                  onCloseMobile();
+                }}
+                aria-label={`Mulai Chat Waifu bersama ${activeWaifu.name}`}
+                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1 text-left cursor-pointer"
+              >
+                <img
+                  src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                  alt={activeWaifu.name}
+                  width={24}
+                  height={24}
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                  }}
+                  className="h-6 w-6 shrink-0 rounded-full border border-[#22D3EE]/55 object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-xs font-bold text-white">
+                      Chat Waifu
+                    </span>
+                    <span className="rounded-full bg-[#FB923C]/20 px-1.5 py-0.2 text-[9.5px] font-semibold text-[#FED7AA]">
+                      Baru
+                    </span>
+                  </div>
+                  <div className="truncate text-[10.5px] text-[#94A3B8]">
+                    {activeWaifu.name}
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenWaifuStudio();
+                  onCloseMobile();
+                }}
+                aria-label="Edit karakter Waifu"
+                title="Edit karakter & personalisasi Waifu"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-[#CBD5E1] transition-colors hover:border-[#FB923C]/50 hover:text-white cursor-pointer"
+              >
+                <Pencil className="h-3.5 w-3.5 text-[#FB923C]" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                onStartWaifuChat();
+                onCloseMobile();
+              }}
+              aria-label={`Chat Waifu (${activeWaifu.name})`}
+              title={`Chat Waifu · ${activeWaifu.name}`}
+              className="nd-glass-card flex min-h-[44px] w-full items-center justify-center rounded-xl p-2 cursor-pointer"
+            >
+              <img
+                src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                alt={activeWaifu.name}
+                width={26}
+                height={26}
+                onError={(e) => {
+                  e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                }}
+                className="h-6.5 w-6.5 rounded-full border border-[#22D3EE]/55 object-cover"
+              />
+            </button>
+          )}
         </div>
 
         {/* Search Input */}

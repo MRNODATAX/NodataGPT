@@ -20,6 +20,14 @@ import { ToolsStudioModal } from './components/ToolsStudioModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AccessGateModal } from './components/AccessGateModal';
+import { WaifuBannerBar } from './components/WaifuBannerBar';
+import { WaifuStudioModal } from './components/WaifuStudioModal';
+import {
+  DEFAULT_MIKU_ID,
+  createDefaultMikuProfile,
+  loadWaifuStore,
+  saveWaifuStore,
+} from './services/waifuPresets';
 import {
   FREE_TRIAL_LIMIT,
   beginProtectedTurn,
@@ -64,6 +72,11 @@ import type {
   Conversation,
   MediaDownloadItem,
 } from './types/chat';
+import type {
+  WaifuProfile,
+  WaifuScenarioPreset,
+  WaifuStoreState,
+} from './types/waifu';
 
 interface PendingStreamState {
   chatId: string;
@@ -97,6 +110,10 @@ export function App() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelPickerTab, setModelPickerTab] = useState<'chat' | 'image'>('chat');
   const [toolsStudioOpen, setToolsStudioOpen] = useState(false);
+  const [waifuStore, setWaifuStore] = useState<WaifuStoreState>(() =>
+    loadWaifuStore()
+  );
+  const [waifuStudioOpen, setWaifuStudioOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [gateState, setGateState] = useState<AccessGateState>(() =>
@@ -140,6 +157,10 @@ export function App() {
   useEffect(() => {
     saveSidebarCollapsed(sidebarCollapsed);
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    saveWaifuStore(waifuStore);
+  }, [waifuStore]);
 
   // Subscribe to server-enforced Access Gate & 5-Trial state
   useEffect(() => {
@@ -317,6 +338,22 @@ export function App() {
     [conversations, activeChatId]
   );
 
+  const activeWaifu = useMemo(
+    () =>
+      waifuStore.profiles.find((p) => p.id === waifuStore.activeWaifuId) ??
+      waifuStore.profiles[0] ??
+      createDefaultMikuProfile(),
+    [waifuStore]
+  );
+
+  const activeConversationWaifu = useMemo<WaifuProfile | undefined>(() => {
+    if (activeConversation?.mode !== 'waifu') return undefined;
+    const matched = activeConversation.waifuId
+      ? waifuStore.profiles.find((p) => p.id === activeConversation.waifuId)
+      : undefined;
+    return matched || activeConversation.waifuProfileSnapshot || activeWaifu;
+  }, [activeConversation, waifuStore.profiles, activeWaifu]);
+
   const activeModel = useMemo(
     () => getModelById(settings.selectedModelId, settings),
     [settings]
@@ -352,6 +389,153 @@ export function App() {
     setImageMode(false);
   }, [handleFlushStream]);
 
+  const handleSaveWaifuProfile = useCallback(
+    (updatedProfile: WaifuProfile, makeActive = true) => {
+      const cleanProfile: WaifuProfile = {
+        ...updatedProfile,
+        updatedAt: Date.now(),
+      };
+      setWaifuStore((prev) => {
+        const exists = prev.profiles.some((p) => p.id === cleanProfile.id);
+        const nextProfiles = exists
+          ? prev.profiles.map((p) => (p.id === cleanProfile.id ? cleanProfile : p))
+          : [...prev.profiles, cleanProfile];
+        return {
+          activeWaifuId: makeActive ? cleanProfile.id : prev.activeWaifuId,
+          profiles: nextProfiles,
+        };
+      });
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.mode === 'waifu' && c.waifuId === cleanProfile.id
+            ? {
+                ...c,
+                waifuProfileSnapshot: cleanProfile,
+              }
+            : c
+        )
+      );
+    },
+    []
+  );
+
+  const handleDeleteWaifuProfile = useCallback((profileId: string) => {
+    if (profileId === DEFAULT_MIKU_ID) return;
+    setWaifuStore((prev) => {
+      const remaining = prev.profiles.filter((p) => p.id !== profileId);
+      const ensured =
+        remaining.length > 0 ? remaining : [createDefaultMikuProfile()];
+      const nextActive =
+        prev.activeWaifuId === profileId ? ensured[0].id : prev.activeWaifuId;
+      return {
+        activeWaifuId: nextActive,
+        profiles: ensured,
+      };
+    });
+  }, []);
+
+  const handleStartWaifuChat = useCallback(
+    (profileOverride?: WaifuProfile, scenarioPreset?: WaifuScenarioPreset) => {
+      if (pendingStreamRef.current) {
+        handleFlushStream();
+      } else if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        turnStartRef.current = 0;
+        setIsLoading(false);
+        setRouterStatus(null);
+      }
+
+      const targetProfile = profileOverride ?? activeWaifu;
+      const effectiveProfile: WaifuProfile = scenarioPreset
+        ? {
+            ...targetProfile,
+            scenario: scenarioPreset.scenario,
+            firstMessage: scenarioPreset.firstMessage,
+            updatedAt: Date.now(),
+          }
+        : targetProfile;
+
+      if (profileOverride || scenarioPreset) {
+        handleSaveWaifuProfile(effectiveProfile, true);
+      }
+
+      const openingGreeting = (
+        scenarioPreset ? scenarioPreset.firstMessage : effectiveProfile.firstMessage
+      ).trim();
+
+      const greetingMsg: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: openingGreeting,
+        answeredById: 'waifu-greeting',
+        answeredByName: effectiveProfile.name,
+        status: 'done',
+        createdAt: Date.now(),
+      };
+
+      const newWaifuChat: Conversation = {
+        id: generateId(),
+        title: `${effectiveProfile.name} · ${
+          scenarioPreset ? scenarioPreset.title : 'Chat Waifu'
+        }`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        mode: 'waifu',
+        waifuId: effectiveProfile.id,
+        waifuProfileSnapshot: effectiveProfile,
+        messages: [greetingMsg],
+      };
+
+      setConversations((prev) => [newWaifuChat, ...prev]);
+      setActiveChatId(newWaifuChat.id);
+      setDraft('');
+      setImageMode(false);
+      setDeepThink(false);
+    },
+    [activeWaifu, handleFlushStream, handleSaveWaifuProfile]
+  );
+
+  const handleSelectWaifuScenario = useCallback(
+    (preset: WaifuScenarioPreset) => {
+      const target = activeConversationWaifu ?? activeWaifu;
+      handleStartWaifuChat(target, preset);
+    },
+    [activeConversationWaifu, activeWaifu, handleStartWaifuChat]
+  );
+
+  const handleGenerateAiAvatar = useCallback(
+    async (avatarPrompt: string): Promise<string> => {
+      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+        setWaifuStudioOpen(false);
+        setGateModalManualOpen(true);
+        throw new Error(
+          'Kuota uji coba habis. Buka kunci akses VIP atau gunakan API key pribadi terlebih dahulu.'
+        );
+      }
+      const protectedTurnId = beginProtectedTurn();
+      const byokActiveForTurn = hasPersonalByokActive(settings);
+      try {
+        const res = await generateMultiEngineImage({
+          prompt: avatarPrompt,
+          selectedImageModelId: settings.selectedImageModelId,
+          autoFallback: settings.imageAutoFallback,
+          settings,
+        });
+        clearProtectedTurn(protectedTurnId);
+        void consumeProtectedTurnOnServer(protectedTurnId, byokActiveForTurn);
+        if (!res.imageUrl) {
+          throw new Error('Model gambar tidak mengembalikan URL avatar.');
+        }
+        return res.imageUrl;
+      } catch (err) {
+        clearProtectedTurn(protectedTurnId);
+        throw err;
+      }
+    },
+    [settings]
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -373,6 +557,7 @@ export function App() {
       attachmentName,
       asImage,
       useDeepThink,
+      waifuProfile,
     }: {
       promptText: string;
       targetChatId: string;
@@ -382,6 +567,7 @@ export function App() {
       attachmentName?: string;
       asImage?: boolean;
       useDeepThink?: boolean;
+      waifuProfile?: WaifuProfile;
     }) => {
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -412,6 +598,7 @@ export function App() {
               history: priorMessages,
               settings,
               deepThink: useDeepThink,
+              waifuProfile,
               signal: controller.signal,
               onStatus: (st) => setRouterStatus(st),
             });
@@ -654,9 +841,19 @@ export function App() {
         attachmentName,
         asImage: useImage,
         useDeepThink: useThinking,
+        waifuProfile: activeConversationWaifu,
       });
     },
-    [draft, isLoading, settings, imageMode, deepThink, activeConversation, executePrompt]
+    [
+      draft,
+      isLoading,
+      settings,
+      imageMode,
+      deepThink,
+      activeConversation,
+      activeConversationWaifu,
+      executePrompt,
+    ]
   );
 
   const handleRunDirectCommand = useCallback(
@@ -724,9 +921,10 @@ export function App() {
         priorMessages: existingMessages,
         asImage: useImage,
         useDeepThink: false,
+        waifuProfile: activeConversationWaifu,
       });
     },
-    [isLoading, settings, activeConversation, executePrompt]
+    [isLoading, settings, activeConversation, activeConversationWaifu, executePrompt]
   );
 
   const handleSelectStarter = useCallback(
@@ -840,9 +1038,17 @@ export function App() {
         attachmentName: precedingUserMsg.attachmentName,
         asImage: regenerateAsImage,
         useDeepThink: deepThink && !regenerateAsImage,
+        waifuProfile: activeConversationWaifu,
       });
     },
-    [activeConversation, isLoading, settings, deepThink, executePrompt]
+    [
+      activeConversation,
+      activeConversationWaifu,
+      isLoading,
+      settings,
+      deepThink,
+      executePrompt,
+    ]
   );
 
   const handleUpdateMessageContent = useCallback(
@@ -959,9 +1165,17 @@ export function App() {
         attachmentName: targetUserMsg.attachmentName,
         asImage: useImage,
         useDeepThink: useThinking,
+        waifuProfile: activeConversationWaifu,
       });
     },
-    [activeConversation, settings, imageMode, deepThink, executePrompt]
+    [
+      activeConversation,
+      activeConversationWaifu,
+      settings,
+      imageMode,
+      deepThink,
+      executePrompt,
+    ]
   );
 
   const handleDeleteChat = useCallback(
@@ -996,6 +1210,7 @@ export function App() {
       <Sidebar
         conversations={conversations}
         activeChatId={activeChatId}
+        activeWaifu={activeWaifu}
         collapsed={sidebarCollapsed}
         mobileOpen={mobileSidebarOpen}
         isPwaInstalled={isInstalled}
@@ -1003,6 +1218,8 @@ export function App() {
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onNewChat={handleNewChat}
+        onStartWaifuChat={() => handleStartWaifuChat()}
+        onOpenWaifuStudio={() => setWaifuStudioOpen(true)}
         onSelectChat={(id) => {
           if (pendingStreamRef.current && pendingStreamRef.current.chatId !== id) {
             handleFlushStream();
@@ -1199,6 +1416,7 @@ export function App() {
             <div className="flex-1 overflow-y-auto">
               <WelcomeScreen
                 activeModel={activeModel}
+                activeWaifu={activeWaifu}
                 autoFallback={settings.autoFallback}
                 healthyCount={healthyCount}
                 deepThink={deepThink}
@@ -1219,25 +1437,37 @@ export function App() {
                 onSelectStarter={handleSelectStarter}
                 onOpenModelPicker={() => openModelPicker(imageMode ? 'image' : 'chat')}
                 onOpenToolsStudio={() => setToolsStudioOpen(true)}
+                onStartWaifuChat={() => handleStartWaifuChat()}
               />
             </div>
           ) : (
-            <ChatThread
-              messages={activeConversation.messages}
-              isLoading={isLoading}
-              elapsedMs={elapsedMs}
-              routerStatus={routerStatus}
-              onRegenerate={handleRegenerate}
-              onEditMessage={handleUpdateMessageContent}
-              onEditAndResendUserMessage={handleEditAndResendUserMessage}
-              onFlushStream={handleFlushStream}
-              onOpenImageModelPicker={() => openModelPicker('image')}
-              onSummarizeTranscript={(transcript) =>
-                handleRunDirectCommand(
-                  `Tolong buatkan ringkasan eksekutif dan poin-poin inti yang rapi dari transkrip video YouTube berikut:\n\n${transcript}`
-                )
-              }
-            />
+            <>
+              {activeConversationWaifu && (
+                <WaifuBannerBar
+                  profile={activeConversationWaifu}
+                  messages={activeConversation.messages}
+                  onOpenEditor={() => setWaifuStudioOpen(true)}
+                  onSelectScenario={handleSelectWaifuScenario}
+                />
+              )}
+              <ChatThread
+                messages={activeConversation.messages}
+                isLoading={isLoading}
+                elapsedMs={elapsedMs}
+                routerStatus={routerStatus}
+                waifuProfile={activeConversationWaifu}
+                onRegenerate={handleRegenerate}
+                onEditMessage={handleUpdateMessageContent}
+                onEditAndResendUserMessage={handleEditAndResendUserMessage}
+                onFlushStream={handleFlushStream}
+                onOpenImageModelPicker={() => openModelPicker('image')}
+                onSummarizeTranscript={(transcript) =>
+                  handleRunDirectCommand(
+                    `Tolong buatkan ringkasan eksekutif dan poin-poin inti yang rapi dari transkrip video YouTube berikut:\n\n${transcript}`
+                  )
+                }
+              />
+            </>
           )}
 
           <ChatComposer
@@ -1262,9 +1492,21 @@ export function App() {
             }}
             onOpenModelPicker={() => openModelPicker('chat')}
             onOpenImageModelPicker={() => openModelPicker('image')}
+            waifuName={activeConversationWaifu?.name}
           />
         </main>
       </div>
+
+      <WaifuStudioModal
+        isOpen={waifuStudioOpen}
+        profiles={waifuStore.profiles}
+        activeWaifuId={(activeConversationWaifu ?? activeWaifu).id}
+        onClose={() => setWaifuStudioOpen(false)}
+        onSaveProfile={handleSaveWaifuProfile}
+        onSaveAndStartChat={(profile) => handleStartWaifuChat(profile)}
+        onDeleteProfile={handleDeleteWaifuProfile}
+        onGenerateAiAvatar={handleGenerateAiAvatar}
+      />
 
       <ToolsStudioModal
         isOpen={toolsStudioOpen}

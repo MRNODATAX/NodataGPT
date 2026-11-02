@@ -26,6 +26,7 @@ import {
   createDefaultMikuProfile,
   exportWaifuToTavernCardV2,
   importWaifuFromTavernJson,
+  resolveWaifuAvatarUrl,
 } from '../services/waifuPresets';
 import type { WaifuArchetype, WaifuProfile } from '../types/waifu';
 
@@ -412,7 +413,7 @@ export function WaifuStudioModal({
                 <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center">
                   <div className="flex items-center gap-3.5">
                     <img
-                      src={draft.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                      src={resolveWaifuAvatarUrl(draft.avatarUrl)}
                       alt={draft.name}
                       width={68}
                       height={68}
@@ -927,7 +928,7 @@ export function WaifuStudioModal({
                     >
                       <div className="flex items-start gap-3">
                         <img
-                          src={item.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                          src={resolveWaifuAvatarUrl(item.avatarUrl)}
                           alt={item.name}
                           width={48}
                           height={48}

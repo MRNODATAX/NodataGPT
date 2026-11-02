@@ -7,7 +7,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ToolsIcon } from './ToolsIcon';
-import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
+import {
+  DEFAULT_MIKU_AVATAR_URL,
+  resolveWaifuAvatarUrl,
+} from '../services/waifuPresets';
 import type { AIModelDefinition } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 import { IMAGE_ENGINES } from '../services/modelCatalog';
@@ -159,7 +162,7 @@ export function WelcomeScreen({
             className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-[#FB923C]/40 bg-gradient-to-r from-[#22D3EE]/12 to-[#FB923C]/14 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md transition-all hover:border-[#FB923C]/70 cursor-pointer"
           >
             <img
-              src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+              src={resolveWaifuAvatarUrl(activeWaifu.avatarUrl)}
               alt=""
               width={18}
               height={18}

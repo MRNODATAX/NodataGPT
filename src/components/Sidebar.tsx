@@ -14,7 +14,10 @@ import {
   X,
 } from 'lucide-react';
 import { ToolsIcon } from './ToolsIcon';
-import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
+import {
+  DEFAULT_MIKU_AVATAR_URL,
+  resolveWaifuAvatarUrl,
+} from '../services/waifuPresets';
 import type { Conversation } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 
@@ -114,11 +117,9 @@ export function Sidebar({
               <Pin className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
             ) : chat.mode === 'waifu' ? (
               <img
-                src={
-                  chat.waifuProfileSnapshot?.avatarUrl ||
-                  activeWaifu.avatarUrl ||
-                  DEFAULT_MIKU_AVATAR_URL
-                }
+                src={resolveWaifuAvatarUrl(
+                  chat.waifuProfileSnapshot?.avatarUrl || activeWaifu.avatarUrl
+                )}
                 alt=""
                 width={18}
                 height={18}
@@ -252,7 +253,7 @@ export function Sidebar({
                 className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1 text-left cursor-pointer"
               >
                 <img
-                  src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                  src={resolveWaifuAvatarUrl(activeWaifu.avatarUrl)}
                   alt={activeWaifu.name}
                   width={24}
                   height={24}
@@ -301,7 +302,7 @@ export function Sidebar({
               className="nd-glass-card flex min-h-[44px] w-full items-center justify-center rounded-xl p-2 cursor-pointer"
             >
               <img
-                src={activeWaifu.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                src={resolveWaifuAvatarUrl(activeWaifu.avatarUrl)}
                 alt={activeWaifu.name}
                 width={26}
                 height={26}

@@ -29,7 +29,10 @@ import {
 import type { ChatMessage } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 import type { RouterStatusUpdate } from '../services/aiRouter';
-import { DEFAULT_MIKU_AVATAR_URL } from '../services/waifuPresets';
+import {
+  DEFAULT_MIKU_AVATAR_URL,
+  resolveWaifuAvatarUrl,
+} from '../services/waifuPresets';
 import {
   formatBytesShort,
   getCachedMediaBlobUrl,
@@ -820,7 +823,7 @@ export function ChatThread({
                   }`}
                 >
                   <img
-                    src={waifuProfile.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+                    src={resolveWaifuAvatarUrl(waifuProfile.avatarUrl)}
                     alt={waifuProfile.name}
                     width={36}
                     height={36}

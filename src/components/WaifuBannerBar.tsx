@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_MIKU_AVATAR_URL,
   analyzeWaifuMoodAndAffection,
+  resolveWaifuAvatarUrl,
 } from '../services/waifuPresets';
 import type { ChatMessage } from '../types/chat';
 import type { WaifuProfile, WaifuScenarioPreset } from '../types/waifu';
@@ -49,7 +50,7 @@ export function WaifuBannerBar({
         >
           <div className="relative shrink-0">
             <img
-              src={profile.avatarUrl || DEFAULT_MIKU_AVATAR_URL}
+              src={resolveWaifuAvatarUrl(profile.avatarUrl)}
               alt={profile.name}
               width={40}
               height={40}

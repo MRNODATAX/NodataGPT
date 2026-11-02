@@ -124,17 +124,20 @@ export const WAIFU_ARCHETYPE_PRESETS: Record<
   },
 };
 
+export function resolveWaifuAvatarUrl(avatarUrl?: string): string {
+  const trimmed = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
+  if (!trimmed || trimmed.includes('/assets/miku-avatar')) {
+    return DEFAULT_MIKU_AVATAR_URL;
+  }
+  return trimmed;
+}
+
 function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuProfile {
   const fallback = createDefaultMikuProfile();
   if (!raw || typeof raw !== 'object') return fallback;
 
   const isDefaultMiku = raw.id === DEFAULT_MIKU_ID || Boolean(raw.isBuiltInDefault);
-  const rawAvatar = typeof raw.avatarUrl === 'string' ? raw.avatarUrl.trim() : '';
-  // Always ensure built-in Miku has a valid bundled avatar if empty or stale
-  const resolvedAvatar =
-    !rawAvatar || (isDefaultMiku && rawAvatar.startsWith('/assets/miku-avatar'))
-      ? DEFAULT_MIKU_AVATAR_URL
-      : rawAvatar;
+  const resolvedAvatar = resolveWaifuAvatarUrl(raw.avatarUrl);
 
   const validArchetypes = new Set<WaifuArchetype>([
     'dandere',

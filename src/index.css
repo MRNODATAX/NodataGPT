@@ -33,6 +33,9 @@
 html,
 body,
 #root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100%;
   height: 100dvh;
   margin: 0;
@@ -45,6 +48,7 @@ body,
   color: var(--text-primary);
   font-family: var(--font-sans);
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* ===== GPU-Isolated Live Starry Night & Shooting Stars Layer (NodataNime Spec) ===== */

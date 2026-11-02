@@ -546,8 +546,21 @@ export function ChatThread({
     el.style.height = `${nextHeight}px`;
   }, [editingId, editDraft]);
 
+  const scrollThreadToBottom = (smooth: boolean) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
+      });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+  };
+
   useEffect(() => {
-    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollThreadToBottom(true);
   }, [messages.length]);
 
   useEffect(() => {
@@ -573,7 +586,7 @@ export function ChatThread({
   };
 
   const scrollToBottom = () => {
-    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollThreadToBottom(true);
   };
 
   const handleCopyMessage = async (msg: ChatMessage) => {
@@ -662,7 +675,7 @@ export function ChatThread({
     <div
       ref={scrollContainerRef}
       onScroll={handleScroll}
-      className="relative flex-1 overflow-y-auto px-3.5 pt-4 pb-5 sm:px-6 sm:pt-6"
+      className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3.5 pt-4 pb-5 sm:px-6 sm:pt-6"
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 sm:gap-6">
         {messages.map((msg, idx) => {

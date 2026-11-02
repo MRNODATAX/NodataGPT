@@ -1234,8 +1234,47 @@ export function App() {
     );
   }, []);
 
+  // Lock root viewport & sync visualViewport height on mobile keyboards so <header> never scrolls out of view
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const rootEl = document.documentElement;
+
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      if (vv && vv.height > 120) {
+        rootEl.style.setProperty('--app-dvh', `${Math.round(vv.height)}px`);
+      } else {
+        rootEl.style.removeProperty('--app-dvh');
+      }
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+      if (rootEl.scrollTop !== 0) rootEl.scrollTop = 0;
+      if (document.body && document.body.scrollTop !== 0) {
+        document.body.scrollTop = 0;
+      }
+    };
+
+    syncViewport();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', syncViewport);
+    vv?.addEventListener('scroll', syncViewport);
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('scroll', syncViewport, { passive: true });
+
+    return () => {
+      vv?.removeEventListener('resize', syncViewport);
+      vv?.removeEventListener('scroll', syncViewport);
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('scroll', syncViewport);
+    };
+  }, []);
+
   return (
-    <div className="relative flex h-dvh w-full overflow-hidden bg-transparent text-[#F8FAFC]">
+    <div
+      style={{ height: 'var(--app-dvh, 100dvh)' }}
+      className="relative flex h-dvh w-full overflow-hidden bg-transparent text-[#F8FAFC]"
+    >
       {/* Live Starry Night & Shooting Stars Canvas (nodatanime.vercel.app GPU Atlas) */}
       <StarfieldBackground
         enabled={settings.starfieldEnabled}
@@ -1274,9 +1313,9 @@ export function App() {
       />
 
       {/* Main Cosmic Stage (z-10 above Starfield) */}
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-transparent">
-        {/* Frosted Glass Top Bar — Clean, Balanced & Symmetrical */}
-        <header className="nd-glass-topbar pt-safe flex min-h-[56px] shrink-0 items-center justify-between gap-2 px-3 sm:px-5">
+      <div className="relative z-10 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+        {/* Frosted Glass Top Bar — Pinned & Never Scrolls Away */}
+        <header className="nd-glass-topbar pt-safe sticky top-0 z-30 flex min-h-[56px] shrink-0 items-center justify-between gap-2 px-3 sm:px-5">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
@@ -1365,9 +1404,9 @@ export function App() {
           </div>
         </header>
 
-        {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header (+ Inline Docked Waifu Pill when minimized) */}
+        {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header (+ Clean Centered/Inline Waifu Pill when minimized) */}
         <div
-          className={`z-20 flex shrink-0 flex-wrap items-center justify-center gap-1.5 px-3 ${
+          className={`z-20 flex shrink-0 flex-col items-center justify-center gap-1 px-3 sm:flex-row sm:gap-2 ${
             activeConversationWaifu ? 'pt-1.5 pb-0.5' : 'pt-2 pb-1'
           }`}
         >
@@ -1381,7 +1420,7 @@ export function App() {
                   ? 'Status kunci API pribadi aktif'
                   : `Kuota uji coba gratis tersisa ${Math.max(0, FREE_TRIAL_LIMIT - gateState.used)} dari ${FREE_TRIAL_LIMIT}`
             }
-            className={`group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all cursor-pointer sm:gap-2 sm:px-3.5 ${
+            className={`group inline-flex max-w-[calc(100vw-24px)] flex-nowrap items-center gap-1.5 rounded-full border px-3 py-1 text-[11.5px] shadow-[0_6px_20px_rgba(0,0,0,0.45)] backdrop-blur-md transition-all cursor-pointer sm:gap-2 sm:px-3.5 ${
               gateState.unlocked || hasByokKey
                 ? 'border-emerald-400/35 bg-[#061512]/90 text-emerald-200 hover:border-emerald-400/60'
                 : gateState.used >= FREE_TRIAL_LIMIT - 1
@@ -1392,26 +1431,13 @@ export function App() {
             {gateState.unlocked || hasByokKey ? (
               <>
                 <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                {isWaifuDockedInline ? (
-                  <>
-                    <span className="truncate font-medium sm:hidden">
-                      {gateState.unlocked ? 'VIP Aktif' : 'BYOK Aktif'}
-                    </span>
-                    <span className="hidden truncate font-medium sm:inline">
-                      {gateState.unlocked
-                        ? 'Akses VIP Aktif · Tanpa Batas'
-                        : 'Mode BYOK · Kunci Pribadi Aktif'}
-                    </span>
-                  </>
-                ) : (
-                  <span className="truncate font-medium">
-                    {gateState.unlocked
-                      ? 'Akses VIP Aktif · Tanpa Batas'
-                      : 'Mode BYOK · Kunci Pribadi Aktif'}
-                  </span>
-                )}
+                <span className="truncate font-medium">
+                  {gateState.unlocked
+                    ? 'Akses VIP Aktif · Tanpa Batas'
+                    : 'Mode BYOK · Kunci Pribadi Aktif'}
+                </span>
                 <span
-                  className={`rounded-full bg-emerald-400/15 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300 ${
+                  className={`shrink-0 rounded-full bg-emerald-400/15 px-2 py-0.5 font-mono-code text-[10px] font-semibold text-emerald-300 ${
                     isWaifuDockedInline ? 'hidden md:inline' : ''
                   }`}
                 >
@@ -1428,19 +1454,14 @@ export function App() {
                   }`}
                 />
                 <span className="truncate font-medium text-[#CBD5E1]">
-                  <span className={isWaifuDockedInline ? 'hidden sm:inline' : ''}>
-                    Uji Coba Gratis:{' '}
-                  </span>
-                  <span className={isWaifuDockedInline ? 'sm:hidden' : 'hidden'}>
-                    Gratis{' '}
-                  </span>
+                  Uji Coba Gratis:{' '}
                   <strong className="font-mono-code font-bold text-white">
                     {Math.max(0, FREE_TRIAL_LIMIT - gateState.used)}/{FREE_TRIAL_LIMIT}
                   </strong>
                 </span>
                 <span
                   aria-hidden="true"
-                  className="hidden items-center gap-1 sm:inline-flex"
+                  className="hidden items-center gap-1 md:inline-flex"
                 >
                   {Array.from({ length: FREE_TRIAL_LIMIT }).map((_, idx) => {
                     const remaining = Math.max(0, FREE_TRIAL_LIMIT - gateState.used);
@@ -1461,8 +1482,6 @@ export function App() {
                 </span>
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold transition-colors ${
-                    isWaifuDockedInline ? 'hidden sm:inline' : ''
-                  } ${
                     gateState.used >= FREE_TRIAL_LIMIT - 1
                       ? 'bg-[#FB923C]/20 text-[#FED7AA] group-hover:bg-[#FB923C]/30'
                       : 'bg-[#22D3EE]/16 text-[#67E8F9] group-hover:bg-[#22D3EE]/26'
@@ -1488,7 +1507,7 @@ export function App() {
         </div>
 
         {/* Main Conversation Area */}
-        <main className="flex min-h-0 flex-1 flex-col">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {!activeConversation || activeConversation.messages.length === 0 ? (
             <div className="flex-1 overflow-y-auto">
               <WelcomeScreen

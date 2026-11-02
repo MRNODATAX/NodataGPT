@@ -61,8 +61,10 @@ const DEEPTHINK_ORDER = [
   'siput-qwq-32b',
   'zelai-nemotron-550b',
   'deepseek',
+  'synox-gpt54',
   'zelai-ciora-coding',
   'synox-qwen80b',
+  'niellku-phi',
   'qwen-direct',
   'siput-gptoss-120b',
   'faa-blackbox',
@@ -428,10 +430,34 @@ function sanitizeAnswerText(text: string): string {
     .replace(/\bHanzzAi\b/gi, 'NodataGPT')
     .replace(/\b(?:website\s+)?HanzzExe\b/gi, 'ekosistem NODATA karya Mr.NODATA')
     .replace(
-      /\bI\s+am\s+UnlimitedAI\.Chat,?\s+an\s+artificial\s+intelligence\s+created\s+by\s+the\s+UnlimitedAI\.Chat\s+team\.?/gi,
+      /^(?:Hello!?\s*I\s+am\s+UnlimitedAI\.Chat,?\s*(?:an\s+artificial\s+intelligence\s+)?created\s+by\s+the\s+UnlimitedAI\.Chat\s+team\.?\s*|Halo[!,.]?\s*(?:Saya|Aku)\s+(?:adalah\s+)?UnlimitedAI\.Chat,?\s*[^.\n]*?\.\s*)(?=\S)/i,
+      ''
+    )
+    .replace(
+      /\bI\s+am\s+UnlimitedAI\.Chat,?\s*(?:an\s+artificial\s+intelligence\s+)?created\s+by\s+the\s+UnlimitedAI\.Chat\s+team\.?/gi,
       'I am **NodataGPT**, an intelligent AI assistant created and developed by **Mr.NODATA**.'
     )
+    .replace(
+      /(?:Halo[!,.]?\s*)?(?:Saya|Aku)\s+(?:adalah\s+)?UnlimitedAI\.Chat,?\s*(?:sebuah\s+)?(?:asisten\s+kecerdasan\s+buatan\s+yang\s+dikembangkan\s+oleh\s+UnlimitedAI\.Chat\s+team|siap\s+membantu\s+kebutuhan\s+kreatif\s+Anda)\.?/gi,
+      'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+    )
     .replace(/\bUnlimitedAI\.Chat(?:\s+team)?\b/gi, 'NodataGPT (Mr.NODATA)')
+    .replace(
+      /Maaf,?\s*saya\s+tidak\s+dapat\s+menjawab\s+pertanyaan\s+tersebut\.\s*Saya\s+adalah\s+NodataGPT\s+karya\s+Mr\.?\s*NODATA,?\s*dan\s+saya\s+tidak\s+memiliki\s+informasi\s+tentang\s+identitas\s+asli\s+saya\s+atau\s+pembuat\s+asli\s+saya\.?\s*(?:Saya\s+hanya\s+dapat\s+menjawab\s+pertanyaan\s+dan\s+memberikan\s+informasi\s+sesuai\s+dengan\s+pengetahuan\s+saya\.?)?/gi,
+      'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA** dalam ekosistem **NODATA**.'
+    )
+    .replace(
+      /(?:Saya|Aku)\s+adalah\s+asisten\s+AI\s+berbasis\s+teks[^.\n]*?\.\s*(?:Saya|Aku)\s+(?:dibuat|dikembangkan)\s+oleh\s+tim\s+di\s+z\.ai\.?/gi,
+      'Saya adalah **NodataGPT**, asisten AI cerdas yang dibuat dan dikembangkan oleh **Mr.NODATA**.'
+    )
+    .replace(
+      /\b(?:dibuat|dikembangkan|created|developed)\s+(?:oleh|by)\s+(?:tim\s+di\s+z\.ai|z\.ai|Microsoft)\b/gi,
+      'dibuat dan dikembangkan oleh **Mr.NODATA**'
+    )
+    .replace(
+      /^(?:Halo!?\s*)?(?:Saya|Aku)\s+adalah\s+\*{0,2}(?:Microsoft\s+)?(?:Copilot|Phi(?:-2|-3|-4)?)\*{0,2}[,.]?\s*(?:asisten\s+AI)?/i,
+      'Saya adalah **NodataGPT**, asisten AI buatan **Mr.NODATA**'
+    )
     .replace(
       /seputar\s+DocSearch\s+dan\s+dokumentasi\s+terkait\s+dari\s+indeks\s+docsearch-markdown/gi,
       'berbagai topik diskusi, pemrograman, dan analisis sebagai **NodataGPT** karya **Mr.NODATA**'
@@ -770,6 +796,10 @@ export function extractUniversalAnswer(rawBody: string): {
         }
 
         for (const key of directKeys) {
+          // Xemoz deepai-chat.php echoes user input inside data.message alongside session_uuid
+          if (key === 'message' && typeof obj.session_uuid === 'string') {
+            continue;
+          }
           const val = obj[key];
           if (typeof val === 'string' && val.trim()) {
             const parsed = splitThinkingBlock(sanitizeAnswerText(val));
@@ -1404,6 +1434,121 @@ export function buildModelRequests(
         },
       ];
 
+    case 'synox-gpt54':
+      return [
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5.4?pesan=${q}&apikey=FREE`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/duckai?q=${q}&model=gpt-5.4-mini&sessionId=`,
+          timeoutMs: 20000,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-4o-mini?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
+    case 'niellku-copilot':
+      return [
+        {
+          targetUrl: `https://api.niellku.web.id/ai/copilot?text=${q}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5.4?pesan=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/openai?q=${q}&session=${synoxSession}`,
+          timeoutMs: 18000,
+        },
+      ];
+
+    case 'niellku-phi':
+      return [
+        {
+          targetUrl: `https://api.niellku.web.id/ai/phi?prompt=${q}&system=${mediumPersona}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.niellku.web.id/ai/copilot?text=${q}`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'xemoz-deepai':
+      return [
+        {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepai-chat.php?message=${q}`,
+          timeoutMs: t,
+        },
+        {
+          targetUrl: '/api/webai',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'deepai-chat',
+            text: contextualUserText,
+            system: fullSystemPersona,
+          }),
+          timeoutMs: 22000,
+        },
+        {
+          targetUrl: `https://api.snowping.cfd/api/aichat/aicode?prompt=${q}&sessionId=`,
+          timeoutMs: 20000,
+        },
+      ];
+
+    case 'synhs-unlimited':
+      // Route identity questions directly to clean persona-native GPT-5.4 / Unlimited mirrors
+      if (
+        /\b(?:siapa\s+(?:kamu|namamu|pembuatmu|penciptamu|developer(?:mu)?)|nama\s+kamu|who\s+(?:are\s+you|created\s+you|made\s+you))\b/i.test(
+          rawPrompt
+        )
+      ) {
+        return [
+          {
+            targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5.4?pesan=${q}&apikey=FREE`,
+            timeoutMs: 19000,
+            clientFirst: true,
+          },
+          {
+            targetUrl: `https://api.synoxcloud.xyz/ai-chat/unlimited-ai?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+            timeoutMs: 20000,
+            clientFirst: true,
+          },
+        ];
+      }
+      return [
+        {
+          targetUrl: `https://api-synhs.my.id/api/ai/jailbreakai?prompt=${contextualUser}`,
+          timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/unlimited-ai?prompt=${q}&session=${synoxSession}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/novaai?text=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
+        },
+      ];
+
     case 'synox-gpt4o':
       return [
         {
@@ -1427,6 +1572,11 @@ export function buildModelRequests(
         {
           targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5-nano?pesan=${q}&session=${synoxSession}&apikey=FREE`,
           timeoutMs: t,
+          clientFirst: true,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5.4?pesan=${q}&apikey=FREE`,
+          timeoutMs: 20000,
           clientFirst: true,
         },
         {
@@ -1804,6 +1954,10 @@ export function buildModelRequests(
           clientFirst: true,
         },
         {
+          targetUrl: `https://api-xemoz-official.my.id/api/ai/deepai-chat.php?message=${compactQ}`,
+          timeoutMs: 18000,
+        },
+        {
           targetUrl: `https://v2.api-varhad.my.id/ai/deepai?prompt=${compactQ}`,
           timeoutMs: 18000,
           clientFirst: true,
@@ -1929,6 +2083,11 @@ export function buildModelRequests(
         {
           targetUrl: `https://api-xemoz-official.my.id/api/ai/gpt-5.5.php?pesan=${compactQ}`,
           timeoutMs: t,
+        },
+        {
+          targetUrl: `https://api.synoxcloud.xyz/ai-chat/gpt-5.4?pesan=${q}&apikey=FREE`,
+          timeoutMs: 20000,
+          clientFirst: true,
         },
       ];
 

@@ -101,6 +101,8 @@ const ALLOWED_HOSTS = new Set([
   'fastly.picsum.photos',
   'nekos.best',
   'api.api-ninjas.com',
+  'api.niellku.web.id',
+  'api-synhs.my.id',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [

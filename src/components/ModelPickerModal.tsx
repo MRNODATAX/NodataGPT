@@ -38,6 +38,11 @@ import { getModelLatencyMs } from '../services/accessGate';
 
 const VERIFIED_BASELINE_MS: Record<string, number> = {
   auto: 950,
+  'synox-gpt54': 1450,
+  'niellku-copilot': 1350,
+  'niellku-phi': 1550,
+  'xemoz-deepai': 1650,
+  'synhs-unlimited': 1900,
   'webai-deepai-online': 670,
   'webai-cohere-command-a': 810,
   'webai-kilo-beam': 1050,

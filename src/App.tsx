@@ -1329,7 +1329,11 @@ export function App() {
         </header>
 
         {/* Dedicated Floating 5x Trial / VIP Status Bubble Below Header */}
-        <div className="flex shrink-0 items-center justify-center px-3 pt-2 pb-1">
+        <div
+          className={`flex shrink-0 items-center justify-center px-3 ${
+            activeConversationWaifu ? 'pt-1.5 pb-0.5' : 'pt-2 pb-1'
+          }`}
+        >
           <button
             type="button"
             onClick={() => setGateModalManualOpen(true)}

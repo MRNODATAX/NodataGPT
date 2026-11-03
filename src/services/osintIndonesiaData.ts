@@ -1,3 +1,5 @@
+import { HLR_CITY_TABLE, HLR_PREFIX_INDEX } from './hlrCityDatabase';
+
 export interface HlrLookupMatch {
   city: string;
   province: string;
@@ -1038,24 +1040,95 @@ const SINGLE_CITY_HLR_RULES: SingleCityHlrRule[] = [
   { cityId: 'merauke', prefixes: ['0812482', '082198', '08152750'] },
 ];
 
-// Build deduplicated, longest-prefix-first lookup index once at startup
-const SORTED_HLR_ENTRIES: Array<{
-  prefix: string;
-  cityInfo: CityGeoInfo;
-}> = [];
+// Build deduplicated O(1) prefix map + normalized city coordinate lookup
+const CURATED_PREFIX_MAP = new Map<string, CityGeoInfo>();
+const CITY_NAME_TO_GEO = new Map<string, CityGeoInfo>();
 
-const seenExactPrefixes = new Set<string>();
+function normCityKey(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/\b(kota|kabupaten|kab\.?)\b/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+for (const info of Object.values(CITY_GEO_REGISTRY)) {
+  const k = normCityKey(info.city);
+  if (k && !CITY_NAME_TO_GEO.has(k)) {
+    CITY_NAME_TO_GEO.set(k, info);
+  }
+}
+
 for (const rule of SINGLE_CITY_HLR_RULES) {
   const cityInfo = CITY_GEO_REGISTRY[rule.cityId];
   for (const rawPrefix of rule.prefixes) {
     const p = rawPrefix.trim();
-    if (!p || seenExactPrefixes.has(p)) continue;
-    seenExactPrefixes.add(p);
-    SORTED_HLR_ENTRIES.push({ prefix: p, cityInfo });
+    if (!p || CURATED_PREFIX_MAP.has(p)) continue;
+    CURATED_PREFIX_MAP.set(p, cityInfo);
   }
 }
 
-SORTED_HLR_ENTRIES.sort((a, b) => b.prefix.length - a.prefix.length);
+const MACRO_UMBRELLA_RE =
+  /\b(jabodetabek|sumatera bagian|sumatra bagian|indonesia timur|priangan|bandung raya|eks-flexi)\b/i;
+
+function resolveSingleCityFromDbIndex(
+  dbIdx: number
+): { city: string; province: string; coordinates?: { lat: number; lon: number } } | null {
+  const tuple = HLR_CITY_TABLE[dbIdx];
+  if (!tuple) return null;
+  const [rawLabel, rawMapQuery] = tuple;
+  if (MACRO_UMBRELLA_RE.test(rawLabel)) return null;
+
+  // Reject multi-city comma lists like "Bandung, Cirebon, Cianjur, Tasikmalaya"
+  const commaParts = rawLabel.split(',').map((s) => s.trim()).filter(Boolean);
+  if (commaParts.length >= 3) return null;
+
+  // Extract primary city name (normalizing "Kota & Kab. X" -> "Kota X" first!)
+  const rawCityPart = (commaParts[0] || '')
+    .replace(/^kota\s*[&/]\s*kab\.?\s+/i, 'Kota ')
+    .split('/')[0]
+    .split('&')[0]
+    .replace(/\([^)]*\)/g, '')
+    .trim();
+  if (!rawCityPart || /^(kota|kab\.?|kabupaten)$/i.test(rawCityPart)) return null;
+
+  // Reject bare province/island names masquerading as a city
+  if (
+    /^(jawa barat|jawa tengah|jawa timur|bali|sumatera|sumatra|kalimantan|sulawesi|maluku|papua)$/i.test(
+      rawCityPart
+    )
+  ) {
+    return null;
+  }
+
+  const matchedGeo = CITY_NAME_TO_GEO.get(normCityKey(rawCityPart));
+  if (matchedGeo) {
+    return {
+      city: matchedGeo.city,
+      province: matchedGeo.province,
+      coordinates: { lat: matchedGeo.lat, lon: matchedGeo.lon },
+    };
+  }
+
+  // Fallback province extraction from label or mapQuery
+  const mapParts = rawMapQuery
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && !/^indonesia$/i.test(s));
+  const rawProvince = (
+    commaParts[1] ||
+    (mapParts.length >= 2 ? mapParts[mapParts.length - 1] : '') ||
+    'Indonesia'
+  )
+    .split('/')[0]
+    .replace(/^d\.i\.\s*yogyakarta$/i, 'DI Yogyakarta')
+    .trim();
+
+  return {
+    city: rawCityPart,
+    province: rawProvince || 'Indonesia',
+  };
+}
 
 export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
   const clean = local08.replace(/\D/g, '');
@@ -1076,24 +1149,50 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
     };
   }
 
-  for (const entry of SORTED_HLR_ENTRIES) {
-    if (clean.startsWith(entry.prefix)) {
-      const { city, province, lat, lon } = entry.cityInfo;
-      const isDeepCityPrefix = entry.prefix.length >= 6;
+  const maxLen = Math.min(clean.length, 10);
+  for (let len = maxLen; len >= 4; len--) {
+    const sub = clean.slice(0, len);
+
+    const curated = CURATED_PREFIX_MAP.get(sub);
+    if (curated) {
+      const { city, province, lat, lon } = curated;
+      const isDeepCityPrefix = len >= 6;
       return {
         city,
         province,
         region: `${city}, ${province}`,
         mapQuery: `${city}, ${province}, Indonesia`,
         coordinates: { lat, lon },
-        matchedPrefix: entry.prefix,
+        matchedPrefix: sub,
         accuracyTier: 'high',
         precisionLevel: isDeepCityPrefix ? 'city_6_8_digit' : 'city_5_digit',
         precisionLabel: isDeepCityPrefix
-          ? `Presisi Tinggi — 1 Kota HLR (${entry.prefix.length} Digit)`
-          : 'Presisi Kota Induk HLR (5 Digit)',
-        basisNote: `Tabel Kode HLR Spesifik Operator (Prefix \`${entry.prefix}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
+          ? `Presisi Tinggi — 1 Kota HLR (${len} Digit)`
+          : `Presisi Kota Induk HLR (${len} Digit)`,
+        basisNote: `Tabel Kode HLR Spesifik Operator (Prefix \`${sub}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
       };
+    }
+
+    if (len >= 6) {
+      const dbIdx = HLR_PREFIX_INDEX[sub];
+      if (dbIdx !== undefined) {
+        const resolved = resolveSingleCityFromDbIndex(dbIdx);
+        if (resolved) {
+          const { city, province, coordinates } = resolved;
+          return {
+            city,
+            province,
+            region: `${city}, ${province}`,
+            mapQuery: `${city}, ${province}, Indonesia`,
+            ...(coordinates ? { coordinates } : {}),
+            matchedPrefix: sub,
+            accuracyTier: 'high',
+            precisionLevel: 'city_6_8_digit',
+            precisionLabel: `Presisi Tinggi — 1 Kota HLR (${len} Digit)`,
+            basisNote: `Tabel Kode HLR Spesifik Operator (Prefix \`${sub}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
+          };
+        }
+      }
     }
   }
 

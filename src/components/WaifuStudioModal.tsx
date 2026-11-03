@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Camera,
   Check,
   ChevronDown,
   ChevronRight,
@@ -18,6 +19,10 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import {
+  isMikuCharacterProfile,
+  setPrivateWaifuEnabled,
+} from '../services/waifuExpressions';
 import {
   DEFAULT_MIKU_AVATAR_URL,
   DEFAULT_MIKU_ID,
@@ -604,25 +609,47 @@ export function WaifuStudioModal({
 
               {/* 2. User Persona (How Waifu Addresses the User) */}
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 sm:p-4">
-                <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                   <span className="font-display text-xs font-bold uppercase tracking-wider text-[#67E8F9]">
                     Peran & Panggilan untuk Kamu
                   </span>
-                  <label className="inline-flex items-center gap-1.5 text-xs text-[#CBD5E1] cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={draft.affectionMeterEnabled}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          affectionMeterEnabled: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded accent-[#22D3EE]"
-                    />
-                    <Heart className="h-3.5 w-3.5 text-rose-400" />
-                    <span>Mood & Level EXP</span>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {isMikuCharacterProfile(draft) && (
+                      <label className="inline-flex items-center gap-1.5 text-xs text-[#CBD5E1] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={draft.expressionImagesEnabled !== false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setPrivateWaifuEnabled(checked);
+                            setDraft((prev) => ({
+                              ...prev,
+                              expressionImagesEnabled: checked,
+                            }));
+                          }}
+                          className="h-4 w-4 rounded accent-[#22D3EE]"
+                        />
+                        <Camera className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Foto Ekspresi</span>
+                      </label>
+                    )}
+
+                    <label className="inline-flex items-center gap-1.5 text-xs text-[#CBD5E1] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={draft.affectionMeterEnabled}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            affectionMeterEnabled: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded accent-[#22D3EE]"
+                      />
+                      <Heart className="h-3.5 w-3.5 text-rose-400" />
+                      <span>Mood & Level EXP</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

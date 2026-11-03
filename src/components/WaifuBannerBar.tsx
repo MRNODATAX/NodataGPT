@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   BookOpen,
+  Camera,
   ChevronDown,
   ChevronUp,
   Heart,
@@ -9,6 +10,7 @@ import {
   Pencil,
   Sparkles,
 } from 'lucide-react';
+import { isMikuCharacterProfile } from '../services/waifuExpressions';
 import {
   DEFAULT_MIKU_AVATAR_URL,
   analyzeWaifuMoodAndAffection,
@@ -134,6 +136,7 @@ interface WaifuBannerBarProps {
   onChangeMode: (nextMode: WaifuCardMode) => void;
   onOpenEditor: () => void;
   onSelectScenario: (preset: WaifuScenarioPreset) => void;
+  onToggleExpressions?: () => void;
 }
 
 export function WaifuBannerBar({
@@ -144,6 +147,7 @@ export function WaifuBannerBar({
   onChangeMode,
   onOpenEditor,
   onSelectScenario,
+  onToggleExpressions,
 }: WaifuBannerBarProps) {
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
 
@@ -152,6 +156,8 @@ export function WaifuBannerBar({
   }
 
   const mood = analyzeWaifuMoodAndAffection(messages, allWaifuMessageLists);
+  const supportsExpressionPack = isMikuCharacterProfile(profile);
+  const photosEnabled = profile.expressionImagesEnabled !== false;
 
   const moodToneClasses: Record<string, string> = {
     shy: 'border-[#F472B6]/40 bg-[#F472B6]/12 text-[#FBCFE8]',
@@ -293,6 +299,27 @@ export function WaifuBannerBar({
 
           {/* Right: Clean uniform 32px controls (never wraps!) */}
           <div className="flex shrink-0 items-center gap-1">
+            {supportsExpressionPack && onToggleExpressions && (
+              <button
+                type="button"
+                onClick={onToggleExpressions}
+                title={
+                  photosEnabled
+                    ? 'Foto ekspresi Miku aktif (klik untuk matikan)'
+                    : 'Foto ekspresi Miku nonaktif (klik untuk aktifkan)'
+                }
+                aria-label="Toggle foto ekspresi Waifu"
+                className={`hidden h-8 items-center gap-1 rounded-xl border px-2.5 text-[11px] font-semibold transition-colors sm:inline-flex cursor-pointer ${
+                  photosEnabled
+                    ? 'border-emerald-400/35 bg-emerald-400/12 text-emerald-200 hover:border-emerald-400/60'
+                    : 'border-white/10 bg-white/[0.04] text-[#94A3B8] hover:text-white'
+                }`}
+              >
+                <Camera className="h-3.5 w-3.5 shrink-0" />
+                <span>Foto {photosEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+
             {profile.scenarioPresets.length > 0 && (
               <div className="relative hidden sm:block">
                 <button
@@ -447,10 +474,16 @@ export function WaifuBannerBar({
           </div>
         )}
 
-        {/* Tier 3: Symmetrical 3-Button Mobile Grid / Desktop Inline Toolbar */}
+        {/* Tier 3: Symmetrical Mobile Grid (2x2 or 3-col) / Desktop Inline Toolbar */}
         <div
           className={`relative mt-2 grid gap-1.5 sm:flex sm:items-center sm:justify-end ${
-            profile.scenarioPresets.length > 0 ? 'grid-cols-3' : 'grid-cols-2'
+            supportsExpressionPack && onToggleExpressions
+              ? profile.scenarioPresets.length > 0
+                ? 'grid-cols-2'
+                : 'grid-cols-3'
+              : profile.scenarioPresets.length > 0
+                ? 'grid-cols-3'
+                : 'grid-cols-2'
           }`}
         >
           {profile.scenarioPresets.length > 0 && (
@@ -466,6 +499,22 @@ export function WaifuBannerBar({
               </button>
               {renderScenarioDropdown()}
             </div>
+          )}
+
+          {supportsExpressionPack && onToggleExpressions && (
+            <button
+              type="button"
+              onClick={onToggleExpressions}
+              aria-label="Toggle foto ekspresi Waifu"
+              className={`inline-flex h-8 w-full items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-semibold transition-colors sm:w-auto sm:px-2.5 cursor-pointer ${
+                photosEnabled
+                  ? 'border-emerald-400/35 bg-emerald-400/12 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-400/18'
+                  : 'border-white/10 bg-white/[0.04] text-[#94A3B8] hover:border-white/20 hover:text-white'
+              }`}
+            >
+              <Camera className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Foto: {photosEnabled ? 'ON' : 'OFF'}</span>
+            </button>
           )}
 
           <button

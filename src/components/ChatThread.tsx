@@ -33,6 +33,7 @@ import {
   DEFAULT_MIKU_AVATAR_URL,
   resolveWaifuAvatarUrl,
 } from '../services/waifuPresets';
+import { resolveMikuExpressionUrl } from '../services/waifuExpressions';
 import {
   formatBytesShort,
   getCachedMediaBlobUrl,
@@ -53,6 +54,71 @@ interface ChatThreadProps {
   onFlushStream: () => void;
   onOpenImageModelPicker: () => void;
   onSummarizeTranscript?: (transcript: string) => void;
+}
+
+function WaifuExpressionPhoto({
+  fileName,
+  fallbackUrl,
+  label,
+  objectPosition,
+  waifuName,
+  onOpenZoom,
+}: {
+  fileName?: string;
+  fallbackUrl?: string;
+  label?: string;
+  objectPosition?: string;
+  waifuName: string;
+  onOpenZoom: (info: { url: string; label?: string; fileName?: string }) => void;
+}) {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const resolvedSrc = resolveMikuExpressionUrl(fileName, fallbackUrl);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [resolvedSrc]);
+
+  // Graceful silent text-only fallback if local file is missing or fails to render
+  if (!resolvedSrc || loadFailed) {
+    return null;
+  }
+
+  return (
+    <div className="mb-2.5">
+      <button
+        type="button"
+        onClick={() => onOpenZoom({ url: resolvedSrc, label, fileName })}
+        aria-label={`Perbesar foto ekspresi ${waifuName}${label ? ` (${label})` : ''}`}
+        title="Ketuk untuk melihat foto ukuran penuh"
+        className="group/expr relative block aspect-[3/4] w-[186px] max-w-[66vw] overflow-hidden rounded-2xl border border-[#F472B6]/30 bg-[#080C15] text-left shadow-[0_10px_26px_rgba(0,0,0,0.48)] transition-all duration-200 hover:border-[#22D3EE]/55 sm:w-[220px] cursor-pointer"
+      >
+        <img
+          src={resolvedSrc}
+          alt={label ? `${waifuName} · ${label}` : waifuName}
+          loading="lazy"
+          decoding="async"
+          style={{ objectPosition: objectPosition || 'center 20%' }}
+          onError={() => setLoadFailed(true)}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover/expr:scale-[1.03]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/75 via-black/25 to-transparent px-2.5 pt-6 pb-2"
+        >
+          {label ? (
+            <span className="truncate rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/95 backdrop-blur-sm">
+              {label}
+            </span>
+          ) : (
+            <span />
+          )}
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white/85 backdrop-blur-sm transition-colors group-hover/expr:border-[#22D3EE]/45 group-hover/expr:text-[#67E8F9]">
+            <Maximize2 className="h-3 w-3" />
+          </span>
+        </div>
+      </button>
+    </div>
+  );
 }
 
 function ThinkingAccordion({ content }: { content: string }) {
@@ -517,6 +583,20 @@ export function ChatThread({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [zoomedWaifuPhoto, setZoomedWaifuPhoto] = useState<{
+    url: string;
+    label?: string;
+    fileName?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!zoomedWaifuPhoto) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setZoomedWaifuPhoto(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomedWaifuPhoto]);
 
   const lastMessage = messages[messages.length - 1];
   const lastContentLen = lastMessage?.content?.length ?? 0;
@@ -1140,6 +1220,17 @@ export function ChatThread({
                       />
                     )}
 
+                    {(msg.waifuExpressionFileName || msg.waifuExpressionUrl) && (
+                      <WaifuExpressionPhoto
+                        fileName={msg.waifuExpressionFileName}
+                        fallbackUrl={msg.waifuExpressionUrl}
+                        label={msg.waifuExpressionLabel}
+                        objectPosition={msg.waifuExpressionObjectPosition}
+                        waifuName={waifuProfile?.name || 'Miku Nakano'}
+                        onOpenZoom={setZoomedWaifuPhoto}
+                      />
+                    )}
+
                     <MarkdownRenderer
                       content={msg.content}
                       isStreaming={isTypingContent}
@@ -1312,6 +1403,54 @@ export function ChatThread({
         >
           <ArrowDown className="h-4 w-4 text-[#22D3EE]" />
         </button>
+      )}
+
+      {zoomedWaifuPhoto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pratinjau foto Waifu"
+          onClick={() => setZoomedWaifuPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#090E1A] shadow-[0_24px_60px_rgba(0,0,0,0.78)]"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3.5 py-2.5">
+              <div className="min-w-0">
+                <span className="truncate text-xs font-bold text-white sm:text-sm">
+                  {waifuProfile?.name || 'Miku Nakano'}
+                  {zoomedWaifuPhoto.label ? ` · ${zoomedWaifuPhoto.label}` : ''}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <DirectDownloadButton
+                  url={zoomedWaifuPhoto.url}
+                  label="Unduh"
+                  kind="image"
+                  fallbackId={zoomedWaifuPhoto.fileName || 'miku-waifu'}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-[#0E7490] px-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#0891B2] cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => setZoomedWaifuPhoto(null)}
+                  aria-label="Tutup pratinjau foto"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/12 bg-white/[0.06] text-[#CBD5E1] transition-colors hover:bg-white/14 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-black p-2">
+              <img
+                src={zoomedWaifuPhoto.url}
+                alt={zoomedWaifuPhoto.label || 'Foto Miku Nakano'}
+                className="max-h-[76dvh] w-auto max-w-full rounded-xl object-contain"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

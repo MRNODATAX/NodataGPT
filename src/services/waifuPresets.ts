@@ -68,6 +68,7 @@ export function createDefaultMikuProfile(): WaifuProfile {
     userNickname: 'Kamu',
     userRole: 'Partner belajar & orang terdekat yang dipercaya Miku',
     affectionMeterEnabled: true,
+    expressionImagesEnabled: true,
     isBuiltInDefault: true,
     updatedAt: Date.now(),
   };
@@ -212,6 +213,10 @@ function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuP
     affectionMeterEnabled:
       typeof raw.affectionMeterEnabled === 'boolean'
         ? raw.affectionMeterEnabled
+        : true,
+    expressionImagesEnabled:
+      typeof raw.expressionImagesEnabled === 'boolean'
+        ? raw.expressionImagesEnabled
         : true,
     isBuiltInDefault: isDefaultMiku,
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),

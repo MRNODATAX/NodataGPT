@@ -35,6 +35,12 @@ import {
   saveWaifuStore,
 } from './services/waifuPresets';
 import {
+  handleWaifuControlCommand,
+  isExplicitPapRequest,
+  selectWaifuExpressionForTurn,
+  setPrivateWaifuEnabled,
+} from './services/waifuExpressions';
+import {
   FREE_TRIAL_LIMIT,
   beginProtectedTurn,
   checkSendCooldownRemainingMs,
@@ -92,6 +98,10 @@ interface PendingStreamState {
   answeredById: string;
   answeredByName: string;
   usedFallback: boolean;
+  waifuExpressionUrl?: string;
+  waifuExpressionFileName?: string;
+  waifuExpressionLabel?: string;
+  waifuExpressionObjectPosition?: string;
   downloadItems?: MediaDownloadItem[];
   summarizeTranscript?: string;
 }
@@ -259,6 +269,10 @@ export function App() {
                 answeredById: pending.answeredById,
                 answeredByName: pending.answeredByName,
                 usedFallback: pending.usedFallback,
+                waifuExpressionUrl: pending.waifuExpressionUrl,
+                waifuExpressionFileName: pending.waifuExpressionFileName,
+                waifuExpressionLabel: pending.waifuExpressionLabel,
+                waifuExpressionObjectPosition: pending.waifuExpressionObjectPosition,
                 downloadItems: pending.downloadItems,
                 summarizeTranscript: pending.summarizeTranscript,
                 status: 'done',
@@ -541,6 +555,16 @@ export function App() {
     [activeConversationWaifu, activeWaifu, handleStartWaifuChat]
   );
 
+  const handleToggleWaifuExpressions = useCallback(() => {
+    const target = activeConversationWaifu ?? activeWaifu;
+    const nextEnabled = target.expressionImagesEnabled === false;
+    setPrivateWaifuEnabled(nextEnabled);
+    handleSaveWaifuProfile({
+      ...target,
+      expressionImagesEnabled: nextEnabled,
+    });
+  }, [activeConversationWaifu, activeWaifu, handleSaveWaifuProfile]);
+
   const handleGenerateAiAvatar = useCallback(
     async (avatarPrompt: string): Promise<string> => {
       if (isGateLockedForSettings(getAccessGateState(), settings)) {
@@ -662,6 +686,19 @@ export function App() {
             (result.galleryUrls && result.galleryUrls.length > 0)
         );
 
+        const selectedWaifuExpr =
+          !asImage &&
+          !hasRichMedia &&
+          waifuProfile &&
+          !detectWebToolCommand(promptText)
+            ? selectWaifuExpressionForTurn({
+                userPrompt: promptText,
+                assistantReply: result.content,
+                waifuProfile,
+                conversationId: targetChatId,
+              })
+            : null;
+
         const shouldStreamTypewriter =
           settings.streamEffect &&
           !reducedMotion &&
@@ -684,6 +721,11 @@ export function App() {
                     answeredByName: result.answeredByName,
                     usedFallback: result.usedFallback,
                     imageUrl: result.imageUrl,
+                    waifuExpressionUrl: selectedWaifuExpr?.url,
+                    waifuExpressionFileName: selectedWaifuExpr?.fileName,
+                    waifuExpressionLabel: selectedWaifuExpr?.label,
+                    waifuExpressionObjectPosition:
+                      selectedWaifuExpr?.objectPosition,
                     videoUrl: result.videoUrl,
                     videoPosterUrl: result.videoPosterUrl,
                     audioUrl: result.audioUrl,
@@ -714,6 +756,10 @@ export function App() {
           answeredById: result.answeredById,
           answeredByName: result.answeredByName,
           usedFallback: result.usedFallback,
+          waifuExpressionUrl: selectedWaifuExpr?.url,
+          waifuExpressionFileName: selectedWaifuExpr?.fileName,
+          waifuExpressionLabel: selectedWaifuExpr?.label,
+          waifuExpressionObjectPosition: selectedWaifuExpr?.objectPosition,
           downloadItems: result.downloadItems,
           summarizeTranscript: result.summarizeTranscript,
         };
@@ -739,6 +785,11 @@ export function App() {
                     answeredById: result.answeredById,
                     answeredByName: result.answeredByName,
                     usedFallback: result.usedFallback,
+                    waifuExpressionUrl: selectedWaifuExpr?.url,
+                    waifuExpressionFileName: selectedWaifuExpr?.fileName,
+                    waifuExpressionLabel: selectedWaifuExpr?.label,
+                    waifuExpressionObjectPosition:
+                      selectedWaifuExpr?.objectPosition,
                     downloadItems: finished ? result.downloadItems : undefined,
                     summarizeTranscript: finished
                       ? result.summarizeTranscript
@@ -801,6 +852,56 @@ export function App() {
     async (attachmentText?: string, attachmentName?: string) => {
       const trimmed = draft.trim();
       if ((!trimmed && !attachmentText) || isLoading) return;
+
+      // Explicit `.waifu on/off/status` control command (local-only, supersedes Waifu chat & never attaches image)
+      const waifuCtrl = !attachmentText ? handleWaifuControlCommand(trimmed) : null;
+      if (waifuCtrl) {
+        if (
+          waifuCtrl.scope === 'private' &&
+          (waifuCtrl.action === 'on' || waifuCtrl.action === 'off')
+        ) {
+          const targetWaifu = activeConversationWaifu ?? activeWaifu;
+          handleSaveWaifuProfile({
+            ...targetWaifu,
+            expressionImagesEnabled: waifuCtrl.enabled,
+          });
+        }
+        const cmdUserMsg: ChatMessage = {
+          id: generateId(),
+          role: 'user',
+          content: trimmed,
+          createdAt: Date.now(),
+        };
+        const cmdReplyMsg: ChatMessage = {
+          id: generateId(),
+          role: 'assistant',
+          content: waifuCtrl.replyText,
+          status: 'done',
+          answeredById: 'system-waifu-ctrl',
+          answeredByName: 'Pengaturan Waifu Lokal',
+          createdAt: Date.now() + 1,
+        };
+        setDraft('');
+        if (!activeConversation) {
+          const newChat: Conversation = {
+            id: generateId(),
+            title: 'Pengaturan Waifu',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [cmdUserMsg, cmdReplyMsg],
+          };
+          setConversations((prev) => [newChat, ...prev]);
+          setActiveChatId(newChat.id);
+        } else {
+          updateChatMessages(activeConversation.id, (msgs) => [
+            ...msgs,
+            cmdUserMsg,
+            cmdReplyMsg,
+          ]);
+        }
+        return;
+      }
+
       if (isGateLockedForSettings(getAccessGateState(), settings)) {
         setGateModalManualOpen(true);
         return;
@@ -808,11 +909,18 @@ export function App() {
       if (checkSendCooldownRemainingMs() > 0) return;
 
       const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
+      const isWaifuPapTurn = Boolean(
+        activeConversationWaifu &&
+          !imageMode &&
+          !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(trimmed) &&
+          isExplicitPapRequest(trimmed)
+      );
       const intent =
-        attachmentText || isWebTool
+        attachmentText || isWebTool || isWaifuPapTurn
           ? { isImageIntent: false, cleanPrompt: trimmed }
           : parseImagePromptIntent(trimmed);
-      const useImage = !isWebTool && (imageMode || intent.isImageIntent);
+      const useImage =
+        !isWebTool && !isWaifuPapTurn && (imageMode || intent.isImageIntent);
       const effectivePrompt = useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
       const useThinking = deepThink && !useImage && !isWebTool;
       const displayContent =
@@ -1031,13 +1139,22 @@ export function App() {
         .find((m) => m.role === 'user');
       if (!precedingUserMsg) return;
 
-      const intent = parseImagePromptIntent(precedingUserMsg.content);
-      const regenerateAsImage = Boolean(
-        targetAssistantMsg?.imageUrl ||
-          targetAssistantMsg?.isImageRequest ||
-          precedingUserMsg.isImageRequest ||
-          intent.isImageIntent
+      const isWaifuPapRegen = Boolean(
+        activeConversationWaifu &&
+          !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(precedingUserMsg.content) &&
+          isExplicitPapRequest(precedingUserMsg.content)
       );
+      const intent = isWaifuPapRegen
+        ? { isImageIntent: false, cleanPrompt: precedingUserMsg.content }
+        : parseImagePromptIntent(precedingUserMsg.content);
+      const regenerateAsImage =
+        !isWaifuPapRegen &&
+        Boolean(
+          targetAssistantMsg?.imageUrl ||
+            targetAssistantMsg?.isImageRequest ||
+            precedingUserMsg.isImageRequest ||
+            intent.isImageIntent
+        );
 
       const trimmedMessages = activeConversation.messages.slice(0, idx);
       const historyBeforeUser = trimmedMessages.slice(0, -1);
@@ -1152,13 +1269,20 @@ export function App() {
       const isWebTool = Boolean(
         !targetUserMsg.attachmentText && detectWebToolCommand(trimmed)
       );
+      const isWaifuPapEdit = Boolean(
+        activeConversationWaifu &&
+          !imageMode &&
+          !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(trimmed) &&
+          isExplicitPapRequest(trimmed)
+      );
       const intent =
-        targetUserMsg.attachmentText || isWebTool
+        targetUserMsg.attachmentText || isWebTool || isWaifuPapEdit
           ? { isImageIntent: false, cleanPrompt: trimmed }
           : parseImagePromptIntent(trimmed);
       const useImage =
         !targetUserMsg.attachmentText &&
         !isWebTool &&
+        !isWaifuPapEdit &&
         Boolean(targetUserMsg.isImageRequest || imageMode || intent.isImageIntent);
       const effectivePrompt =
         useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
@@ -1547,6 +1671,7 @@ export function App() {
                   onChangeMode={handleChangeWaifuCardMode}
                   onOpenEditor={() => setWaifuStudioOpen(true)}
                   onSelectScenario={handleSelectWaifuScenario}
+                  onToggleExpressions={handleToggleWaifuExpressions}
                 />
               )}
               <ChatThread

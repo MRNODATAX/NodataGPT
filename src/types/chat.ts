@@ -41,6 +41,10 @@ export interface ChatMessage {
   downloadItems?: MediaDownloadItem[];
   summarizeTranscript?: string;
   isImageRequest?: boolean;
+  waifuExpressionUrl?: string;
+  waifuExpressionFileName?: string;
+  waifuExpressionLabel?: string;
+  waifuExpressionObjectPosition?: string;
   attachmentName?: string;
   attachmentText?: string;
 }

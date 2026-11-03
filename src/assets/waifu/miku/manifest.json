@@ -1,0 +1,164 @@
+{
+  "version": "1.0.0",
+  "characterId": "miku-nakano-default",
+  "characterName": "Miku Nakano",
+  "fallbackCategory": "netral",
+  "categories": {
+    "dukungan": {
+      "label": "Dukungan & Empati",
+      "description": "Curhat, sedih, stres, lelah, atau butuh dukungan emosional",
+      "priorityAssets": [
+        "miku-ulurkan-tangan.jpg",
+        "miku-semangat.jpg"
+      ],
+      "forbiddenAssets": [
+        "miku-tertawa.jpg",
+        "miku-wink.jpg",
+        "miku-cemberut.jpg"
+      ]
+    },
+    "afeksi": {
+      "label": "Tersipu & Afeksi",
+      "description": "Pujian, malu, afeksi hangat, atau flirting ringan yang sopan",
+      "priorityAssets": [
+        "miku-tersipu.jpg",
+        "miku-malu-closeup.jpg",
+        "miku-wink.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "hangat": {
+      "label": "Sapaan Hangat & Rindu",
+      "description": "Kangen, sapaan hangat, atau obrolan akrab yang nyaman",
+      "priorityAssets": [
+        "miku-selfie-hangat.jpg",
+        "miku-malu-closeup.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "ceria": {
+      "label": "Candaan & Bahagia",
+      "description": "Candaan ringan, tawa, atau kabar menyenangkan",
+      "priorityAssets": [
+        "miku-tertawa.jpg",
+        "miku-wink.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "tsundere": {
+      "label": "Cemberut & Salah Tingkah",
+      "description": "Kesal ringan, ngambek/pout, cemburu, atau gugup karena digoda",
+      "priorityAssets": [
+        "miku-cemberut.jpg",
+        "miku-gugup.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "terkejut": {
+      "label": "Terkejut & Tak Terduga",
+      "description": "Kabar mengejutkan atau reaksi kaget kontekstual",
+      "priorityAssets": [
+        "miku-terkejut.jpg",
+        "miku-gugup.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "pap": {
+      "label": "PAP & Selfie Miku",
+      "description": "Permintaan eksplisit pengguna untuk pap, foto, atau selfie Miku",
+      "priorityAssets": [
+        "miku-pap-selfie.png",
+        "miku-selfie-hangat.jpg"
+      ],
+      "forbiddenAssets": []
+    },
+    "netral": {
+      "label": "Ramah & Santai",
+      "description": "Fallback aman dan ramah saat konteks netral atau belum cukup sinyal",
+      "priorityAssets": [
+        "miku-selfie-hangat.jpg",
+        "miku-semangat.jpg"
+      ],
+      "forbiddenAssets": []
+    }
+  },
+  "assets": [
+    {
+      "fileName": "miku-cemberut.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Cemberut",
+      "categories": ["tsundere"],
+      "objectPosition": "center 20%"
+    },
+    {
+      "fileName": "miku-gugup.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Gugup",
+      "categories": ["tsundere", "terkejut"],
+      "objectPosition": "center center"
+    },
+    {
+      "fileName": "miku-malu-closeup.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Malu-malu",
+      "categories": ["afeksi", "hangat"],
+      "objectPosition": "center center"
+    },
+    {
+      "fileName": "miku-pap-selfie.png",
+      "mimeType": "image/png",
+      "label": "PAP Selfie",
+      "categories": ["pap"],
+      "objectPosition": "center 18%"
+    },
+    {
+      "fileName": "miku-selfie-hangat.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Senyum Hangat",
+      "categories": ["hangat", "netral", "pap"],
+      "objectPosition": "center 18%"
+    },
+    {
+      "fileName": "miku-semangat.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Semangat",
+      "categories": ["dukungan", "netral"],
+      "objectPosition": "center 16%"
+    },
+    {
+      "fileName": "miku-terkejut.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Terkejut",
+      "categories": ["terkejut"],
+      "objectPosition": "center 65%"
+    },
+    {
+      "fileName": "miku-tersipu.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Tersipu",
+      "categories": ["afeksi"],
+      "objectPosition": "center 16%"
+    },
+    {
+      "fileName": "miku-tertawa.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Tertawa",
+      "categories": ["ceria"],
+      "objectPosition": "center center"
+    },
+    {
+      "fileName": "miku-ulurkan-tangan.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Temani Kamu",
+      "categories": ["dukungan"],
+      "objectPosition": "center 22%"
+    },
+    {
+      "fileName": "miku-wink.jpg",
+      "mimeType": "image/jpeg",
+      "label": "Wink Manis",
+      "categories": ["afeksi", "ceria"],
+      "objectPosition": "center 18%"
+    }
+  ]
+}

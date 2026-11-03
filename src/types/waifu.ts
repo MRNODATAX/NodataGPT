@@ -44,6 +44,7 @@ export interface WaifuProfile {
   userNickname: string;
   userRole: string;
   affectionMeterEnabled: boolean;
+  expressionImagesEnabled?: boolean;
   isBuiltInDefault?: boolean;
   updatedAt: number;
 }

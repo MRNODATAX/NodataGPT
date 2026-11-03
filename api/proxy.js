@@ -266,6 +266,17 @@ export default async function handler(req, res) {
       ''
   ).trim();
   const rawTargetPreview = String(parsedBodyPreview?.targetUrl || '').trim();
+  const rawInnerBodyPreview =
+    typeof parsedBodyPreview?.body === 'string' ? parsedBodyPreview.body : '';
+  const isVisionMultimodalPost =
+    !isUploadAction &&
+    parsedBodyPreview?.method === 'POST' &&
+    /(?:\/chat\/completions|\/responses|\/messages|:generateContent)(?:\?|$)/i.test(
+      rawTargetPreview
+    ) &&
+    /(?:"image_url"|"inline_data"|"inlineData"|"type"\s*:\s*"image")/.test(
+      rawInnerBodyPreview
+    );
   const isModelsDiscovery =
     Boolean(parsedBodyPreview?.routerRelay) && /\/models(?:\?|$)/i.test(rawTargetPreview);
   const hasPersonalByokRelay =
@@ -277,7 +288,11 @@ export default async function handler(req, res) {
     mode: isUploadAction ? 'media' : 'api',
     isDiagnostic: isProbePayload,
     allowByokBypass: hasPersonalByokRelay,
-    maxBodyBytes: isUploadAction ? 6 * 1024 * 1024 : 131072,
+    maxBodyBytes: isUploadAction
+      ? 6 * 1024 * 1024
+      : isVisionMultimodalPost
+        ? 2 * 1024 * 1024
+        : 131072,
     guestRatePerMin: isUploadAction ? 6 : 20,
     vipRatePerMin: isUploadAction ? 15 : 60,
   });

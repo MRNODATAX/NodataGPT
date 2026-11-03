@@ -587,6 +587,7 @@ export function ChatThread({
     url: string;
     label?: string;
     fileName?: string;
+    headerTitle?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -838,15 +839,80 @@ export function ChatThread({
                 ) : (
                   <>
                     <div className="nd-user-bubble max-w-[90%] rounded-2xl rounded-tr-sm px-4 py-2.5 text-[#F8FAFC] sm:max-w-[78%] sm:px-4.5 sm:py-3">
-                      {msg.attachmentName && (
-                        <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-black/45 px-2.5 py-1 text-xs text-[#67E8F9]">
-                          <FileText className="h-3.5 w-3.5 shrink-0" />
-                          <span className="max-w-[200px] truncate">{msg.attachmentName}</span>
+                      {(msg.attachmentImageUrl ||
+                        msg.attachmentImageThumb ||
+                        msg.attachmentImageDataUrl) && (
+                        <div className={msg.content ? 'mb-2.5' : ''}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const zoomSrc =
+                                msg.attachmentImageUrl ||
+                                msg.attachmentImageDataUrl ||
+                                msg.attachmentImageThumb ||
+                                '';
+                              if (!zoomSrc) return;
+                              setZoomedWaifuPhoto({
+                                url: zoomSrc,
+                                label: msg.attachmentName || 'Foto Lampiran',
+                                fileName: msg.attachmentName || `foto-${msg.id}`,
+                                headerTitle: msg.attachmentName || 'Foto Lampiran Pengguna',
+                              });
+                            }}
+                            aria-label={`Perbesar foto ${msg.attachmentName || 'lampiran'}`}
+                            className="group/userimg relative block overflow-hidden rounded-xl border border-white/15 bg-black/60 text-left shadow-[0_8px_22px_rgba(0,0,0,0.45)] transition-transform active:scale-[0.99] cursor-pointer"
+                          >
+                            <img
+                              src={
+                                msg.attachmentImageUrl ||
+                                msg.attachmentImageThumb ||
+                                msg.attachmentImageDataUrl
+                              }
+                              alt={msg.attachmentName || 'Foto lampiran pengguna'}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                const fallback =
+                                  msg.attachmentImageThumb ||
+                                  msg.attachmentImageDataUrl;
+                                if (fallback && e.currentTarget.src !== fallback) {
+                                  e.currentTarget.src = fallback;
+                                }
+                              }}
+                              className="max-h-[250px] w-auto max-w-full object-contain sm:max-h-[300px]"
+                            />
+                            <span className="pointer-events-none absolute right-2 bottom-2 rounded-lg border border-white/15 bg-black/75 px-2 py-0.5 font-mono-code text-[10px] font-medium text-[#E2E8F0] opacity-90 backdrop-blur-xs transition-opacity group-hover/userimg:opacity-100">
+                              Ketuk perbesar
+                            </span>
+                          </button>
+                          {msg.attachmentImageMeta && (
+                            <div className="mt-1 flex items-center justify-between gap-2 font-mono-code text-[10px] text-[#94A3B8]">
+                              <span className="max-w-[190px] truncate sm:max-w-[260px]">
+                                {msg.attachmentName || 'Foto'}
+                              </span>
+                              <span className="shrink-0 text-[#67E8F9]/80">
+                                {msg.attachmentImageMeta}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
-                      <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed sm:text-base">
-                        {msg.content}
-                      </p>
+                      {msg.attachmentName &&
+                        !msg.attachmentImageUrl &&
+                        !msg.attachmentImageThumb &&
+                        !msg.attachmentImageDataUrl && (
+                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-black/45 px-2.5 py-1 text-xs text-[#67E8F9]">
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="max-w-[200px] truncate">
+                              {msg.attachmentName}
+                            </span>
+                          </div>
+                        )}
+                      {msg.content && (
+                        <p className="m-0 whitespace-pre-wrap text-[15px] leading-relaxed sm:text-base">
+                          {msg.content}
+                        </p>
+                      )}
                       {msg.editedAt && (
                         <div className="mt-1 flex justify-end">
                           <span className="font-mono-code text-[10px] text-[#67E8F9]/75">
@@ -1409,7 +1475,7 @@ export function ChatThread({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Pratinjau foto Waifu"
+          aria-label={zoomedWaifuPhoto.headerTitle ? 'Pratinjau foto' : 'Pratinjau foto Waifu'}
           onClick={() => setZoomedWaifuPhoto(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
         >
@@ -1420,8 +1486,11 @@ export function ChatThread({
             <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3.5 py-2.5">
               <div className="min-w-0">
                 <span className="truncate text-xs font-bold text-white sm:text-sm">
-                  {waifuProfile?.name || 'Miku Nakano'}
-                  {zoomedWaifuPhoto.label ? ` · ${zoomedWaifuPhoto.label}` : ''}
+                  {zoomedWaifuPhoto.headerTitle
+                    ? zoomedWaifuPhoto.headerTitle
+                    : `${waifuProfile?.name || 'Miku Nakano'}${
+                        zoomedWaifuPhoto.label ? ` · ${zoomedWaifuPhoto.label}` : ''
+                      }`}
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">

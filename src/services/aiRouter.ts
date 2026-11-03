@@ -25,6 +25,7 @@ import {
   detectWebToolCommand,
   executeWebToolCommand,
 } from './webTools';
+import { uploadCompressedImageToPublicUrl } from '../utils/imageAttachment';
 import { getModelLatencyMs, recordModelLatency } from './accessGate';
 
 const CIRCUIT_STORAGE_KEY = 'nodatagpt.circuit.v1';
@@ -2709,12 +2710,114 @@ export interface RouterResult {
   summarizeTranscript?: string;
 }
 
-export async function sendMultiModelChat({
+export interface VisionImageAttachmentInput {
+  publicUrl?: string;
+  dataUrl?: string;
+  mimeType?: string;
+  name?: string;
+}
+
+const KEYLESS_VISION_MODELS: Array<{
+  id: string;
+  modelId: string;
+  shortName: string;
+  provider: string;
+}> = [
+  {
+    id: 'zelai-nemotron-vl',
+    modelId: 'nemotron-3.5-super-vl-free',
+    shortName: 'Nemotron 3.5 Super VL',
+    provider: 'ZelAI Vision',
+  },
+  {
+    id: 'zelai-gemini25-vision',
+    modelId: 'stenly-gemini-2.5-flash-free',
+    shortName: 'Gemini 2.5 Flash Vision',
+    provider: 'ZelAI Vision',
+  },
+  {
+    id: 'zelai-ciora-vision',
+    modelId: 'ciora-vision-free',
+    shortName: 'Ciora Vision',
+    provider: 'ZelAI Vision',
+  },
+  {
+    id: 'zelai-gemini15-vision',
+    modelId: 'gemini-1.5-pro-free',
+    shortName: 'Gemini 1.5 Pro Vision',
+    provider: 'ZelAI Vision',
+  },
+];
+
+function isBlindVisionRefusal(text: string): boolean {
+  const clean = text.trim();
+  if (!clean || clean.length > 520) return false;
+  return /(?:tidak\s+(?:dapat|bisa)\s+melihat\s+(?:gambar|foto)|belum\s+(?:melampirkan|mengirimkan)\s+(?:gambar|foto)|cannot\s+(?:see|view|access)\s+(?:the\s+)?image|can'?t\s+(?:see|view)\s+images?|no\s+image\s+(?:was\s+)?provided|unable\s+to\s+view\s+images?)/i.test(
+    clean
+  );
+}
+
+function extractHybridOcrText(rawBody?: string): string {
+  if (!rawBody) return '';
+  try {
+    const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    const resObj = parsed.result as Record<string, unknown> | string | undefined;
+    let candidate = '';
+    if (typeof resObj === 'string') {
+      candidate = resObj;
+    } else if (resObj && typeof resObj === 'object') {
+      const parsedResults = Array.isArray(resObj.ParsedResults)
+        ? (resObj.ParsedResults as Array<Record<string, unknown>>)
+        : [];
+      if (typeof parsedResults[0]?.ParsedText === 'string') {
+        candidate = parsedResults[0].ParsedText;
+      } else if (typeof resObj.text === 'string') {
+        candidate = resObj.text;
+      }
+    } else if (typeof parsed.text === 'string') {
+      candidate = parsed.text;
+    }
+    const trimmed = candidate.trim();
+    if (
+      !trimmed ||
+      /^(?:teks\s+tidak\s+ditemukan\.?|tidak\s+terdeteksi\s+text)/i.test(trimmed)
+    ) {
+      return '';
+    }
+    return trimmed.slice(0, 3500);
+  } catch {
+    return '';
+  }
+}
+
+function extractStenlyImgToPromptText(rawBody?: string): string {
+  if (!rawBody) return '';
+  try {
+    const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    if (parsed.sukses === false || parsed.status === false) return '';
+    const candidate =
+      typeof parsed.prompt === 'string'
+        ? parsed.prompt
+        : typeof parsed.result === 'string'
+          ? parsed.result
+          : typeof parsed.description === 'string'
+            ? parsed.description
+            : '';
+    const trimmed = candidate.trim();
+    if (!trimmed || /gagal\s+mengambil\s+gambar/i.test(trimmed)) return '';
+    return trimmed.slice(0, 2500);
+  } catch {
+    return '';
+  }
+}
+
+async function executeVisionMultiModelChat({
   prompt,
   history,
   settings,
   deepThink,
   waifuProfile,
+  attachmentImage,
   signal,
   onStatus,
 }: {
@@ -2723,12 +2826,378 @@ export async function sendMultiModelChat({
   settings: AppSettings;
   deepThink?: boolean;
   waifuProfile?: WaifuProfile;
+  attachmentImage: VisionImageAttachmentInput;
+  signal?: AbortSignal;
+  onStatus?: (status: RouterStatusUpdate) => void;
+}): Promise<RouterResult> {
+  const effectivePrompt =
+    prompt.trim() ||
+    (waifuProfile
+      ? 'Lihat foto yang baru aku kirim ini ya, menurutmu gimana?'
+      : 'Analisis dan jelaskan isi foto ini secara detail dan jelas.');
+
+  const basePersona = buildSystemPersona(settings, 'full', waifuProfile);
+  const visionDirective = waifuProfile
+    ? `\n\nKonteks Visual Saat Ini: Lawan bicara baru saja memperlihatkan sebuah foto kepadamu. Perhatikan seluruh isi, objek, suasana, maupun teks di dalam foto tersebut secara nyata dan akurat, lalu tanggapi langsung sebagai ${waifuProfile.name} dengan format roleplay (*ekspresi/gerakan* dan "dialog langsung" dalam Bahasa Indonesia) sesuai kepribadian dan skenario saat ini — jangan menjawab kaku seperti asisten AI teknis.`
+    : '\n\nKonteks Analisis Visual: Pengguna melampirkan sebuah foto/gambar. Amati seluruh detail visual, objek, warna, tata letak, maupun teks yang tampak di dalam gambar dengan cermat, lalu jawab permintaan pengguna secara akurat, terstruktur, dan jelas dalam Bahasa Indonesia (kecuali diminta bahasa lain).';
+  const deepThinkDirective = deepThink
+    ? '\n\nMode DeepThink aktif: Lakukan analisis mendalam langkah demi langkah di dalam tag <think>...</think> terlebih dahulu, lalu berikan jawaban akhir di luar tag tersebut.'
+    : '';
+  const fullVisionSystem = `${basePersona}${visionDirective}${deepThinkDirective}`;
+
+  const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  if (settings.memoryContextEnabled && history.length > 0) {
+    const recent = history
+      .filter((m) => !m.isError && m.content.trim().length > 0 && !m.imageUrl)
+      .slice(-6);
+    for (const item of recent) {
+      historyMessages.push({
+        role: item.role,
+        content: item.content.slice(0, 700),
+      });
+    }
+  }
+
+  let attempt = 0;
+  let lastFailedModel: string | undefined;
+  let lastReason = 'Model Vision sedang padat.';
+
+  // Tier 0A: Connected AI Router Gateway (9Router / OmniRoute / OpenRouter / Custom)
+  if (
+    isRouterModelSelection(settings.selectedModelId) ||
+    isRouterConfiguredAndReady(settings)
+  ) {
+    if (isRouterConfiguredAndReady(settings)) {
+      attempt += 1;
+      const providerLabel = getRouterDisplayLabel(settings);
+      const targetRouterModel = resolveRouterModelName(
+        settings.selectedModelId,
+        settings
+      );
+      onStatus?.({
+        modelName: `${providerLabel} Vision: ${targetRouterModel}`,
+        attempt,
+        isFallback: false,
+        deepThink,
+      });
+      try {
+        const routerRes = await executeRouterChatCompletion({
+          prompt: effectivePrompt,
+          history,
+          settings,
+          systemPersona: fullVisionSystem,
+          modelIdOverride: targetRouterModel,
+          deepThink,
+          attachmentImage,
+          signal,
+        });
+        if (!isBlindVisionRefusal(routerRes.content)) {
+          return {
+            content: routerRes.content,
+            thinkingContent: routerRes.thinkingContent,
+            answeredById: isRouterModelSelection(settings.selectedModelId)
+              ? settings.selectedModelId
+              : 'custom-ai-router-vision',
+            answeredByName: `${routerRes.resolvedModel} · ${routerRes.providerLabel}`,
+            usedFallback: false,
+            attemptsCount: attempt,
+          };
+        }
+        lastFailedModel = `${providerLabel} (${targetRouterModel})`;
+        lastReason = 'Model router aktif belum mendukung input gambar.';
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        lastFailedModel = `${providerLabel} (${targetRouterModel})`;
+        lastReason =
+          err instanceof Error ? err.message : `Gagal menghubungi ${providerLabel}.`;
+        if (isRouterModelSelection(settings.selectedModelId) && !settings.autoFallback) {
+          throw new Error(lastReason);
+        }
+      }
+    }
+  }
+
+  // Tier 0B: Official Google Gemini 2.5 Flash Vision (when user configured Gemini API key)
+  const geminiKey = settings.geminiApiKey.trim();
+  const rawDataUrl = attachmentImage.dataUrl || '';
+  const commaPos = rawDataUrl.indexOf(',');
+  const inlineBase64 = commaPos >= 0 ? rawDataUrl.slice(commaPos + 1) : '';
+  const inlineMime =
+    attachmentImage.mimeType && /^image\/(jpe?g|png|webp|gif)$/i.test(attachmentImage.mimeType)
+      ? attachmentImage.mimeType.toLowerCase()
+      : 'image/jpeg';
+
+  if (geminiKey && inlineBase64) {
+    attempt += 1;
+    onStatus?.({
+      modelName: 'Gemini 2.5 Flash Vision (Resmi)',
+      attempt,
+      isFallback: attempt > 1,
+      previousFailedModel: lastFailedModel,
+      deepThink,
+    });
+    const gemStart = performance.now();
+    try {
+      const geminiContents = [
+        ...historyMessages.map((m) => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }],
+        })),
+        {
+          role: 'user',
+          parts: [
+            { text: effectivePrompt },
+            {
+              inline_data: {
+                mime_type: inlineMime,
+                data: inlineBase64,
+              },
+            },
+          ],
+        },
+      ];
+      const gemRes = await callGateway(
+        {
+          targetUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: fullVisionSystem }] },
+            contents: geminiContents,
+          }),
+          timeoutMs: 32000,
+        },
+        signal
+      );
+      if (gemRes.ok && gemRes.body) {
+        const parsed = extractUniversalAnswer(gemRes.body, waifuProfile);
+        if (parsed.content.length >= 2 && !isBlindVisionRefusal(parsed.content)) {
+          recordModelLatency(
+            'gemini-resmi',
+            Math.max(85, Math.round(performance.now() - gemStart))
+          );
+          return {
+            content: parsed.content,
+            thinkingContent: parsed.thinkingContent,
+            answeredById: 'gemini-resmi',
+            answeredByName: 'Gemini 2.5 Flash Vision · Google Resmi',
+            usedFallback: attempt > 1,
+            attemptsCount: attempt,
+          };
+        }
+      }
+      lastFailedModel = 'Gemini 2.5 Flash Resmi';
+      lastReason = gemRes.error || 'Respons Gemini Vision kosong.';
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      lastFailedModel = 'Gemini 2.5 Flash Resmi';
+      lastReason = err instanceof Error ? err.message : 'Gagal menghubungi Gemini Resmi.';
+    }
+  }
+
+  // Tier 1: Keyless Native Multimodal Vision Models (OpenAI-compatible `image_url` via ZelAI)
+  const imageSources = Array.from(
+    new Set(
+      [attachmentImage.dataUrl, attachmentImage.publicUrl].filter(
+        (v): v is string => typeof v === 'string' && v.trim().length > 0
+      )
+    )
+  );
+
+  for (const visionModel of KEYLESS_VISION_MODELS) {
+    if (signal?.aborted) {
+      throw new DOMException('Permintaan dibatalkan oleh pengguna.', 'AbortError');
+    }
+
+    attempt += 1;
+    onStatus?.({
+      modelName: visionModel.shortName,
+      attempt,
+      isFallback: attempt > 1,
+      previousFailedModel: lastFailedModel,
+      deepThink,
+    });
+
+    const modelStart = performance.now();
+    for (const imgRef of imageSources) {
+      try {
+        const payload = {
+          model: visionModel.modelId,
+          messages: [
+            { role: 'system', content: fullVisionSystem },
+            ...historyMessages,
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: effectivePrompt },
+                { type: 'image_url', image_url: { url: imgRef } },
+              ],
+            },
+          ],
+          stream: false,
+        };
+
+        const res = await callGateway(
+          {
+            targetUrl: 'https://ai.zelai.qzz.io/v1/chat/completions',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            timeoutMs: 26000,
+          },
+          signal
+        );
+
+        if (res.ok && typeof res.body === 'string') {
+          const parsed = extractUniversalAnswer(res.body, waifuProfile);
+          if (parsed.content.length >= 2 && !isBlindVisionRefusal(parsed.content)) {
+            recordModelLatency(
+              visionModel.id,
+              Math.max(85, Math.round(performance.now() - modelStart))
+            );
+            return {
+              content: parsed.content,
+              thinkingContent: parsed.thinkingContent,
+              answeredById: visionModel.id,
+              answeredByName: `${visionModel.shortName} · ${visionModel.provider}`,
+              usedFallback: attempt > 1,
+              attemptsCount: attempt,
+            };
+          }
+        }
+        lastReason = res.error || `${visionModel.shortName} belum mengembalikan analisis.`;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        lastReason =
+          err instanceof Error
+            ? err.message
+            : `Gagal menghubungi ${visionModel.shortName}.`;
+      }
+    }
+
+    lastFailedModel = visionModel.shortName;
+  }
+
+  // Tier 2: Keyless Hybrid Visual-Perception (Stenly ImgToPrompt + Faa Vision OCR) -> 76-Model Chat/Waifu Router
+  let resolvedPublicUrl = attachmentImage.publicUrl?.trim();
+  if (!resolvedPublicUrl && attachmentImage.dataUrl) {
+    resolvedPublicUrl = await uploadCompressedImageToPublicUrl(
+      attachmentImage.dataUrl,
+      attachmentImage.name || 'photo.jpg',
+      attachmentImage.mimeType || 'image/jpeg',
+      signal
+    );
+  }
+
+  if (resolvedPublicUrl && /^https:\/\//i.test(resolvedPublicUrl)) {
+    attempt += 1;
+    onStatus?.({
+      modelName: 'Hybrid Vision Perception (NanoBanana + OCR)',
+      attempt,
+      isFallback: true,
+      previousFailedModel: lastFailedModel,
+      deepThink,
+    });
+
+    const [captionSettled, ocrSettled] = await Promise.allSettled([
+      callGateway(
+        {
+          targetUrl: `https://www.stenly.org/api/ai/imgtoprompt?url=${encodeURIComponent(
+            resolvedPublicUrl
+          )}`,
+          timeoutMs: 18000,
+        },
+        signal
+      ),
+      callGateway(
+        {
+          targetUrl: `https://api-faa.my.id/faa/ocr?url=${encodeURIComponent(
+            resolvedPublicUrl
+          )}`,
+          timeoutMs: 18000,
+        },
+        signal
+      ),
+    ]);
+
+    const visualCaption =
+      captionSettled.status === 'fulfilled' && captionSettled.value.ok
+        ? extractStenlyImgToPromptText(captionSettled.value.body)
+        : '';
+    const ocrText =
+      ocrSettled.status === 'fulfilled' && ocrSettled.value.ok
+        ? extractHybridOcrText(ocrSettled.value.body)
+        : '';
+
+    if (visualCaption || ocrText) {
+      const groundedBlocks = [
+        visualCaption
+          ? `[Hasil Pengamatan Visual Isi Foto Pengguna]:\n${visualCaption}`
+          : '',
+        ocrText
+          ? `[Teks yang Terbaca di Dalam Foto Pengguna (OCR)]:\n${ocrText}`
+          : '',
+        `[Pesan / Pertanyaan Pengguna tentang Foto Tersebut]:\n${effectivePrompt}`,
+        waifuProfile
+          ? `(Instruksi penting: Tanggapi langsung sebagai ${waifuProfile.name} seolah matamu sendiri sedang menatap foto di atas secara langsung. Jangan menyebut kata "OCR" atau "pengamatan visual".)`
+          : '(Instruksi penting: Jawab permintaan pengguna secara alami dan akurat seolah kamu mengamati foto tersebut secara langsung, tanpa menyebut proses ekstraksi internal.)',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      const chatRes = await sendMultiModelChat({
+        prompt: groundedBlocks,
+        history,
+        settings,
+        deepThink,
+        waifuProfile,
+        signal,
+        onStatus,
+      });
+
+      return {
+        ...chatRes,
+        answeredByName: `${chatRes.answeredByName} + Hybrid Vision`,
+        usedFallback: true,
+        attemptsCount: attempt + chatRes.attemptsCount,
+      };
+    }
+  }
+
+  throw new Error(
+    `${lastReason} Silakan coba kirim ulang foto atau gunakan API Key Gemini / Router di Pengaturan.`
+  );
+}
+
+export async function sendMultiModelChat({
+  prompt,
+  history,
+  settings,
+  deepThink,
+  waifuProfile,
+  attachmentImage,
+  signal,
+  onStatus,
+}: {
+  prompt: string;
+  history: ChatMessage[];
+  settings: AppSettings;
+  deepThink?: boolean;
+  waifuProfile?: WaifuProfile;
+  attachmentImage?: VisionImageAttachmentInput;
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
   // 0. Check Phase 2 Web Tools (Categories A, B, and D slash commands)
   const webToolCommand = detectWebToolCommand(prompt);
   if (webToolCommand) {
+    if (
+      webToolCommand.toolId === 'ocr' &&
+      !webToolCommand.arg.trim() &&
+      attachmentImage?.publicUrl
+    ) {
+      webToolCommand.arg = attachmentImage.publicUrl;
+    }
     const toolRes = await executeWebToolCommand({
       command: webToolCommand,
       signal,
@@ -2757,6 +3226,20 @@ export async function sendMultiModelChat({
       downloadItems: toolRes.downloadItems,
       summarizeTranscript: toolRes.summarizeTranscript,
     };
+  }
+
+  // 0.5 Multimodal Vision Routing when user attached a personal photo/screenshot
+  if (attachmentImage && (attachmentImage.dataUrl || attachmentImage.publicUrl)) {
+    return executeVisionMultiModelChat({
+      prompt,
+      history,
+      settings,
+      deepThink,
+      waifuProfile,
+      attachmentImage,
+      signal,
+      onStatus,
+    });
   }
 
   let lastFailedName: string | undefined;

@@ -50,6 +50,8 @@ function sanitizeStoredMessages(messages: unknown): ChatMessage[] {
     const msg = raw as ChatMessage;
     const hasRichMedia = Boolean(
       msg.imageUrl ||
+        msg.attachmentImageUrl ||
+        msg.attachmentImageThumb ||
         msg.videoUrl ||
         msg.audioUrl ||
         (Array.isArray(msg.galleryUrls) && msg.galleryUrls.length > 0)
@@ -83,12 +85,42 @@ export function loadConversations(): Conversation[] {
 }
 
 export function saveConversations(conversations: Conversation[]): void {
+  // Keep full inline vision base64 only on the 2 newest user image turns (by createdAt) so localStorage stays featherlight
+  const recentVisionIds = new Set(
+    conversations
+      .flatMap((conv) => conv.messages)
+      .filter((msg) => Boolean(msg.attachmentImageDataUrl))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, 2)
+      .map((msg) => msg.id)
+  );
+  const storageReady: Conversation[] = conversations.map((conv) => ({
+    ...conv,
+    messages: conv.messages.map((msg) => {
+      if (!msg.attachmentImageDataUrl) return msg;
+      const hasCompactPreview = Boolean(
+        (msg.attachmentImageUrl && /^https?:\/\//i.test(msg.attachmentImageUrl)) ||
+          msg.attachmentImageThumb
+      );
+      if (
+        hasCompactPreview &&
+        msg.attachmentImageDataUrl.length > 90000 &&
+        !recentVisionIds.has(msg.id)
+      ) {
+        const { attachmentImageDataUrl: _trimmedVision, ...restMsg } = msg;
+        return restMsg;
+      }
+      return msg;
+    }),
+  }));
+
   try {
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(storageReady));
   } catch {
     try {
       let keptInlineImages = 0;
-      const compacted: Conversation[] = conversations.map((conv) => ({
+      let keptUserThumbs = 0;
+      const compacted: Conversation[] = storageReady.map((conv) => ({
         ...conv,
         messages: conv.messages.map((msg) => {
           let nextMsg = msg;
@@ -97,6 +129,29 @@ export function saveConversations(conversations: Conversation[]): void {
               ...nextMsg,
               attachmentText: nextMsg.attachmentText.slice(0, 2000),
             };
+          }
+          if (nextMsg.attachmentImageDataUrl) {
+            const { attachmentImageDataUrl: _dropVision, ...restVision } = nextMsg;
+            nextMsg = restVision;
+          }
+          if (
+            nextMsg.attachmentImageUrl &&
+            nextMsg.attachmentImageUrl.startsWith('data:image/')
+          ) {
+            nextMsg = {
+              ...nextMsg,
+              attachmentImageUrl: nextMsg.attachmentImageThumb,
+            };
+          }
+          if (
+            nextMsg.attachmentImageThumb &&
+            nextMsg.attachmentImageThumb.startsWith('data:image/')
+          ) {
+            keptUserThumbs += 1;
+            if (keptUserThumbs > 12) {
+              const { attachmentImageThumb: _dropThumb, ...restThumb } = nextMsg;
+              nextMsg = restThumb;
+            }
           }
           if (nextMsg.imageUrl && nextMsg.imageUrl.startsWith('data:image/')) {
             keptInlineImages += 1;

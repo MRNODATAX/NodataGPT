@@ -6,6 +6,7 @@ import {
   Command,
   FileText,
   ImageIcon,
+  Loader2,
   Mic,
   MicOff,
   Paperclip,
@@ -13,7 +14,10 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import type { AIModelDefinition } from '../types/chat';
+import type {
+  AIModelDefinition,
+  PreparedChatAttachment,
+} from '../types/chat';
 import {
   AI_MODELS,
   IMAGE_ENGINES,
@@ -23,11 +27,19 @@ import {
   RANDOM_IMAGE_COMMAND_MODES,
   WEB_TOOLS_CATALOG,
 } from '../services/webTools';
+import {
+  MAX_IMAGE_UPLOAD_BYTES,
+  MAX_TEXT_UPLOAD_BYTES,
+  compressImageFileForChat,
+  formatBytesCompact,
+  isImageAttachmentCandidate,
+  uploadCompressedImageToPublicUrl,
+} from '../utils/imageAttachment';
 
 interface ChatComposerProps {
   value: string;
   onChange: (val: string) => void;
-  onSend: (attachmentText?: string, attachmentName?: string) => void;
+  onSend: (attachment?: PreparedChatAttachment) => void;
   onStop: () => void;
   isLoading: boolean;
   enterToSend: boolean;
@@ -75,8 +87,11 @@ export function ChatComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
-  const [attachment, setAttachment] = useState<{ name: string; content: string } | null>(null);
+  const [attachment, setAttachment] = useState<PreparedChatAttachment | null>(null);
+  const [isCompressingFile, setIsCompressingFile] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
@@ -194,25 +209,142 @@ export function ChatComposer({
     recognition.start();
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileError(null);
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    return () => {
+      uploadAbortRef.current?.abort();
+    };
+  }, []);
 
-    if (file.size > 150 * 1024) {
-      setFileError('Ukuran berkas teks maksimum 150 KB.');
-      e.target.value = '';
+  const clearCurrentAttachment = () => {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    setAttachment(null);
+  };
+
+  const processSelectedFile = async (file: File) => {
+    setFileError(null);
+
+    if (isImageAttachmentCandidate(file)) {
+      if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+        setFileError(
+          `Ukuran foto terlalu besar (${formatBytesCompact(file.size)}). Maksimum 20 MB per foto.`
+        );
+        return;
+      }
+
+      uploadAbortRef.current?.abort();
+      const uploadCtrl = new AbortController();
+      uploadAbortRef.current = uploadCtrl;
+      setIsCompressingFile(true);
+
+      try {
+        const compressed = await compressImageFileForChat(file);
+        if (uploadCtrl.signal.aborted) return;
+
+        const uploadPromise = uploadCompressedImageToPublicUrl(
+          compressed.visionDataUrl,
+          compressed.fileName,
+          compressed.mimeType,
+          uploadCtrl.signal
+        ).then((pubUrl) => {
+          if (pubUrl && !uploadCtrl.signal.aborted) {
+            setAttachment((prev) =>
+              prev && prev.kind === 'image' && prev.name === compressed.fileName
+                ? { ...prev, imagePublicUrl: pubUrl }
+                : prev
+            );
+          }
+          return pubUrl;
+        });
+
+        setAttachment({
+          kind: 'image',
+          name: compressed.fileName,
+          imageDataUrl: compressed.visionDataUrl,
+          imageThumbDataUrl: compressed.thumbDataUrl,
+          imageMimeType: compressed.mimeType,
+          imageMeta: compressed.metaLabel,
+          pendingPublicUrlPromise: uploadPromise,
+        });
+
+        if (imageMode) onToggleImageMode();
+        textareaRef.current?.focus();
+      } catch (err) {
+        setFileError(
+          err instanceof Error
+            ? err.message
+            : 'Gagal memproses atau mengompresi foto.'
+        );
+      } finally {
+        setIsCompressingFile(false);
+      }
+      return;
+    }
+
+    if (file.size > MAX_TEXT_UPLOAD_BYTES) {
+      setFileError(
+        `Ukuran berkas teks/kode maksimum 1 MB (berkas ini ${formatBytesCompact(file.size)}). Untuk foto pribadi, gunakan JPG, PNG, atau WEBP hingga 20 MB.`
+      );
       return;
     }
 
     try {
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
       const text = await file.text();
-      setAttachment({ name: file.name, content: text.slice(0, 12000) });
+      setAttachment({
+        kind: 'text',
+        name: file.name,
+        textContent: text.slice(0, 24000),
+      });
       if (imageMode) onToggleImageMode();
+      textareaRef.current?.focus();
     } catch {
       setFileError('Gagal membaca berkas teks.');
     }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     e.target.value = '';
+    if (!file) return;
+    await processSelectedFile(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const pastedFile = item.getAsFile();
+        if (pastedFile) {
+          e.preventDefault();
+          const ext = pastedFile.type.includes('png')
+            ? 'png'
+            : pastedFile.type.includes('webp')
+              ? 'webp'
+              : 'jpg';
+          const namedFile =
+            pastedFile.name && pastedFile.name !== 'image.png'
+              ? pastedFile
+              : new File([pastedFile], `tangkapan-layar-${Date.now()}.${ext}`, {
+                  type: pastedFile.type || 'image/png',
+                });
+          void processSelectedFile(namedFile);
+          return;
+        }
+      }
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const droppedFile = e.dataTransfer?.files?.[0];
+    if (droppedFile) {
+      void processSelectedFile(droppedFile);
+    }
   };
 
   const triggerSubmit = () => {
@@ -220,8 +352,11 @@ export function ChatComposer({
       onStop();
       return;
     }
+    if (isCompressingFile) return;
     if (!value.trim() && !attachment) return;
-    onSend(attachment?.content, attachment?.name);
+    // Detach abort ref so background public URL upload can finish for the sent message
+    uploadAbortRef.current = null;
+    onSend(attachment ?? undefined);
     setAttachment(null);
     setFileError(null);
   };
@@ -269,7 +404,7 @@ export function ChatComposer({
     }
   };
 
-  const canSend = Boolean(value.trim() || attachment);
+  const canSend = Boolean((value.trim() || attachment) && !isCompressingFile);
 
   const isRandomImageCmd =
     filteredSlashItems.length === 0 &&
@@ -449,9 +584,19 @@ export function ChatComposer({
             if ((e.target as HTMLElement).closest('button, input')) return;
             textareaRef.current?.focus();
           }}
-          className={`nd-glass-composer rounded-[26px] px-3.5 pt-2.5 pb-2 cursor-text ${
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!isDragOver) setIsDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setIsDragOver(false);
+            }
+          }}
+          onDrop={handleDrop}
+          className={`nd-glass-composer rounded-[26px] px-3.5 pt-2.5 pb-2 cursor-text transition-colors ${
             imageMode ? 'nd-glass-composer-orange' : ''
-          }`}
+          } ${isDragOver ? 'ring-2 ring-[#22D3EE]/60' : ''}`}
         >
           {/* Image Engine Selector Bar (Mobile 320px+ & Desktop — Zero Horizontal Crowding) */}
           {imageMode && (
@@ -479,20 +624,67 @@ export function ChatComposer({
             </div>
           )}
 
-          {/* Attachment Chip */}
-          {attachment && (
-            <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-white/12 bg-black/50 px-2.5 py-1 text-xs text-[#F8FAFC]">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
-              <span className="max-w-[200px] truncate">{attachment.name}</span>
-              <button
-                type="button"
-                onClick={() => setAttachment(null)}
-                aria-label="Hapus lampiran"
-                className="ml-0.5 rounded p-0.5 text-[#94A3B8] hover:text-white cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+          {/* Compressing Photo Indicator */}
+          {isCompressingFile && (
+            <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-[#22D3EE]/35 bg-[#081322]/90 px-3 py-1.5 text-xs text-[#A5F3FC]">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#22D3EE]" />
+              <span>Mengompresi &amp; mengoptimalkan foto...</span>
             </div>
+          )}
+
+          {/* Attachment Chip (Personal Photo Thumbnail OR Text/Code File) */}
+          {attachment && !isCompressingFile && (
+            attachment.kind === 'image' ? (
+              <div className="mb-2 inline-flex max-w-full items-center gap-2.5 rounded-2xl border border-[#22D3EE]/35 bg-black/60 p-1.5 pr-2.5 text-xs text-[#F8FAFC] shadow-[0_6px_18px_rgba(0,0,0,0.45)]">
+                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black">
+                  <img
+                    src={
+                      attachment.imageThumbDataUrl ||
+                      attachment.imageDataUrl ||
+                      attachment.imagePublicUrl
+                    }
+                    alt={attachment.name}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="max-w-[155px] truncate font-medium text-white sm:max-w-[240px]">
+                      {attachment.name}
+                    </span>
+                    <span className="shrink-0 rounded border border-[#22D3EE]/35 bg-[#22D3EE]/14 px-1.5 py-0.5 font-mono-code text-[9.5px] font-semibold text-[#67E8F9]">
+                      Vision AI
+                    </span>
+                  </div>
+                  {attachment.imageMeta && (
+                    <p className="m-0 mt-0.5 truncate font-mono-code text-[10px] text-[#94A3B8]">
+                      {attachment.imageMeta}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={clearCurrentAttachment}
+                  aria-label="Hapus lampiran"
+                  className="ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#94A3B8] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="mb-2 inline-flex max-w-full items-center gap-2 rounded-xl border border-white/12 bg-black/50 px-2.5 py-1 text-xs text-[#F8FAFC]">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
+                <span className="max-w-[200px] truncate">{attachment.name}</span>
+                <button
+                  type="button"
+                  onClick={clearCurrentAttachment}
+                  aria-label="Hapus lampiran"
+                  className="ml-0.5 rounded p-0.5 text-[#94A3B8] hover:text-white cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )
           )}
 
           {/* Auto-growing Prompt Input */}
@@ -506,14 +698,19 @@ export function ChatComposer({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
-              imageMode
-                ? 'Deskripsikan gambar AI yang ingin dibuat...'
-                : deepThink
-                  ? 'Tanyakan masalah kompleks untuk dianalisis DeepThink...'
-                  : waifuName
-                    ? `Kirim pesan ke ${waifuName}...`
-                    : 'Tanya NodataGPT apa saja...'
+              attachment?.kind === 'image'
+                ? waifuName
+                  ? `Tulis pesan tentang foto ini untuk ${waifuName} (atau langsung kirim)...`
+                  : 'Tanyakan apa saja tentang foto ini (atau langsung kirim)...'
+                : imageMode
+                  ? 'Deskripsikan gambar AI yang ingin dibuat...'
+                  : deepThink
+                    ? 'Tanyakan masalah kompleks untuk dianalisis DeepThink...'
+                    : waifuName
+                      ? `Kirim pesan ke ${waifuName}...`
+                      : 'Tanya NodataGPT apa saja...'
             }
             className="nd-composer-textarea block max-h-[160px] min-h-[26px] w-full resize-none border-0 bg-transparent px-1 py-0.5 text-[15px] leading-relaxed text-[#F8FAFC] caret-[#22D3EE] placeholder-[#94A3B8] focus:ring-0 focus:outline-none focus-visible:outline-none sm:text-base"
           />
@@ -524,16 +721,20 @@ export function ChatComposer({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.html,.css,.csv,.sql,.sh,.yaml,.yml,.xml"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.txt,.md,.json,.js,.ts,.tsx,.jsx,.py,.html,.css,.csv,.sql,.sh,.yaml,.yml,.xml"
                 onChange={handleFileChange}
                 className="hidden"
               />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                aria-label="Lampirkan berkas teks atau kode"
-                title="Lampirkan berkas teks atau kode"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white cursor-pointer"
+                aria-label="Lampirkan foto atau berkas"
+                title="Upload foto pribadi (hingga 20 MB, otomatis dikompresi) atau berkas teks/kode"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors cursor-pointer ${
+                  attachment
+                    ? 'border-[#22D3EE]/55 bg-[#22D3EE]/16 text-[#67E8F9]'
+                    : 'border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/20 hover:bg-white/10 hover:text-white'
+                }`}
               >
                 <Paperclip className="h-4 w-4" />
               </button>

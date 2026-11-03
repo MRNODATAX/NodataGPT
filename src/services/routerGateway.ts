@@ -1736,6 +1736,7 @@ export async function executeRouterChatCompletion({
   systemPersona,
   modelIdOverride,
   deepThink,
+  attachmentImage,
   signal,
 }: {
   prompt: string;
@@ -1744,6 +1745,11 @@ export async function executeRouterChatCompletion({
   systemPersona: string;
   modelIdOverride?: string;
   deepThink?: boolean;
+  attachmentImage?: {
+    publicUrl?: string;
+    dataUrl?: string;
+    mimeType?: string;
+  };
   signal?: AbortSignal;
 }): Promise<{
   content: string;
@@ -1766,6 +1772,25 @@ export async function executeRouterChatCompletion({
     (modelIdOverride || '').trim() ||
     resolveRouterModelName(settings.selectedModelId, settings);
 
+  const hasVisionInput = Boolean(
+    attachmentImage?.dataUrl || attachmentImage?.publicUrl
+  );
+  if (
+    hasVisionInput &&
+    targetModel === 'auto' &&
+    Array.isArray(settings.routerDiscoveredModels) &&
+    settings.routerDiscoveredModels.length > 0
+  ) {
+    const discoveredVision = settings.routerDiscoveredModels.find((m) =>
+      /(?:gemini|gpt-4o|gpt-4\.1|gpt-5|claude-3|claude-sonnet|claude-opus|qwen.*vl|vision|pixtral|llama-4|nemotron.*vl)/i.test(
+        m
+      )
+    );
+    if (discoveredVision) {
+      targetModel = discoveredVision;
+    }
+  }
+
   const deepThinkAddendum = deepThink
     ? '\n\nMode DeepThink aktif: Lakukan analisis mendalam langkah demi langkah di dalam tag <think>...</think> terlebih dahulu, lalu berikan jawaban akhir yang jernih, terstruktur, dan tuntas di luar tag tersebut.'
     : '';
@@ -1784,18 +1809,66 @@ export async function executeRouterChatCompletion({
     }
   }
 
+  const visionImageRef =
+    attachmentImage?.dataUrl || attachmentImage?.publicUrl || '';
+  const openAiUserContent:
+    | string
+    | Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      > = visionImageRef
+    ? [
+        { type: 'text', text: prompt.trim() },
+        { type: 'image_url', image_url: { url: visionImageRef } },
+      ]
+    : prompt.trim();
+
   const standardMessages: Array<{
     role: 'system' | 'user' | 'assistant';
-    content: string;
+    content: typeof openAiUserContent;
   }> = [
     { role: 'system', content: fullSystemPrompt },
     ...historyTurns,
-    { role: 'user', content: prompt.trim() },
+    { role: 'user', content: openAiUserContent },
   ];
 
   // Anthropic native `/v1/messages` support when calling `api.anthropic.com`
   if (/api\.anthropic\.com/i.test(activeBaseUrl)) {
     const messagesUrl = appendPathToRouterBase(activeBaseUrl, '/messages');
+    const rawDataUrl = attachmentImage?.dataUrl || '';
+    const base64Comma = rawDataUrl.indexOf(',');
+    const anthropicBase64 =
+      base64Comma >= 0 ? rawDataUrl.slice(base64Comma + 1) : '';
+    const anthropicMediaType =
+      attachmentImage?.mimeType && /^image\/(jpeg|png|gif|webp)$/i.test(attachmentImage.mimeType)
+        ? attachmentImage.mimeType.toLowerCase()
+        : 'image/jpeg';
+
+    const anthropicUserContent = anthropicBase64
+      ? [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: anthropicMediaType,
+              data: anthropicBase64,
+            },
+          },
+          { type: 'text', text: prompt.trim() },
+        ]
+      : attachmentImage?.publicUrl
+        ? [
+            {
+              type: 'image',
+              source: {
+                type: 'url',
+                url: attachmentImage.publicUrl,
+              },
+            },
+            { type: 'text', text: prompt.trim() },
+          ]
+        : prompt.trim();
+
     const anthropicRes = await performRouterHttpCall({
       url: messagesUrl,
       method: 'POST',
@@ -1806,7 +1879,7 @@ export async function executeRouterChatCompletion({
         system: fullSystemPrompt,
         messages: [
           ...historyTurns,
-          { role: 'user', content: prompt.trim() },
+          { role: 'user', content: anthropicUserContent },
         ],
       }),
       timeoutMs: 42000,
@@ -1850,12 +1923,21 @@ export async function executeRouterChatCompletion({
 
     for (let i = 0; i < attemptModes.length; i++) {
       const mode = attemptModes[i];
+      const mergedUserText = `Konteks peran percakapan: ${fullSystemPrompt}\n\nPesan pengguna:\n${prompt.trim()}`;
       const messagesPayload = mode.mergeSystemIntoUser
         ? [
             ...historyTurns,
             {
               role: 'user' as const,
-              content: `Konteks peran percakapan: ${fullSystemPrompt}\n\nPesan pengguna:\n${prompt.trim()}`,
+              content: visionImageRef
+                ? [
+                    { type: 'text' as const, text: mergedUserText },
+                    {
+                      type: 'image_url' as const,
+                      image_url: { url: visionImageRef },
+                    },
+                  ]
+                : mergedUserText,
             },
           ]
         : standardMessages;

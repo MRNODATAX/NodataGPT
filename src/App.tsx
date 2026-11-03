@@ -84,6 +84,7 @@ import type {
   ChatMessage,
   Conversation,
   MediaDownloadItem,
+  PreparedChatAttachment,
 } from './types/chat';
 import type {
   WaifuProfile,
@@ -700,20 +701,30 @@ export function App() {
     async ({
       promptText,
       targetChatId,
+      userMsgId,
       assistantMsgId,
       priorMessages,
       attachmentText,
       attachmentName,
+      attachmentImage,
       asImage,
       useDeepThink,
       waifuProfile,
     }: {
       promptText: string;
       targetChatId: string;
+      userMsgId?: string;
       assistantMsgId: string;
       priorMessages: ChatMessage[];
       attachmentText?: string;
       attachmentName?: string;
+      attachmentImage?: {
+        publicUrl?: string;
+        dataUrl?: string;
+        mimeType?: string;
+        name?: string;
+        pendingPublicUrlPromise?: Promise<string | undefined>;
+      };
       asImage?: boolean;
       useDeepThink?: boolean;
       waifuProfile?: WaifuProfile;
@@ -732,6 +743,42 @@ export function App() {
         ? `${promptText.trim() || 'Analisis berkas berikut:'}\n\n[Berkas: ${attachmentName || 'lampiran'}]\n${attachmentText}`
         : promptText.trim();
 
+      let activeAttachmentImage = attachmentImage
+        ? {
+            publicUrl: attachmentImage.publicUrl,
+            dataUrl: attachmentImage.dataUrl,
+            mimeType: attachmentImage.mimeType,
+            name: attachmentImage.name,
+          }
+        : undefined;
+
+      if (
+        attachmentImage &&
+        !attachmentImage.publicUrl &&
+        attachmentImage.pendingPublicUrlPromise
+      ) {
+        const applyResolvedPublicUrl = (url?: string) => {
+          if (!url || !userMsgId) return;
+          updateChatMessages(targetChatId, (msgs) =>
+            msgs.map((m) =>
+              m.id === userMsgId ? { ...m, attachmentImageUrl: url } : m
+            )
+          );
+        };
+        void attachmentImage.pendingPublicUrlPromise.then(applyResolvedPublicUrl);
+
+        const quickUrl = await Promise.race<string | undefined>([
+          attachmentImage.pendingPublicUrlPromise,
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5500)),
+        ]);
+        if (quickUrl && activeAttachmentImage) {
+          activeAttachmentImage = {
+            ...activeAttachmentImage,
+            publicUrl: quickUrl,
+          };
+        }
+      }
+
       try {
         const result = asImage
           ? await generateMultiEngineImage({
@@ -748,6 +795,7 @@ export function App() {
               settings,
               deepThink: useDeepThink,
               waifuProfile,
+              attachmentImage: activeAttachmentImage,
               signal: controller.signal,
               onStatus: (st) => setRouterStatus(st),
             });
@@ -937,12 +985,23 @@ export function App() {
   );
 
   const handleSend = useCallback(
-    async (attachmentText?: string, attachmentName?: string) => {
+    async (attachment?: PreparedChatAttachment) => {
       const trimmed = draft.trim();
-      if ((!trimmed && !attachmentText) || isLoading) return;
+      const attachmentText =
+        attachment?.kind === 'text' ? attachment.textContent : undefined;
+      const attachmentName = attachment?.name;
+      const hasImageAttachment = Boolean(
+        attachment?.kind === 'image' &&
+          (attachment.imageDataUrl || attachment.imagePublicUrl)
+      );
+
+      if ((!trimmed && !attachmentText && !hasImageAttachment) || isLoading) return;
 
       // Explicit `.waifu on/off/status` control command (local-only, supersedes Waifu chat & never attaches image)
-      const waifuCtrl = !attachmentText ? handleWaifuControlCommand(trimmed) : null;
+      const waifuCtrl =
+        !attachmentText && !hasImageAttachment
+          ? handleWaifuControlCommand(trimmed)
+          : null;
       if (waifuCtrl) {
         if (
           waifuCtrl.scope === 'private' &&
@@ -998,21 +1057,28 @@ export function App() {
 
       const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
       const isWaifuPapTurn = Boolean(
-        activeConversationWaifu &&
+        !hasImageAttachment &&
+          activeConversationWaifu &&
           !imageMode &&
           !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(trimmed) &&
           isExplicitPapRequest(trimmed)
       );
       const intent =
-        attachmentText || isWebTool || isWaifuPapTurn
+        attachmentText || hasImageAttachment || isWebTool || isWaifuPapTurn
           ? { isImageIntent: false, cleanPrompt: trimmed }
           : parseImagePromptIntent(trimmed);
       const useImage =
-        !isWebTool && !isWaifuPapTurn && (imageMode || intent.isImageIntent);
+        !hasImageAttachment &&
+        !isWebTool &&
+        !isWaifuPapTurn &&
+        (imageMode || intent.isImageIntent);
       const effectivePrompt = useImage && intent.cleanPrompt ? intent.cleanPrompt : trimmed;
       const useThinking = deepThink && !useImage && !isWebTool;
-      const displayContent =
-        trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
+      const displayContent = hasImageAttachment
+        ? trimmed
+        : trimmed || `Lampirkan berkas ${attachmentName || ''}`.trim();
+      const titleSource =
+        displayContent || `Foto ${attachmentName || 'Lampiran'}`.trim();
 
       const userMsg: ChatMessage = {
         id: generateId(),
@@ -1022,6 +1088,18 @@ export function App() {
         isImageRequest: useImage,
         attachmentName,
         attachmentText,
+        attachmentImageUrl: hasImageAttachment
+          ? attachment?.imagePublicUrl || attachment?.imageThumbDataUrl || attachment?.imageDataUrl
+          : undefined,
+        attachmentImageThumb: hasImageAttachment
+          ? attachment?.imageThumbDataUrl
+          : undefined,
+        attachmentImageDataUrl: hasImageAttachment
+          ? attachment?.imageDataUrl
+          : undefined,
+        attachmentImageMeta: hasImageAttachment
+          ? attachment?.imageMeta
+          : undefined,
       };
 
       const assistantPlaceholder: ChatMessage = {
@@ -1042,7 +1120,7 @@ export function App() {
       if (!chatId) {
         const newChat: Conversation = {
           id: generateId(),
-          title: deriveChatTitle(displayContent),
+          title: deriveChatTitle(titleSource),
           createdAt: Date.now(),
           updatedAt: Date.now(),
           messages: [userMsg, assistantPlaceholder],
@@ -1069,10 +1147,20 @@ export function App() {
       await executePrompt({
         promptText: effectivePrompt,
         targetChatId: chatId,
+        userMsgId: userMsg.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: existingMessages,
         attachmentText,
         attachmentName,
+        attachmentImage: hasImageAttachment
+          ? {
+              publicUrl: attachment?.imagePublicUrl,
+              dataUrl: attachment?.imageDataUrl,
+              mimeType: attachment?.imageMimeType,
+              name: attachment?.name,
+              pendingPublicUrlPromise: attachment?.pendingPublicUrlPromise,
+            }
+          : undefined,
         asImage: useImage,
         useDeepThink: useThinking,
         waifuProfile: activeConversationWaifu,
@@ -1229,15 +1317,23 @@ export function App() {
         .find((m) => m.role === 'user');
       if (!precedingUserMsg) return;
 
+      const hasUserPhotoRegen = Boolean(
+        precedingUserMsg.attachmentImageUrl ||
+          precedingUserMsg.attachmentImageDataUrl ||
+          precedingUserMsg.attachmentImageThumb
+      );
       const isWaifuPapRegen = Boolean(
-        activeConversationWaifu &&
+        !hasUserPhotoRegen &&
+          activeConversationWaifu &&
           !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(precedingUserMsg.content) &&
           isExplicitPapRequest(precedingUserMsg.content)
       );
-      const intent = isWaifuPapRegen
-        ? { isImageIntent: false, cleanPrompt: precedingUserMsg.content }
-        : parseImagePromptIntent(precedingUserMsg.content);
+      const intent =
+        hasUserPhotoRegen || isWaifuPapRegen
+          ? { isImageIntent: false, cleanPrompt: precedingUserMsg.content }
+          : parseImagePromptIntent(precedingUserMsg.content);
       const regenerateAsImage =
+        !hasUserPhotoRegen &&
         !isWaifuPapRegen &&
         Boolean(
           targetAssistantMsg?.imageUrl ||
@@ -1270,16 +1366,37 @@ export function App() {
         )
       );
 
+      const regenPublicUrl =
+        precedingUserMsg.attachmentImageUrl &&
+        /^https?:\/\//i.test(precedingUserMsg.attachmentImageUrl)
+          ? precedingUserMsg.attachmentImageUrl
+          : undefined;
+      const regenDataUrl =
+        precedingUserMsg.attachmentImageDataUrl ||
+        (precedingUserMsg.attachmentImageUrl?.startsWith('data:image/')
+          ? precedingUserMsg.attachmentImageUrl
+          : precedingUserMsg.attachmentImageThumb?.startsWith('data:image/')
+            ? precedingUserMsg.attachmentImageThumb
+            : undefined);
+
       await executePrompt({
         promptText:
           regenerateAsImage && intent.cleanPrompt
             ? intent.cleanPrompt
             : precedingUserMsg.content,
         targetChatId: activeConversation.id,
+        userMsgId: precedingUserMsg.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages: historyBeforeUser,
         attachmentText: precedingUserMsg.attachmentText,
         attachmentName: precedingUserMsg.attachmentName,
+        attachmentImage: hasUserPhotoRegen
+          ? {
+              publicUrl: regenPublicUrl,
+              dataUrl: regenDataUrl,
+              name: precedingUserMsg.attachmentName,
+            }
+          : undefined,
         asImage: regenerateAsImage,
         useDeepThink: deepThink && !regenerateAsImage,
         waifuProfile: activeConversationWaifu,
@@ -1356,21 +1473,28 @@ export function App() {
         abortControllerRef.current = null;
       }
 
+      const hasUserPhotoEdit = Boolean(
+        targetUserMsg.attachmentImageUrl ||
+          targetUserMsg.attachmentImageDataUrl ||
+          targetUserMsg.attachmentImageThumb
+      );
       const isWebTool = Boolean(
         !targetUserMsg.attachmentText && detectWebToolCommand(trimmed)
       );
       const isWaifuPapEdit = Boolean(
-        activeConversationWaifu &&
+        !hasUserPhotoEdit &&
+          activeConversationWaifu &&
           !imageMode &&
           !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(trimmed) &&
           isExplicitPapRequest(trimmed)
       );
       const intent =
-        targetUserMsg.attachmentText || isWebTool || isWaifuPapEdit
+        targetUserMsg.attachmentText || hasUserPhotoEdit || isWebTool || isWaifuPapEdit
           ? { isImageIntent: false, cleanPrompt: trimmed }
           : parseImagePromptIntent(trimmed);
       const useImage =
         !targetUserMsg.attachmentText &&
+        !hasUserPhotoEdit &&
         !isWebTool &&
         !isWaifuPapEdit &&
         Boolean(targetUserMsg.isImageRequest || imageMode || intent.isImageIntent);
@@ -1407,13 +1531,34 @@ export function App() {
         )
       );
 
+      const editPublicUrl =
+        targetUserMsg.attachmentImageUrl &&
+        /^https?:\/\//i.test(targetUserMsg.attachmentImageUrl)
+          ? targetUserMsg.attachmentImageUrl
+          : undefined;
+      const editDataUrl =
+        targetUserMsg.attachmentImageDataUrl ||
+        (targetUserMsg.attachmentImageUrl?.startsWith('data:image/')
+          ? targetUserMsg.attachmentImageUrl
+          : targetUserMsg.attachmentImageThumb?.startsWith('data:image/')
+            ? targetUserMsg.attachmentImageThumb
+            : undefined);
+
       await executePrompt({
         promptText: effectivePrompt,
         targetChatId: activeConversation.id,
+        userMsgId: updatedUserMsg.id,
         assistantMsgId: assistantPlaceholder.id,
         priorMessages,
         attachmentText: targetUserMsg.attachmentText,
         attachmentName: targetUserMsg.attachmentName,
+        attachmentImage: hasUserPhotoEdit
+          ? {
+              publicUrl: editPublicUrl,
+              dataUrl: editDataUrl,
+              name: targetUserMsg.attachmentName,
+            }
+          : undefined,
         asImage: useImage,
         useDeepThink: useThinking,
         waifuProfile: activeConversationWaifu,

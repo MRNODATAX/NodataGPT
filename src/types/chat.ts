@@ -17,6 +17,18 @@ export interface MediaDownloadItem {
   kind?: 'video' | 'audio' | 'image' | 'file';
 }
 
+export interface PreparedChatAttachment {
+  kind: 'text' | 'image';
+  name: string;
+  textContent?: string;
+  imagePublicUrl?: string;
+  imageDataUrl?: string;
+  imageThumbDataUrl?: string;
+  imageMimeType?: string;
+  imageMeta?: string;
+  pendingPublicUrlPromise?: Promise<string | undefined>;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -47,6 +59,10 @@ export interface ChatMessage {
   waifuExpressionObjectPosition?: string;
   attachmentName?: string;
   attachmentText?: string;
+  attachmentImageUrl?: string;
+  attachmentImageThumb?: string;
+  attachmentImageDataUrl?: string;
+  attachmentImageMeta?: string;
 }
 
 export interface Conversation {

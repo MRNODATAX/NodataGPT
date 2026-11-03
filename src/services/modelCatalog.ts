@@ -1121,6 +1121,72 @@ function mapGrokRatio(ratio = '1:1'): string {
 
 export const IMAGE_ENGINES: ImageEngineDefinition[] = [
   {
+    id: 'webai-bfl-flux-schnell',
+    name: 'FLUX.1 Schnell · Black Forest Labs (ZeroGPU)',
+    shortName: 'BFL FLUX.1 Schnell',
+    provider: 'Black Forest Labs Space',
+    category: 'direct',
+    badge: 'Direct ZeroGPU ~3.5s',
+    description:
+      'Scraper Gradio v5 langsung ke Space resmi Black Forest Labs FLUX.1-Schnell (1024x1024, mendukung semua rasio + mirror).',
+    delivery: 'hybrid-json',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    buildUrl: () => '/api/webai',
+    buildBody: (prompt, ratio) =>
+      JSON.stringify({
+        provider: 'bfl-flux-schnell',
+        mode: 'image',
+        prompt,
+        ratio: ratio || '1:1',
+      }),
+    timeoutMs: 38000,
+  },
+  {
+    id: 'webai-evalstate-flux',
+    name: 'FLUX.1 Schnell Fast · Evalstate Space (ZeroGPU)',
+    shortName: 'Evalstate FLUX.1',
+    provider: 'Evalstate HF Space',
+    category: 'artistik',
+    badge: 'ZeroGPU Mirror 1024px',
+    description:
+      'Scraper Gradio v5 langsung ke Space evalstate/flux1_schnell dengan kuota independen untuk ilustrasi & foto 1024px.',
+    delivery: 'hybrid-json',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    buildUrl: () => '/api/webai',
+    buildBody: (prompt, ratio) =>
+      JSON.stringify({
+        provider: 'evalstate-flux',
+        mode: 'image',
+        prompt,
+        ratio: ratio || '1:1',
+      }),
+    timeoutMs: 38000,
+  },
+  {
+    id: 'webai-qwen-image',
+    name: 'Qwen-Image Lightning · Alibaba Space',
+    shortName: 'Qwen-Image Fast',
+    provider: 'Qwen-Image ZeroGPU',
+    category: 'cepat',
+    badge: 'Lightning 8-Step',
+    description:
+      'Scraper langsung ke mcp-tools/Qwen-Image-Fast (Alibaba Qwen-Image Lightning 8-step) mendukung multi-rasio & teks poster.',
+    delivery: 'hybrid-json',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    buildUrl: () => '/api/webai',
+    buildBody: (prompt, ratio) =>
+      JSON.stringify({
+        provider: 'qwen-image-fast',
+        mode: 'image',
+        prompt,
+        ratio: ratio || '1:1',
+      }),
+    timeoutMs: 38000,
+  },
+  {
     id: 'zelai-zimage-turbo',
     name: 'Z-Image Turbo · ZelAI Cloud',
     shortName: 'ZelAI Z-Image',
@@ -1306,72 +1372,6 @@ export const IMAGE_ENGINES: ImageEngineDefinition[] = [
     buildUrl: (prompt) =>
       `https://api.synoxcloud.xyz/search/meigen-ai?q=${encodeURIComponent(prompt)}&apikey=FREE`,
     timeoutMs: 24000,
-  },
-  {
-    id: 'webai-bfl-flux-schnell',
-    name: 'FLUX.1 Schnell · Black Forest Labs (ZeroGPU)',
-    shortName: 'BFL FLUX.1 Schnell',
-    provider: 'Black Forest Labs Space',
-    category: 'direct',
-    badge: 'Direct ZeroGPU ~3.5s',
-    description:
-      'Scraper Gradio v5 langsung ke Space resmi Black Forest Labs FLUX.1-Schnell (1024x1024, mendukung semua rasio + mirror).',
-    delivery: 'hybrid-json',
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    buildUrl: () => '/api/webai',
-    buildBody: (prompt, ratio) =>
-      JSON.stringify({
-        provider: 'bfl-flux-schnell',
-        mode: 'image',
-        prompt,
-        ratio: ratio || '1:1',
-      }),
-    timeoutMs: 38000,
-  },
-  {
-    id: 'webai-evalstate-flux',
-    name: 'FLUX.1 Schnell Fast · Evalstate Space (ZeroGPU)',
-    shortName: 'Evalstate FLUX.1',
-    provider: 'Evalstate HF Space',
-    category: 'artistik',
-    badge: 'ZeroGPU Mirror 1024px',
-    description:
-      'Scraper Gradio v5 langsung ke Space evalstate/flux1_schnell dengan kuota independen untuk ilustrasi & foto 1024px.',
-    delivery: 'hybrid-json',
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    buildUrl: () => '/api/webai',
-    buildBody: (prompt, ratio) =>
-      JSON.stringify({
-        provider: 'evalstate-flux',
-        mode: 'image',
-        prompt,
-        ratio: ratio || '1:1',
-      }),
-    timeoutMs: 38000,
-  },
-  {
-    id: 'webai-qwen-image',
-    name: 'Qwen-Image Lightning · Alibaba Space',
-    shortName: 'Qwen-Image Fast',
-    provider: 'Qwen-Image ZeroGPU',
-    category: 'cepat',
-    badge: 'Lightning 8-Step',
-    description:
-      'Scraper langsung ke mcp-tools/Qwen-Image-Fast (Alibaba Qwen-Image Lightning 8-step) mendukung multi-rasio & teks poster.',
-    delivery: 'hybrid-json',
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    buildUrl: () => '/api/webai',
-    buildBody: (prompt, ratio) =>
-      JSON.stringify({
-        provider: 'qwen-image-fast',
-        mode: 'image',
-        prompt,
-        ratio: ratio || '1:1',
-      }),
-    timeoutMs: 38000,
   },
   {
     id: 'rin-flux',

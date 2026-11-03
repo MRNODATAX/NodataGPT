@@ -31,7 +31,9 @@ import { WaifuStudioModal } from './components/WaifuStudioModal';
 import { WaifuScenarioBubbleModal } from './components/WaifuScenarioBubbleModal';
 import {
   DEFAULT_MIKU_ID,
+  buildCasualAyangSnapshot,
   createDefaultMikuProfile,
+  isCasualAyangScenario,
   loadWaifuStore,
   saveWaifuStore,
 } from './services/waifuPresets';
@@ -501,7 +503,11 @@ export function App() {
   }, []);
 
   const handleStartWaifuChat = useCallback(
-    (profileOverride?: WaifuProfile, scenarioPreset?: WaifuScenarioPreset) => {
+    (
+      profileOverride?: WaifuProfile,
+      scenarioPreset?: WaifuScenarioPreset,
+      persistProfileAsDefault = false
+    ) => {
       if (pendingStreamRef.current) {
         handleFlushStream();
       } else if (abortControllerRef.current) {
@@ -520,10 +526,14 @@ export function App() {
             firstMessage: scenarioPreset.firstMessage,
             updatedAt: Date.now(),
           }
-        : targetProfile;
+        : persistProfileAsDefault
+          ? targetProfile
+          : buildCasualAyangSnapshot(targetProfile);
 
-      if (profileOverride || scenarioPreset) {
+      if (persistProfileAsDefault) {
         handleSaveWaifuProfile(effectiveProfile, true);
+      } else if (effectiveProfile.id !== waifuStore.activeWaifuId) {
+        setWaifuStore((prev) => ({ ...prev, activeWaifuId: effectiveProfile.id }));
       }
 
       const openingGreeting = (
@@ -540,10 +550,14 @@ export function App() {
         createdAt: Date.now(),
       };
 
+      const defaultRoomSubtitle = isCasualAyangScenario(effectiveProfile.scenario)
+        ? 'Chat Biasa Bareng Ayang'
+        : 'Chat Waifu';
+
       const newWaifuChat: Conversation = {
         id: generateId(),
         title: `${effectiveProfile.name} · ${
-          scenarioPreset ? scenarioPreset.title : 'Chat Waifu'
+          scenarioPreset ? scenarioPreset.title : defaultRoomSubtitle
         }`,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -560,7 +574,7 @@ export function App() {
       setImageMode(false);
       setDeepThink(false);
     },
-    [activeWaifu, handleFlushStream, handleSaveWaifuProfile]
+    [activeWaifu, handleFlushStream, handleSaveWaifuProfile, waifuStore.activeWaifuId]
   );
 
   const handleOpenWaifuScenarioBubble = useCallback(() => {
@@ -1055,10 +1069,16 @@ export function App() {
       }
       if (checkSendCooldownRemainingMs() > 0) return;
 
+      const implicitCasualWaifu =
+        !activeConversation && sidebarMode === 'waifu'
+          ? buildCasualAyangSnapshot(activeWaifu)
+          : undefined;
+      const effectiveTurnWaifu = activeConversationWaifu ?? implicitCasualWaifu;
+
       const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
       const isWaifuPapTurn = Boolean(
         !hasImageAttachment &&
-          activeConversationWaifu &&
+          effectiveTurnWaifu &&
           !imageMode &&
           !/^\/(?:img|image|gambar|draw|lukis)\b/i.test(trimmed) &&
           isExplicitPapRequest(trimmed)
@@ -1118,15 +1138,26 @@ export function App() {
       let existingMessages: ChatMessage[] = [];
 
       if (!chatId) {
-        const newChat: Conversation = {
-          id: generateId(),
-          title: deriveChatTitle(titleSource),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          messages: [userMsg, assistantPlaceholder],
-        };
+        const newChat: Conversation = effectiveTurnWaifu
+          ? {
+              id: generateId(),
+              title: `${effectiveTurnWaifu.name} · ${deriveChatTitle(titleSource)}`,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              mode: 'waifu',
+              waifuId: effectiveTurnWaifu.id,
+              waifuProfileSnapshot: effectiveTurnWaifu,
+              messages: [userMsg, assistantPlaceholder],
+            }
+          : {
+              id: generateId(),
+              title: deriveChatTitle(titleSource),
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              messages: [userMsg, assistantPlaceholder],
+            };
         chatId = newChat.id;
-        setSidebarMode('ai');
+        setSidebarMode(effectiveTurnWaifu ? 'waifu' : 'ai');
         setConversations((prev) => [newChat, ...prev]);
         setActiveChatId(chatId);
       } else {
@@ -1163,7 +1194,7 @@ export function App() {
           : undefined,
         asImage: useImage,
         useDeepThink: useThinking,
-        waifuProfile: activeConversationWaifu,
+        waifuProfile: effectiveTurnWaifu,
       });
     },
     [
@@ -1172,6 +1203,8 @@ export function App() {
       settings,
       imageMode,
       deepThink,
+      sidebarMode,
+      activeWaifu,
       activeConversation,
       activeConversationWaifu,
       executePrompt,
@@ -1958,7 +1991,12 @@ export function App() {
             }}
             onOpenModelPicker={() => openModelPicker('chat')}
             onOpenImageModelPicker={() => openModelPicker('image')}
-            waifuName={activeConversationWaifu?.name}
+            waifuName={
+              activeConversationWaifu?.name ??
+              (!activeConversation && sidebarMode === 'waifu'
+                ? activeWaifu.name
+                : undefined)
+            }
           />
         </main>
       </div>
@@ -1978,7 +2016,7 @@ export function App() {
         activeWaifuId={(activeConversationWaifu ?? activeWaifu).id}
         onClose={() => setWaifuStudioOpen(false)}
         onSaveProfile={handleSaveWaifuProfile}
-        onSaveAndStartChat={(profile) => handleStartWaifuChat(profile)}
+        onSaveAndStartChat={(profile) => handleStartWaifuChat(profile, undefined, true)}
         onDeleteProfile={handleDeleteWaifuProfile}
         onGenerateAiAvatar={handleGenerateAiAvatar}
       />

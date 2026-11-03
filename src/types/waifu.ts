@@ -21,6 +21,7 @@ export interface WaifuMoodState {
 }
 
 export type WaifuScenarioCategory =
+  | 'casual'
   | 'night'
   | 'home'
   | 'outing'

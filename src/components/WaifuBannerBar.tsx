@@ -14,6 +14,7 @@ import { isMikuCharacterProfile } from '../services/waifuExpressions';
 import {
   DEFAULT_MIKU_AVATAR_URL,
   analyzeWaifuMoodAndAffection,
+  isCasualAyangScenario,
   resolveWaifuAvatarUrl,
 } from '../services/waifuPresets';
 import type { ChatMessage } from '../types/chat';
@@ -188,13 +189,14 @@ export function WaifuBannerBar({
         />
         <div
           role="menu"
-          className="absolute top-full left-0 right-0 z-40 mt-1.5 rounded-2xl border border-white/14 bg-[#0B1221]/98 p-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.72)] backdrop-blur-xl sm:right-auto sm:w-72"
+          className="absolute top-full left-0 right-0 z-40 mt-1.5 max-h-72 overflow-y-auto rounded-2xl border border-white/14 bg-[#0B1221]/98 p-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.72)] backdrop-blur-xl sm:right-auto sm:w-80"
         >
           <div className="px-2.5 py-1.5 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-            Pilih Skenario Pembuka
+            Mode Chat Ayang & Skenario
           </div>
           {profile.scenarioPresets.map((preset) => {
             const isCurrent = preset.scenario === profile.scenario;
+            const isCasual = isCasualAyangScenario(preset.scenario);
             return (
               <button
                 key={preset.id}
@@ -210,9 +212,16 @@ export function WaifuBannerBar({
                     : 'text-[#CBD5E1] hover:bg-white/[0.06] hover:text-white'
                 }`}
               >
-                <span className="text-xs font-semibold">{preset.title}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold">{preset.title}</span>
+                  {isCasual && (
+                    <span className="rounded-full border border-[#22D3EE]/40 bg-[#22D3EE]/15 px-1.5 py-0.2 text-[9px] font-bold uppercase text-[#67E8F9]">
+                      Default
+                    </span>
+                  )}
+                </div>
                 <span className="line-clamp-2 text-[11px] leading-snug text-[#94A3B8]">
-                  {preset.scenario}
+                  {preset.shortHint || preset.scenario}
                 </span>
               </button>
             );

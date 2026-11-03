@@ -359,7 +359,7 @@ export function Sidebar({
                         </span>
                       </div>
                       <div className="truncate text-[10.5px] text-[#94A3B8]">
-                        {activeWaifu.name} · Pilih Skenario
+                        {activeWaifu.name} · Chat Ayang / Skenario
                       </div>
                     </div>
                   </button>

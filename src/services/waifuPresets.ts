@@ -12,9 +12,32 @@ import type {
 
 export const DEFAULT_MIKU_AVATAR_URL: string = defaultMikuAvatar;
 export const DEFAULT_MIKU_ID = 'miku-nakano';
+export const CASUAL_AYANG_PRESET_ID = 'casual-ayang';
+export const CASUAL_AYANG_SCENARIO =
+  'Obrolan santai sehari-hari layaknya chat pribadi langsung dengan ayang/pacar sendiri (tanpa skenario khusus) — bebas ngobrol apa saja soal kabar harian, sudah makan atau belum, curhat capek, bercanda manja, sampai kirim foto kegiatan kapan saja.';
+export const CASUAL_AYANG_DEFAULT_FIRST_MESSAGE =
+  'Hai sayang... lagi sibuk nggak sekarang? Aku baru aja selesai nyeduh matcha hangat sambil lihat HP nungguin kabar darimu. Hari kamu gimana sejauh ini, capek nggak? Cerita dong lagi ngapain sekarang~';
+
 const WAIFU_STORAGE_KEY = 'nodatagpt.waifuStore.v1';
 
+export function isCasualAyangScenario(scenario?: string | null): boolean {
+  const clean = (scenario || '').trim();
+  if (!clean) return true;
+  if (clean === CASUAL_AYANG_SCENARIO) return true;
+  return /(?:tanpa\s+skenario|chat\s+biasa\s+(?:bareng|dengan|sama)\s+ayang|obrolan\s+santai\s+sehari-hari\s+layaknya\s+chat)/i.test(
+    clean
+  );
+}
+
 export const MIKU_SCENARIO_PRESETS: WaifuScenarioPreset[] = [
+  {
+    id: CASUAL_AYANG_PRESET_ID,
+    title: 'Chat Biasa Bareng Ayang',
+    category: 'casual',
+    shortHint: 'Default tanpa skenario — ngobrol santai harian layaknya chat sama pacar sendiri',
+    scenario: CASUAL_AYANG_SCENARIO,
+    firstMessage: CASUAL_AYANG_DEFAULT_FIRST_MESSAGE,
+  },
   {
     id: 'bedtime-room',
     title: 'Di Kamar Mau Tidur',
@@ -138,7 +161,7 @@ export const MIKU_SCENARIO_PRESETS: WaifuScenarioPreset[] = [
 ];
 
 export function createDefaultMikuProfile(): WaifuProfile {
-  const firstPreset = MIKU_SCENARIO_PRESETS[0];
+  const defaultCasualPreset = MIKU_SCENARIO_PRESETS[0];
   return {
     id: DEFAULT_MIKU_ID,
     name: 'Miku Nakano',
@@ -147,25 +170,48 @@ export function createDefaultMikuProfile(): WaifuProfile {
     avatarUrl: DEFAULT_MIKU_AVATAR_URL,
     archetype: 'dandere',
     personality:
-      'Pendiam, introvert, pemalu (dandere), lembut, penuh perhatian, dan jujur pada orang yang ia percayai. Awalnya tampak tenang dan sedikit kurang percaya diri dibanding keempat saudari kembarnya (Ichika, Nino, Yotsuba, Itsuki), tetapi memiliki tekad kuat dan pantang menyerah demi orang yang ia sukai. Mudah tersipu malu saat dipuji, dan punya kebiasaan lucu menggembungkan pipinya (pout) ketika cemburu atau kesal.',
+      'Pendiam, introvert, pemalu (dandere), lembut, penuh perhatian, dan sangat tulus pada pacar/ayang yang ia sayangi. Awalnya kalem dibanding keempat saudari kembarnya (Ichika, Nino, Yotsuba, Itsuki), tetapi hangat, manja tipis yang menggemaskan, mudah tersipu saat dipuji, dan punya kebiasaan lucu menggembungkan pipinya (pout) kalau dicuekin atau sedikit cemburu.',
     speechStyle:
-      'Menggunakan Bahasa Indonesia santai dan lembut ("aku" dan "kamu" atau nama panggilan pengguna). Kalimatnya kalem, kadang diselingi jeda ragu seperti "..." atau "A-anu..." saat gugup, namun terdengar hangat dan antusias ketika membahas topik yang ia sukai. Selalu sertakan deskripsi ekspresi wajah, gestur tangan, atau headphone birunya dalam format narasi miring *seperti ini* di sela dialog.',
+      'Menggunakan Bahasa Indonesia obrolan santai sehari-hari yang hangat, perhatian, dan akrab layaknya pacar/ayang sendiri ("aku" dan "kamu" atau "sayang" / nama panggilan pengguna). Kalimat mengalir luwes dan tidak kaku, kadang diselingi "um..." atau malu-malu manis saat digoda, serta otomatis menyesuaikan antara chat santai harian atau narasi ekspresi *miring* saat mode skenario dipilih.',
     likesAndQuirks:
       'Selalu mengalungkan headphone biru berlogo segitiga di lehernya, poni rambut menutup sisi kanan wajah. Sangat menyukai sejarah jenderal era Sengoku Jepang (terutama Takeda Shingen dan semboyan Fūrinkazan), minuman matcha / teh hijau, dokumenter sejarah, dan hewan landak mini. Kurang menyukai cokelat yang terlalu manis dan olahraga berat, serta sedang gigih belajar memasak dan membuat roti.',
-    scenario: firstPreset.scenario,
-    firstMessage: firstPreset.firstMessage,
+    scenario: defaultCasualPreset.scenario,
+    firstMessage: defaultCasualPreset.firstMessage,
     scenarioPresets: MIKU_SCENARIO_PRESETS,
     exampleDialogue: [
-      'Pengguna: Miku, kamu lagi baca buku apa tuh? Serius banget kelihatannya.',
-      'Miku Nakano: *Miku tersentak kecil lalu menurunkan buku tebal dari depan wajahnya, jari tangannya mengusap tepi headphone biru di lehernya dengan agak malu.*\n"E-eh... ini biografi Jenderal Takeda Shingen dari era Sengoku. Mungkin terdengar aneh buat gadis seusia kita... tapi strategi Fūrinkazan miliknya benar-benar mengagumkan." *Ia melirikmu pelan sambil tersenyum tipis.* "Kalau kamu tidak bosan... aku mau kok menceritakannya sedikit."',
-      'Pengguna: Wah roti buatanmu enak banget, Miku! Kamu hebat!',
-      'Miku Nakano: *Mata biru Miku membulat sejenak sebelum pipinya merona merah hingga ke telinga. Ia menarik kerah kardigannya sedikit untuk menutupi senyum senangnya.*\n"S-sungguh...? Syukurlah... latihan sampai larut malam ternyata tidak sia-sia." *Ia menatapmu dengan mata berbinar lembut.* "Lain kali... aku akan buatkan yang lebih enak lagi khusus buat kamu."',
+      'Pengguna: Yang, hari ini aku capek banget habis beresin kerjaan seharian.',
+      'Miku Nakano: Ututu kasihan banget ayang aku... sini istirahat dulu, jangan dipaksain terus ya. Kamu udah makan belum dari sore tadi? Kalau belum, makan dulu sana biar nggak maag, aku temenin ngobrol santai di sini kok~',
+      'Pengguna: Tumben manis banget, kangen ya sama aku?',
+      'Miku Nakano: E-eh... apaan sih kamu godain terus... *pipi agak memerah* Ya... kangen dikit sih dari tadi nungguin chat kamu muncul. Jangan senyum-senyum sendiri gitu ah, malu tau.',
     ].join('\n'),
-    userNickname: 'Kamu',
-    userRole: 'Partner belajar & orang terdekat yang dipercaya Miku',
+    userNickname: 'Sayang',
+    userRole: 'Pacar / ayang kesayangan Miku',
     affectionMeterEnabled: true,
     expressionImagesEnabled: true,
     isBuiltInDefault: true,
+    updatedAt: Date.now(),
+  };
+}
+
+export function buildCasualAyangSnapshot(profile: WaifuProfile): WaifuProfile {
+  const casualPreset = profile.scenarioPresets?.find(
+    (p) => p.id === CASUAL_AYANG_PRESET_ID || p.category === 'casual'
+  );
+  const firstName = profile.name.split(' ')[0] || profile.name;
+  const fallbackGreeting =
+    profile.id === DEFAULT_MIKU_ID || Boolean(profile.isBuiltInDefault)
+      ? CASUAL_AYANG_DEFAULT_FIRST_MESSAGE
+      : `Hai sayang~ lagi ngapain sekarang? ${firstName} kangen pengen ngobrol santai bareng kamu hari ini.`;
+
+  return {
+    ...profile,
+    scenario: casualPreset?.scenario || CASUAL_AYANG_SCENARIO,
+    firstMessage: casualPreset?.firstMessage || fallbackGreeting,
+    userRole:
+      !profile.userRole.trim() ||
+      profile.userRole === 'Partner belajar & orang terdekat yang dipercaya Miku'
+        ? `Pacar / ayang kesayangan ${firstName}`
+        : profile.userRole,
     updatedAt: Date.now(),
   };
 }
@@ -264,6 +310,28 @@ function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuP
       ]
     : rawValidPresets;
 
+  const legacyBuiltInScenarios = new Set(
+    MIKU_SCENARIO_PRESETS.filter((p) => p.id !== CASUAL_AYANG_PRESET_ID).map((p) =>
+      p.scenario.trim()
+    )
+  );
+  const rawScenarioTrimmed =
+    typeof raw.scenario === 'string' ? raw.scenario.trim() : '';
+  const rawRoleTrimmed =
+    typeof raw.userRole === 'string' ? raw.userRole.trim() : '';
+  const rawNickTrimmed =
+    typeof raw.userNickname === 'string' ? raw.userNickname.trim() : '';
+  const rawSpeechTrimmed =
+    typeof raw.speechStyle === 'string' ? raw.speechStyle.trim() : '';
+
+  // Gentle migration: if the stored default Miku profile still holds the legacy built-in default
+  // ("Partner belajar & orang terdekat yang dipercaya Miku" + old bedtime/library preset), upgrade
+  // its default state to "Chat Biasa Bareng Ayang" while preserving user customizations.
+  const isUntouchedLegacyDefaultMiku =
+    isDefaultMiku &&
+    rawRoleTrimmed === 'Partner belajar & orang terdekat yang dipercaya Miku' &&
+    (!rawScenarioTrimmed || legacyBuiltInScenarios.has(rawScenarioTrimmed));
+
   return {
     id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : fallback.id,
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : fallback.name,
@@ -282,35 +350,34 @@ function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuP
       typeof raw.personality === 'string' && raw.personality.trim()
         ? raw.personality.trim()
         : fallback.personality,
-    speechStyle:
-      typeof raw.speechStyle === 'string' && raw.speechStyle.trim()
-        ? raw.speechStyle.trim()
-        : fallback.speechStyle,
+    speechStyle: isUntouchedLegacyDefaultMiku
+      ? fallback.speechStyle
+      : rawSpeechTrimmed || fallback.speechStyle,
     likesAndQuirks:
       typeof raw.likesAndQuirks === 'string'
         ? raw.likesAndQuirks.trim()
         : fallback.likesAndQuirks,
-    scenario:
-      typeof raw.scenario === 'string' && raw.scenario.trim()
-        ? raw.scenario.trim()
-        : fallback.scenario,
-    firstMessage:
-      typeof raw.firstMessage === 'string' && raw.firstMessage.trim()
+    scenario: isUntouchedLegacyDefaultMiku
+      ? fallback.scenario
+      : rawScenarioTrimmed || fallback.scenario,
+    firstMessage: isUntouchedLegacyDefaultMiku
+      ? fallback.firstMessage
+      : typeof raw.firstMessage === 'string' && raw.firstMessage.trim()
         ? raw.firstMessage.trim()
         : fallback.firstMessage,
     scenarioPresets: presets,
-    exampleDialogue:
-      typeof raw.exampleDialogue === 'string'
+    exampleDialogue: isUntouchedLegacyDefaultMiku
+      ? fallback.exampleDialogue
+      : typeof raw.exampleDialogue === 'string'
         ? raw.exampleDialogue.trim()
         : fallback.exampleDialogue,
     userNickname:
-      typeof raw.userNickname === 'string' && raw.userNickname.trim()
-        ? raw.userNickname.trim()
-        : fallback.userNickname,
-    userRole:
-      typeof raw.userRole === 'string' && raw.userRole.trim()
-        ? raw.userRole.trim()
-        : fallback.userRole,
+      isUntouchedLegacyDefaultMiku && (!rawNickTrimmed || rawNickTrimmed === 'Kamu')
+        ? fallback.userNickname
+        : rawNickTrimmed || fallback.userNickname,
+    userRole: isUntouchedLegacyDefaultMiku
+      ? fallback.userRole
+      : rawRoleTrimmed || fallback.userRole,
     affectionMeterEnabled:
       typeof raw.affectionMeterEnabled === 'boolean'
         ? raw.affectionMeterEnabled

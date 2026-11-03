@@ -312,7 +312,7 @@ export function CctvCommandCenterModal({
                   ))}
                 </div>
               ) : (
-                <LiveCctvPlayerCard camera={activeCamera} />
+                <LiveCctvPlayerCard key={activeCamera.id} camera={activeCamera} />
               )
             ) : null}
           </div>

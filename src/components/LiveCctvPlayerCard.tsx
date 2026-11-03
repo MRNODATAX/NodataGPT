@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ExternalLink,
   LayoutGrid,
   Loader2,
   MapPin,
+  Play,
   Radio,
   RefreshCw,
+  RotateCcw,
   Video,
 } from 'lucide-react';
 import type { CctvCameraItem } from '../types/chat';
@@ -16,58 +18,139 @@ interface LiveCctvPlayerCardProps {
   compact?: boolean;
 }
 
+type PlayerStatus =
+  | 'loading'
+  | 'live'
+  | 'snapshot-fallback'
+  | 'fallback-embed'
+  | 'portal-only';
+
 export function LiveCctvPlayerCard({
   camera,
   compact = false,
 }: LiveCctvPlayerCardProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [status, setStatus] = useState<'loading' | 'live' | 'fallback-embed' | 'portal-only'>(
-    camera.streamType === 'portal' ? 'portal-only' : 'loading'
+  const getInitialStatus = (cam: CctvCameraItem): PlayerStatus => {
+    if (cam.streamType === 'portal') return 'portal-only';
+    if (cam.streamType === 'youtube' || cam.streamType === 'iframe') {
+      return 'live';
+    }
+    return 'loading';
+  };
+
+  const camKey = `${camera.id}|${camera.streamType}|${camera.streamUrl}`;
+  const [prevCamKey, setPrevCamKey] = useState(camKey);
+  const [status, setStatus] = useState<PlayerStatus>(() =>
+    getInitialStatus(camera)
   );
+  const [needsTapToPlay, setNeedsTapToPlay] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [snapshotTick, setSnapshotTick] = useState<number>(() => Date.now());
 
-  // Reset player state when camera changes
-  useEffect(() => {
-    setStatus(camera.streamType === 'portal' ? 'portal-only' : 'loading');
+  // Synchronously reset state on camera switch so <video ref={videoRef}> mounts on frame 1!
+  if (prevCamKey !== camKey) {
+    setPrevCamKey(camKey);
+    setNeedsTapToPlay(false);
     setSnapshotTick(Date.now());
-  }, [camera.id, camera.streamType, camera.streamUrl]);
+    setStatus(getInitialStatus(camera));
+  }
 
-  // HLS (.m3u8) Engine — dynamic import('hls.js') + native Safari fallback + watchdog
+  const handleManualRetry = useCallback(() => {
+    setNeedsTapToPlay(false);
+    setSnapshotTick(Date.now());
+    setStatus(getInitialStatus(camera));
+    setRetryCount((c) => c + 1);
+  }, [camera]);
+
+  // HLS (.m3u8) Engine — verified lowLatencyMode:false + true first-frame watchdog (zero infinite spin!)
   useEffect(() => {
     if (camera.streamType !== 'hls') return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     let cancelled = false;
-    let hlsInstance: { destroy: () => void } | null = null;
+    let recoveredOnce = false;
+    let frameConfirmed = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let hlsInstance: any = null;
+
+    const detachVideoCleanly = () => {
+      try {
+        videoEl.pause();
+        videoEl.removeAttribute('src');
+        videoEl.load();
+      } catch {
+        // ignore detach errors
+      }
+    };
 
     const triggerFallback = () => {
-      if (cancelled) return;
-      if (camera.fallbackEmbedUrl) {
+      if (cancelled || frameConfirmed) return;
+      if (hlsInstance) {
+        try {
+          hlsInstance.destroy();
+        } catch {
+          // ignore
+        }
+        hlsInstance = null;
+      }
+      detachVideoCleanly();
+
+      if (camera.posterUrl) {
+        setStatus('snapshot-fallback');
+      } else if (camera.fallbackEmbedUrl) {
         setStatus('fallback-embed');
       } else {
         setStatus('portal-only');
       }
     };
 
+    // Strict 7.5s First-Frame Watchdog: only cleared once <video> actually decodes real media data!
     const watchdog = window.setTimeout(() => {
-      setStatus((prev) => {
-        if (prev === 'loading') {
-          return camera.fallbackEmbedUrl ? 'fallback-embed' : 'portal-only';
-        }
-        return prev;
-      });
-    }, 10500);
+      if (!frameConfirmed) {
+        triggerFallback();
+      }
+    }, 7500);
 
-    const onPlaying = () => {
-      if (!cancelled) {
-        window.clearTimeout(watchdog);
-        setStatus('live');
+    const markFrameReady = () => {
+      if (cancelled || frameConfirmed) return;
+      frameConfirmed = true;
+      window.clearTimeout(watchdog);
+      setStatus('live');
+    };
+
+    const onLoadedData = () => {
+      if (videoEl.readyState >= 2) {
+        markFrameReady();
       }
     };
 
-    videoEl.addEventListener('playing', onPlaying);
-    videoEl.addEventListener('loadeddata', onPlaying);
+    const onVideoError = () => {
+      if (!frameConfirmed) {
+        window.clearTimeout(watchdog);
+        triggerFallback();
+      }
+    };
+
+    videoEl.addEventListener('playing', markFrameReady);
+    videoEl.addEventListener('loadeddata', onLoadedData);
+    videoEl.addEventListener('canplay', onLoadedData);
+    videoEl.addEventListener('error', onVideoError);
+
+    const attemptAutoPlay = () => {
+      const p = videoEl.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          if (!cancelled) {
+            // Browser blocked autoplay (e.g. iOS Low Power Mode) — show tap-to-play button, not spinner!
+            frameConfirmed = true;
+            window.clearTimeout(watchdog);
+            setNeedsTapToPlay(true);
+            setStatus('live');
+          }
+        });
+      }
+    };
 
     void (async () => {
       try {
@@ -75,39 +158,65 @@ export function LiveCctvPlayerCard({
         const Hls = mod.default;
         if (cancelled) return;
 
-        if (Hls && Hls.isSupported()) {
-          const hls = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            manifestLoadingTimeOut: 9000,
-            levelLoadingTimeOut: 9000,
-          });
-          hlsInstance = hls;
-          hls.loadSource(camera.streamUrl);
-          hls.attachMedia(videoEl);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            if (cancelled) return;
+        // Prefer native HLS on iOS/macOS Safari where available & hls.js isn't needed
+        if (!Hls || !Hls.isSupported()) {
+          if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+            videoEl.src = camera.streamUrl;
+            attemptAutoPlay();
+          } else {
             window.clearTimeout(watchdog);
-            setStatus('live');
-            videoEl.play().catch(() => {
-              // Autoplay muted allowed; user can tap play if browser requires gesture
-            });
-          });
-          hls.on(Hls.Events.ERROR, (_ev, data) => {
-            if (data?.fatal) {
-              window.clearTimeout(watchdog);
-              hls.destroy();
-              hlsInstance = null;
-              triggerFallback();
-            }
-          });
-        } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-          videoEl.src = camera.streamUrl;
-          videoEl.play().catch(() => {});
-        } else {
-          triggerFallback();
+            triggerFallback();
+          }
+          return;
         }
+
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false, // Standard ATCS/Nginx/Wowza HLS requires lowLatencyMode: false!
+          maxBufferLength: 12,
+          maxMaxBufferLength: 28,
+          backBufferLength: 20,
+          manifestLoadingTimeOut: 6000,
+          manifestLoadingMaxRetry: 1,
+          levelLoadingTimeOut: 6000,
+          levelLoadingMaxRetry: 1,
+          fragLoadingTimeOut: 6500,
+          fragLoadingMaxRetry: 1,
+        });
+        hlsInstance = hls;
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_ev: unknown, data: { levels?: unknown[] }) => {
+          if (cancelled) return;
+          if (Array.isArray(data?.levels) && data.levels.length === 0) {
+            window.clearTimeout(watchdog);
+            triggerFallback();
+            return;
+          }
+          attemptAutoPlay();
+        });
+
+        hls.on(
+          Hls.Events.ERROR,
+          (_ev: unknown, data: { fatal?: boolean; type?: string }) => {
+            if (cancelled || !data?.fatal) return;
+            if (!recoveredOnce && data.type === 'mediaError') {
+              recoveredOnce = true;
+              try {
+                hls.recoverMediaError();
+                return;
+              } catch {
+                // fall through
+              }
+            }
+            window.clearTimeout(watchdog);
+            triggerFallback();
+          }
+        );
+
+        hls.attachMedia(videoEl);
+        hls.loadSource(camera.streamUrl);
       } catch {
+        window.clearTimeout(watchdog);
         triggerFallback();
       }
     })();
@@ -115,30 +224,70 @@ export function LiveCctvPlayerCard({
     return () => {
       cancelled = true;
       window.clearTimeout(watchdog);
-      videoEl.removeEventListener('playing', onPlaying);
-      videoEl.removeEventListener('loadeddata', onPlaying);
+      videoEl.removeEventListener('playing', markFrameReady);
+      videoEl.removeEventListener('loadeddata', onLoadedData);
+      videoEl.removeEventListener('canplay', onLoadedData);
+      videoEl.removeEventListener('error', onVideoError);
       if (hlsInstance) {
-        hlsInstance.destroy();
+        try {
+          hlsInstance.destroy();
+        } catch {
+          // ignore
+        }
+        hlsInstance = null;
       }
+      detachVideoCleanly();
     };
-  }, [camera.id, camera.streamType, camera.streamUrl, camera.fallbackEmbedUrl]);
+  }, [
+    camera.id,
+    camera.streamType,
+    camera.streamUrl,
+    camera.posterUrl,
+    camera.fallbackEmbedUrl,
+    retryCount,
+  ]);
 
-  // Auto-refresh interval for live snapshot traffic cams (pauses when tab hidden)
+  // Snapshot watchdog + auto-refresh interval (pauses when tab hidden)
+  const isSnapshotActive =
+    camera.streamType === 'snapshot' || status === 'snapshot-fallback';
+
   useEffect(() => {
-    if (camera.streamType !== 'snapshot') return;
-    const intervalMs = camera.streamUrl.includes('nyctmc.org') ? 5000 : 18000;
+    if (!isSnapshotActive) return;
+    const snapWatchdog = window.setTimeout(() => {
+      setStatus((prev) => (prev === 'loading' ? 'portal-only' : prev));
+    }, 6500);
+
+    const baseUrl =
+      status === 'snapshot-fallback' && camera.posterUrl
+        ? camera.posterUrl
+        : camera.streamUrl;
+    const intervalMs = baseUrl.includes('nyctmc.org') ? 4000 : 15000;
     const id = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
       setSnapshotTick(Date.now());
     }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [camera.id, camera.streamType, camera.streamUrl]);
+
+    return () => {
+      window.clearTimeout(snapWatchdog);
+      window.clearInterval(id);
+    };
+  }, [
+    isSnapshotActive,
+    status,
+    camera.id,
+    camera.streamUrl,
+    camera.posterUrl,
+    retryCount,
+  ]);
 
   const mapsUrl = buildGoogleMapsSearchUrl(`${camera.lat},${camera.lon}`);
-  const snapshotSrc =
-    camera.streamType === 'snapshot'
-      ? `${camera.streamUrl}${camera.streamUrl.includes('?') ? '&' : '?'}t=${snapshotTick}`
-      : '';
+  const activeSnapshotBase =
+    status === 'snapshot-fallback' && camera.posterUrl
+      ? camera.posterUrl
+      : camera.streamUrl;
+  const snapshotSrc = isSnapshotActive
+    ? `${activeSnapshotBase}${activeSnapshotBase.includes('?') ? '&' : '?'}t=${snapshotTick}`
+    : '';
 
   const activeIframeUrl =
     status === 'fallback-embed' && camera.fallbackEmbedUrl
@@ -169,7 +318,7 @@ export function LiveCctvPlayerCard({
             />
             {status === 'portal-only'
               ? 'PORTAL RESMI'
-              : camera.streamType === 'snapshot'
+              : isSnapshotActive
                 ? 'LIVE FRAME'
                 : 'LIVE'}
           </span>
@@ -185,39 +334,57 @@ export function LiveCctvPlayerCard({
 
       {/* 16:9 Video / Snapshot / Embed Viewport */}
       <div className="relative aspect-video w-full bg-[#03060D]">
-        {camera.streamType === 'hls' && status !== 'fallback-embed' && status !== 'portal-only' && (
-          <>
-            <video
-              ref={videoRef}
-              muted
-              autoPlay
-              playsInline
-              controls
-              poster={camera.posterUrl}
-              className="h-full w-full object-contain bg-black"
-            />
-            {status === 'loading' && (
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-[2px]">
-                <Loader2 className="h-6 w-6 animate-spin text-[#22D3EE]" />
-                <span className="text-[11px] font-medium text-[#CBD5E1]">
-                  Menghubungkan stream HLS {camera.city}...
-                </span>
-              </div>
-            )}
-          </>
-        )}
+        {camera.streamType === 'hls' &&
+          status !== 'snapshot-fallback' &&
+          status !== 'fallback-embed' &&
+          status !== 'portal-only' && (
+            <>
+              <video
+                ref={videoRef}
+                muted
+                autoPlay
+                playsInline
+                controls
+                poster={camera.posterUrl}
+                className="h-full w-full bg-black object-contain"
+              />
+              {status === 'loading' && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 backdrop-blur-[2px]">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#22D3EE]" />
+                  <span className="text-[11px] font-medium text-[#CBD5E1]">
+                    Menghubungkan kamera {camera.city}...
+                  </span>
+                </div>
+              )}
+              {needsTapToPlay && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNeedsTapToPlay(false);
+                    videoRef.current?.play().catch(() => {});
+                  }}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white backdrop-blur-[2px] cursor-pointer"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#22D3EE]/50 bg-[#0E7490] shadow-[0_0_20px_rgba(34,211,238,0.4)]">
+                    <Play className="h-5 w-5 fill-current" />
+                  </span>
+                  <span className="text-xs font-bold">Ketuk untuk Putar Live</span>
+                </button>
+              )}
+            </>
+          )}
 
-        {camera.streamType === 'snapshot' && status !== 'portal-only' && (
+        {isSnapshotActive && status !== 'portal-only' && (
           <>
             <img
               src={snapshotSrc}
               alt={camera.name}
-              onLoad={() => setStatus('live')}
+              onLoad={() => setStatus((prev) => (prev === 'loading' ? 'live' : prev))}
               onError={() => setStatus('portal-only')}
-              className="h-full w-full object-contain bg-black"
+              className="h-full w-full bg-black object-contain"
             />
             {status === 'loading' && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60">
                 <Loader2 className="h-6 w-6 animate-spin text-[#22D3EE]" />
               </div>
             )}
@@ -236,29 +403,31 @@ export function LiveCctvPlayerCard({
         {(camera.streamType === 'youtube' ||
           camera.streamType === 'iframe' ||
           status === 'fallback-embed') &&
-          status !== 'portal-only' && (
+          status !== 'portal-only' &&
+          status !== 'snapshot-fallback' && (
             <iframe
               src={activeIframeUrl}
               title={camera.name}
-              loading="lazy"
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              referrerPolicy="strict-origin-when-cross-origin"
               allowFullScreen
-              onLoad={() => setStatus('live')}
               className="h-full w-full border-0 bg-black"
             />
           )}
 
         {status === 'portal-only' && (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 bg-gradient-to-br from-[#061220] via-[#050912] to-[#160E07] px-4 text-center">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE]">
               <Radio className="h-5 w-5" />
             </span>
             <div className="max-w-sm">
               <p className="font-display text-xs font-bold text-white sm:text-sm">
-                Stream Langsung di Portal {camera.operator}
+                Buka Tayangan di Portal {camera.operator}
               </p>
               <p className="mt-1 text-[11px] leading-relaxed text-[#94A3B8]">
-                Server instansi membatasi penyematan pihak ketiga (CORS/X-Frame) demi keamanan jaringan daerah. Buka tayangan penuh langsung di portal resminya:
+                {camera.streamType === 'portal'
+                  ? 'Instansi daerah mempublikasikan stream melalui portal peta resmi. Klik tombol di bawah untuk menonton langsung:'
+                  : 'Stream sedang penuh/dibatasi CORS oleh jaringan daerah. Anda dapat mencoba ulang atau membuka langsung di portal resminya:'}
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -280,6 +449,16 @@ export function LiveCctvPlayerCard({
                 <MapPin className="h-3.5 w-3.5 text-emerald-300" />
                 <span>Titik Google Maps</span>
               </a>
+              {camera.streamType !== 'portal' && (
+                <button
+                  type="button"
+                  onClick={handleManualRetry}
+                  className="inline-flex items-center gap-1 rounded-xl border border-white/15 bg-white/[0.06] px-2.5 py-2 text-xs font-semibold text-[#E2E8F0] transition-colors hover:bg-white/12 cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[#22D3EE]" />
+                  <span>Coba Lagi</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -385,7 +564,7 @@ export function InChatCctvDeck({
         </div>
       )}
 
-      <LiveCctvPlayerCard camera={currentCam} />
+      <LiveCctvPlayerCard key={currentCam.id} camera={currentCam} />
     </div>
   );
 }

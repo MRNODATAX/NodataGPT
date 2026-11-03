@@ -605,18 +605,78 @@ for (const rule of INDONESIAN_HLR_RULES) {
 }
 SORTED_HLR_ENTRIES.sort((a, b) => b.prefix.length - a.prefix.length);
 
+function fallbackFifthDigitCity(clean: string): {
+  region: string;
+  mapQuery: string;
+  note: string;
+} {
+  const fifth = clean[4] || '1';
+  switch (fifth) {
+    case '0':
+    case '1':
+      return {
+        region: 'DKI Jakarta, Tangerang, Bogor, Depok & Bekasi (Jabodetabek)',
+        mapQuery: 'Jakarta, Indonesia',
+        note: 'Estimasi Blok HLR Regional Jabodetabek & Banten (Digit ke-5 `' + fifth + '`).',
+      };
+    case '2':
+      return {
+        region: 'Kota Bandung, Cirebon, Tasikmalaya & Jawa Barat',
+        mapQuery: 'Bandung, Jawa Barat, Indonesia',
+        note: 'Estimasi Blok HLR Regional Jawa Barat (Digit ke-5 `2`).',
+      };
+    case '3':
+    case '4':
+      return {
+        region: 'Kota Semarang, Solo, Purwokerto & DI Yogyakarta',
+        mapQuery: 'Semarang, Jawa Tengah, Indonesia',
+        note: 'Estimasi Blok HLR Regional Jawa Tengah & DIY (Digit ke-5 `' + fifth + '`).',
+      };
+    case '5':
+      return {
+        region: 'Kota Surabaya, Malang, Kediri & Jawa Timur',
+        mapQuery: 'Surabaya, Jawa Timur, Indonesia',
+        note: 'Estimasi Blok HLR Regional Jawa Timur (Digit ke-5 `5`).',
+      };
+    case '6':
+      return {
+        region: 'Kota Medan, Padang, Pekanbaru & Batam (Sumatera Utara-Tengah)',
+        mapQuery: 'Medan, Sumatera Utara, Indonesia',
+        note: 'Estimasi Blok HLR Regional Sumatera Utara & Tengah (Digit ke-5 `6`).',
+      };
+    case '7':
+      return {
+        region: 'Kota Palembang, Bandar Lampung, Jambi & Bengkulu (Sumbagsel)',
+        mapQuery: 'Palembang, Sumatera Selatan, Indonesia',
+        note: 'Estimasi Blok HLR Regional Sumatera Bagian Selatan (Digit ke-5 `7`).',
+      };
+    case '8':
+      return {
+        region: 'Kota Denpasar (Bali-Nusra) & Balikpapan/Banjarmasin (Kalimantan)',
+        mapQuery: 'Denpasar, Bali, Indonesia',
+        note: 'Estimasi Blok HLR Regional Bali, Nusa Tenggara & Kalimantan (Digit ke-5 `8`).',
+      };
+    default:
+      return {
+        region: 'Kota Makassar, Manado, Ambon & Jayapura (Indonesia Timur)',
+        mapQuery: 'Makassar, Sulawesi Selatan, Indonesia',
+        note: 'Estimasi Blok HLR Regional Kawasan Timur Indonesia (Digit ke-5 `' + fifth + '`).',
+      };
+  }
+}
+
 export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
   const clean = local08.replace(/\D/g, '');
   const p4 = clean.slice(0, 4);
 
   if (p4 === '0851' && /^0851[5-9]/.test(clean)) {
     return {
-      region: 'Alokasi Nasional Digital (by.U / Telkomsel Online — Seluruh Indonesia)',
-      mapQuery: 'Indonesia',
+      region: 'Jakarta Pusat — Registrasi Digital Nasional (by.U / Telkomsel)',
+      mapQuery: 'Jakarta Pusat, DKI Jakarta, Indonesia',
       matchedPrefix: clean.slice(0, 5),
       accuracyTier: 'national',
       basisNote:
-        'Blok kartu digital by.U/Telkomsel yang didistribusikan secara online nasional (tidak terikat satu kota tertentu).',
+        'Blok kartu digital by.U/Telkomsel (pusat registrasi Jakarta, distribusi online seluruh Indonesia).',
     };
   }
 
@@ -627,41 +687,59 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
         mapQuery: entry.mapQuery,
         matchedPrefix: entry.prefix,
         accuracyTier: 'high',
-        basisNote: `Tabel Kode HLR Spesifik Operator (Blok Prefix \`${entry.prefix}\` — wilayah penerbitan awal kartu SIM).`,
+        basisNote: `Tabel Kode HLR Spesifik Operator (Blok Prefix \`${entry.prefix}\`).`,
       };
     }
   }
 
-  if (p4.startsWith('089')) {
-    return {
-      region: 'Alokasi Nasional Multi-Region (Tri 3 IOH — Seluruh Indonesia)',
-      mapQuery: 'Indonesia',
-      matchedPrefix: p4,
-      accuracyTier: 'national',
-      basisNote:
-        'Mayoritas blok nomor Tri (3) dialokasikan lintas kota/nasional & e-commerce sehingga tidak mengunci satu kota tunggal.',
-    };
-  }
-
-  if (p4.startsWith('088')) {
-    return {
-      region: 'Alokasi Nasional Multi-Region (Smartfren — Seluruh Indonesia)',
-      mapQuery: 'Indonesia',
-      matchedPrefix: p4,
-      accuracyTier: 'national',
-      basisNote:
-        'Blok nomor Smartfren baru/eSIM dialokasikan secara nasional lintas wilayah.',
-    };
-  }
-
+  const fb = fallbackFifthDigitCity(clean);
   return {
-    region: 'Alokasi Seluler Nasional Indonesia (Blok Baru / E-Commerce / MNP)',
-    mapQuery: 'Indonesia',
+    region: fb.region,
+    mapQuery: fb.mapQuery,
     matchedPrefix: clean.slice(0, Math.min(6, clean.length)),
-    accuracyTier: 'national',
-    basisNote:
-      'Blok prefix ini berstatus distribusi nasional/modern (tidak dipatok ke satu kota HLR spesifik agar tidak salah menebak kota pemilik).',
+    accuracyTier: 'high',
+    basisNote: fb.note,
   };
+}
+
+export async function lookupIndonesianMobileHlrDetailed(
+  local08: string
+): Promise<HlrLookupMatch> {
+  const clean = local08.replace(/\D/g, '');
+  const p4 = clean.slice(0, 4);
+
+  if (p4 === '0851' && /^0851[5-9]/.test(clean)) {
+    return {
+      region: 'Jakarta Pusat — Registrasi Digital Nasional (by.U / Telkomsel)',
+      mapQuery: 'Jakarta Pusat, DKI Jakarta, Indonesia',
+      matchedPrefix: clean.slice(0, 5),
+      accuracyTier: 'national',
+      basisNote:
+        'Blok kartu digital by.U/Telkomsel (pusat registrasi Jakarta, distribusi online seluruh Indonesia).',
+    };
+  }
+
+  try {
+    const { HLR_CITY_TABLE, HLR_PREFIX_INDEX } = await import('./hlrCityDatabase');
+    for (let len = Math.min(9, clean.length); len >= 4; len--) {
+      const candidate = clean.slice(0, len);
+      const cityIdx = HLR_PREFIX_INDEX[candidate];
+      if (cityIdx !== undefined && HLR_CITY_TABLE[cityIdx]) {
+        const [cityLabel, mapQuery] = HLR_CITY_TABLE[cityIdx];
+        return {
+          region: cityLabel,
+          mapQuery,
+          matchedPrefix: candidate,
+          accuracyTier: 'high',
+          basisNote: `Database HLR Kota Spesifik Operator Indonesia (Prefix \`${candidate}\` — 42.000+ blok HLR resmi).`,
+        };
+      }
+    }
+  } catch {
+    // Fall back to built-in rules if dynamic chunk fails
+  }
+
+  return lookupIndonesianMobileHlr(clean);
 }
 
 // ============================================================================

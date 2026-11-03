@@ -1,4 +1,9 @@
-import type { MediaDownloadItem, ToolActionLink } from '../types/chat';
+import type {
+  CctvCameraItem,
+  MediaDownloadItem,
+  ToolActionLink,
+} from '../types/chat';
+import { executeCctvSearchTool } from './cctvDirectory';
 import {
   analyzeEmailInput,
   analyzePhoneInput,
@@ -137,6 +142,7 @@ export interface WebToolExecutionResult {
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   actionLinks?: ToolActionLink[];
+  cctvCameras?: CctvCameraItem[];
   summarizeTranscript?: string;
 }
 
@@ -151,7 +157,44 @@ export interface WebToolStatusCallback {
 
 // Strictly OSINT + Categories A, B, D, and E (Category C intentionally excluded per user directive)
 export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
-  // === CATEGORY OSINT: FULL 11-TOOL OSINT & DIGITAL FORENSICS SUITE ===
+  // === CATEGORY OSINT: FULL 12-TOOL OSINT, LIVE CCTV & DIGITAL FORENSICS SUITE ===
+  {
+    id: 'cctv',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, CCTV & Forensik',
+    name: 'Live CCTV Publik Indonesia & Dunia',
+    shortName: 'Live CCTV ID & Dunia',
+    slashCommand: '/cctv',
+    badge: 'ATCS RI + Global + Maps',
+    description:
+      'Pantau tayangan Live CCTV publik seluruh Indonesia (Jakarta, Bogor, Bandung, Tasikmalaya, Jogja, Semarang, Surabaya, Bali, Medan, Jalan Tol/Nasional) & Dunia (Makkah, Madinah, Singapura, NYC, LA, Tokyo, NASA ISS) lengkap dengan titik Google Maps.',
+    placeholder:
+      'Opsional: ketik kota/negara/ikon (contoh: jakarta, bali, jogja, makkah, singapore, new york, tol)...',
+    exampleInput: 'jakarta',
+    requiresInput: false,
+    secondarySelect: {
+      label: 'Cakupan Wilayah Cepat',
+      defaultValue: 'all',
+      options: [
+        { value: 'all', label: '⚡ Indonesia & Dunia' },
+        { value: 'indonesia', label: '🇮🇩 Seluruh Indonesia' },
+        { value: 'dunia', label: '🌍 Mancanegara / Dunia' },
+      ],
+    },
+    usageNotice: {
+      title: 'Cara Pakai Live CCTV Publik Indonesia & Dunia (GEOINT)',
+      syntax: '/cctv [kota / provinsi / negara / jalan tol]',
+      notes:
+        'Memutar stream HLS (.m3u8), snapshot lalu lintas real-time, & portal resmi ATCS/DOT langsung di browser Anda tanpa membebani kuota server, lengkap dengan Ruang Pantau Grid 2×2 dan tombol Google Maps.',
+      examples: [
+        '/cctv jakarta',
+        '/cctv bali',
+        '/cctv jogja',
+        '/cctv makkah',
+        '/cctv new york',
+      ],
+    },
+  },
   {
     id: 'qris',
     category: 'OSINT',
@@ -1706,6 +1749,11 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'nik':
     case 'parsenik':
       return { toolId: 'ceknik', arg: rest };
+    case 'cctv':
+    case 'livecctv':
+    case 'atcs':
+    case 'webcam':
+      return { toolId: 'cctv', arg: rest };
     default:
       return null;
   }
@@ -1739,6 +1787,11 @@ export function buildSlashCommandFromTool(
   }
   if (tool.id === 'berita' && subOption && subOption !== 'all') {
     return clean ? `/berita ${subOption} | ${clean}` : `/berita ${subOption}`;
+  }
+  if (tool.id === 'cctv') {
+    if (clean) return `/cctv ${clean}`;
+    if (subOption && subOption !== 'all') return `/cctv ${subOption}`;
+    return '/cctv';
   }
   if (tool.id === 'translate' && subOption) {
     return `/translate ${subOption} | ${clean}`.trim();
@@ -6496,6 +6549,24 @@ export async function executeWebToolCommand({
       answeredById: 'osint-nik-kemendagri',
       answeredByName: 'OSINT Studio · Dekoder Struktur NIK',
       usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'cctv') {
+    onStatus?.({
+      toolName: 'Live CCTV Publik (GEOINT)',
+      mirrorName: 'ATCS Indonesia + Global DOT + Google Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await executeCctvSearchTool(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-live-cctv-global',
+      answeredByName: 'GEOINT Studio · Live CCTV Indonesia & Dunia',
+      usedFallback: false,
+      cctvCameras: out.cctvCameras,
       actionLinks: out.actionLinks,
     };
   }

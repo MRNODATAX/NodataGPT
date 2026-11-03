@@ -1,6 +1,7 @@
 import type {
   AIModelDefinition,
   AppSettings,
+  CctvCameraItem,
   ChatMessage,
   MediaDownloadItem,
   ToolActionLink,
@@ -2820,6 +2821,7 @@ export interface RouterResult {
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   actionLinks?: ToolActionLink[];
+  cctvCameras?: CctvCameraItem[];
   summarizeTranscript?: string;
 }
 
@@ -3361,6 +3363,7 @@ export async function sendMultiModelChat({
       galleryAspect: toolRes.galleryAspect,
       downloadItems: toolRes.downloadItems,
       actionLinks: toolRes.actionLinks,
+      cctvCameras: toolRes.cctvCameras,
       summarizeTranscript: toolRes.summarizeTranscript,
     };
   }

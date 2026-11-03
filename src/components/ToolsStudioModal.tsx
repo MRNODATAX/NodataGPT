@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  ChevronDown,
+  ChevronRight,
   ClipboardPaste,
   CloudSun,
   CreditCard,
@@ -12,6 +14,7 @@ import {
   Film,
   Globe,
   ImagePlus,
+  LayoutGrid,
   Loader2,
   LocateFixed,
   Mail,
@@ -20,6 +23,7 @@ import {
   Play,
   QrCode,
   Radar,
+  Radio,
   ScanSearch,
   Search,
   Sparkles,
@@ -49,33 +53,63 @@ interface ToolsStudioModalProps {
   onClose: () => void;
   onRunCommand: (commandText: string, displayLabel?: string) => void;
   onInsertCommand: (commandText: string) => void;
+  onOpenCctvCommandCenter?: () => void;
 }
+
+const CATEGORY_META: Record<
+  WebToolCategoryId,
+  {
+    shortTab: string;
+    sectionTitle: string;
+    sectionSubtitle: string;
+    accent: 'emerald' | 'cyan' | 'orange';
+  }
+> = {
+  OSINT: {
+    shortTab: '🛰️ OSINT & CCTV',
+    sectionTitle: 'OSINT, Forensik & Live CCTV',
+    sectionSubtitle: 'Live CCTV Indonesia/Dunia, pelacakan nomor, medsos, QRIS, EXIF & jaringan',
+    accent: 'emerald',
+  },
+  A: {
+    shortTab: '📥 Downloader',
+    sectionTitle: 'Downloader Media & Cloud',
+    sectionSubtitle: 'Unduh video, musik MP3, galeri foto & berkas tanpa iklan',
+    accent: 'cyan',
+  },
+  B: {
+    shortTab: '🎬 Audio & Video',
+    sectionTitle: 'Studio Audio & Video AI',
+    sectionSubtitle: 'Text-to-Video, transkrip YouTube, vokal splitter, lirik & TTS',
+    accent: 'orange',
+  },
+  D: {
+    shortTab: '✨ Kreatif & Riset',
+    sectionTitle: 'Kreatif, Gambar & Riset Web',
+    sectionSubtitle: 'Edit foto AI, 10 mode gambar HD, OCR, pencarian web & berita aktual',
+    accent: 'cyan',
+  },
+  E: {
+    shortTab: '🌤️ Cuaca & Finansial',
+    sectionTitle: 'Cuaca, Sholat & Finansial',
+    sectionSubtitle: 'Cuaca tingkat desa, jadwal sholat Kemenag, kurs, emas, kripto & saham',
+    accent: 'orange',
+  },
+};
+
+const CATEGORY_ORDER: WebToolCategoryId[] = ['OSINT', 'A', 'B', 'D', 'E'];
 
 const CATEGORY_TABS: Array<{
   id: 'all' | WebToolCategoryId;
   label: string;
+  count: number;
 }> = [
-  { id: 'all', label: `Semua (${WEB_TOOLS_CATALOG.length})` },
-  {
-    id: 'OSINT',
-    label: `OSINT · Lacak & Forensik (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'OSINT').length})`,
-  },
-  {
-    id: 'A',
-    label: `A · Downloader (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'A').length})`,
-  },
-  {
-    id: 'B',
-    label: `B · Audio & Video AI (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'B').length})`,
-  },
-  {
-    id: 'D',
-    label: `D · Kreatif & Info ID (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'D').length})`,
-  },
-  {
-    id: 'E',
-    label: `E · Cuaca, Sholat & Finansial (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'E').length})`,
-  },
+  { id: 'all', label: '⚡ Semua', count: WEB_TOOLS_CATALOG.length },
+  ...CATEGORY_ORDER.map((catId) => ({
+    id: catId,
+    label: CATEGORY_META[catId].shortTab,
+    count: WEB_TOOLS_CATALOG.filter((t) => t.category === catId).length,
+  })),
 ];
 
 export function ToolsStudioModal({
@@ -83,6 +117,7 @@ export function ToolsStudioModal({
   onClose,
   onRunCommand,
   onInsertCommand,
+  onOpenCctvCommandCenter,
 }: ToolsStudioModalProps) {
   const [activeCategory, setActiveCategory] = useState<'all' | WebToolCategoryId>(
     'all'
@@ -91,6 +126,7 @@ export function ToolsStudioModal({
   const [selectedTool, setSelectedTool] = useState<WebToolDefinition | null>(
     null
   );
+  const [expandedRandomModes, setExpandedRandomModes] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [subOption, setSubOption] = useState('');
   const [countValue, setCountValue] = useState<number>(8);
@@ -133,7 +169,6 @@ export function ToolsStudioModal({
 
   useEffect(() => {
     if (!selectedTool || typeof window === 'undefined') return;
-    // Auto-focus only on tablet/desktop so mobile soft keyboard doesn't pop abruptly
     if (window.innerWidth >= 640) {
       const id = window.setTimeout(() => {
         toolInputRef.current?.focus();
@@ -158,6 +193,38 @@ export function ToolsStudioModal({
       );
     });
   }, [activeCategory, searchQuery]);
+
+  const groupedSections = useMemo(() => {
+    const isGroupedAll = activeCategory === 'all' && !searchQuery.trim();
+    if (!isGroupedAll) {
+      return [
+        {
+          id: activeCategory,
+          title:
+            activeCategory === 'all'
+              ? `Hasil Pencarian (${filteredTools.length})`
+              : CATEGORY_META[activeCategory].sectionTitle,
+          subtitle:
+            activeCategory === 'all'
+              ? ''
+              : CATEGORY_META[activeCategory].sectionSubtitle,
+          accent:
+            activeCategory === 'all'
+              ? ('cyan' as const)
+              : CATEGORY_META[activeCategory].accent,
+          tools: filteredTools,
+        },
+      ];
+    }
+
+    return CATEGORY_ORDER.map((catId) => ({
+      id: catId,
+      title: CATEGORY_META[catId].sectionTitle,
+      subtitle: CATEGORY_META[catId].sectionSubtitle,
+      accent: CATEGORY_META[catId].accent,
+      tools: filteredTools.filter((t) => t.category === catId),
+    })).filter((sec) => sec.tools.length > 0);
+  }, [activeCategory, searchQuery, filteredTools]);
 
   if (!isOpen) return null;
 
@@ -230,7 +297,6 @@ export function ToolsStudioModal({
     setUploadingPhoto(true);
     setUploadError('');
     try {
-      // 1. Raw Binary EXIF + GPS Reader (100% client-side, ZERO canvas stripping!)
       if (selectedTool?.id === 'exif') {
         const exifToken = await extractExifTokenFromFile(file);
         const readerUrl = await new Promise<string>((resolve) => {
@@ -245,7 +311,6 @@ export function ToolsStudioModal({
         return;
       }
 
-      // 2. Client-side private QRIS barcode decode (0 external upload needed when QR is readable!)
       if (selectedTool?.id === 'qris') {
         const localDecoded = await decodeQrFromFile(file);
         if (localDecoded) {
@@ -363,6 +428,7 @@ export function ToolsStudioModal({
   };
 
   const getToolIcon = (tool: WebToolDefinition) => {
+    if (tool.id === 'cctv') return Radio;
     if (tool.id === 'qris') return QrCode;
     if (tool.id === 'ceknomor') return PhoneCall;
     if (tool.id === 'waosint') return MessageCircle;
@@ -381,6 +447,8 @@ export function ToolsStudioModal({
     return Sparkles;
   };
 
+  const cctvToolDef = WEB_TOOLS_CATALOG.find((t) => t.id === 'cctv');
+
   return (
     <div
       role="dialog"
@@ -390,7 +458,7 @@ export function ToolsStudioModal({
       onClick={onClose}
     >
       <div
-        className="nd-glass-sheet animate-sheet-up flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[86dvh] sm:max-w-2xl sm:rounded-2xl"
+        className="nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Grabber Handle */}
@@ -404,14 +472,14 @@ export function ToolsStudioModal({
              ================================================================= */
           <>
             {/* Focused Top Bar */}
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5 sm:py-3.5">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-6 sm:py-3.5">
               <button
                 type="button"
                 onClick={() => setSelectedTool(null)}
                 className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.05] px-3 text-xs font-semibold text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/40 hover:bg-[#22D3EE]/12 hover:text-white cursor-pointer"
               >
                 <ArrowLeft className="h-3.5 w-3.5 text-[#22D3EE]" />
-                <span>Semua Tools ({WEB_TOOLS_CATALOG.length})</span>
+                <span>Katalog Tools ({WEB_TOOLS_CATALOG.length})</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -430,10 +498,10 @@ export function ToolsStudioModal({
             </div>
 
             {/* Scrollable Tool Configuration Body */}
-            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
               {/* Tool Identity Banner */}
-              <div className="rounded-2xl border border-[#22D3EE]/25 bg-gradient-to-br from-[#071829]/95 via-[#091220]/95 to-[#1A1008]/85 p-3.5 sm:p-4">
-                <div className="flex items-start gap-3">
+              <div className="rounded-2xl border border-[#22D3EE]/25 bg-gradient-to-br from-[#071829]/95 via-[#091220]/95 to-[#1A1008]/85 p-4">
+                <div className="flex items-start gap-3.5">
                   {(() => {
                     const ActiveIcon = getToolIcon(selectedTool);
                     const isOrange =
@@ -442,7 +510,7 @@ export function ToolsStudioModal({
                     const isOsint = selectedTool.category === 'OSINT';
                     return (
                       <span
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${
                           isOsint
                             ? 'border-emerald-400/45 bg-emerald-500/15 text-emerald-300'
                             : isOrange
@@ -466,15 +534,31 @@ export function ToolsStudioModal({
                         {selectedTool.slashCommand}
                       </code>
                     </div>
-                    <p className="mt-1 text-xs leading-relaxed text-[#CBD5E1]">
+                    <p className="mt-1.5 text-xs leading-relaxed text-[#CBD5E1]">
                       {selectedTool.description}
                     </p>
+
+                    {selectedTool.id === 'cctv' && onOpenCctvCommandCenter && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onOpenCctvCommandCenter();
+                          }}
+                          className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-400/45 bg-emerald-500/18 px-3.5 text-xs font-bold text-emerald-200 transition-colors hover:bg-emerald-500/28 cursor-pointer"
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5 text-emerald-300" />
+                          <span>Buka Ruang Pantau Multi-CCTV (Grid 2×2 &amp; Peta Wilayah)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Primary Input Box Card */}
-              <div className="rounded-2xl border border-white/12 bg-black/50 p-3.5 sm:p-4">
+              <div className="rounded-2xl border border-white/12 bg-black/50 p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor="nodatagpt-tool-runner-input"
@@ -482,7 +566,7 @@ export function ToolsStudioModal({
                   >
                     {selectedTool.requiresInput
                       ? 'Masukkan Tautan / Kata Kunci'
-                      : 'Kata Kunci Tambahan (Opsional)'}
+                      : 'Kata Kunci Wilayah / Tambahan (Opsional)'}
                   </label>
 
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -560,7 +644,7 @@ export function ToolsStudioModal({
                 </div>
               </div>
 
-              {/* Photo Upload Helper (QRIS, EXIF, RemoveBG, HD, NanoBanana, ToFigure, OCR) */}
+              {/* Photo Upload Helper */}
               {selectedTool.acceptsImageUpload && (
                 <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/12 bg-black/45 p-3.5">
                   <input
@@ -682,7 +766,7 @@ export function ToolsStudioModal({
                 </div>
               )}
 
-              {/* Sub-Mode Options (Voices, Video Ratio, Kurs Currency, etc.) */}
+              {/* Sub-Mode Options */}
               {selectedTool.secondarySelect && !selectedTool.commandCatalog && (
                 <div className="rounded-2xl border border-white/12 bg-black/45 p-3.5">
                   <label className="mb-2 block text-xs font-semibold text-white">
@@ -841,8 +925,8 @@ export function ToolsStudioModal({
               )}
             </div>
 
-            {/* Sticky Bottom Action Bar (Never Clipped!) */}
-            <div className="pb-safe flex shrink-0 items-center gap-2.5 border-t border-white/10 bg-[#050812]/95 px-4 py-3 sm:px-5 sm:py-3.5">
+            {/* Sticky Bottom Action Bar */}
+            <div className="pb-safe flex shrink-0 items-center gap-2.5 border-t border-white/10 bg-[#050812]/95 px-4 py-3 sm:px-6 sm:py-3.5">
               <button
                 type="button"
                 disabled={!canRunSelected}
@@ -865,24 +949,29 @@ export function ToolsStudioModal({
           </>
         ) : (
           /* =================================================================
-             STEP 1: CATALOG BROWSE VIEW (Header + Clean Tabs + Full Grid)
+             STEP 1: REDESIGNED AIRY CATALOG BROWSE VIEW (De-Cluttered & Rich)
              ================================================================= */
           <>
-            {/* Header */}
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-5 sm:py-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE]">
-                  <ToolsIcon className="h-4.5 w-4.5" />
+            {/* Spacious Studio Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6 sm:py-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE] shadow-[0_0_16px_rgba(34,211,238,0.18)]">
+                  <ToolsIcon className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2
-                    id="nodatagpt-tools-studio-title"
-                    className="font-display text-base font-bold text-white sm:text-lg"
-                  >
-                    NodataGPT Web Tools Studio
-                  </h2>
-                  <p className="text-xs text-[#94A3B8]">
-                    {WEB_TOOLS_CATALOG.length} fitur aktif (11 OSINT Medsos/Nomor/QRIS/EXIF, Downloader, Audio/Video AI, Cuaca &amp; Finansial)
+                  <div className="flex items-center gap-2">
+                    <h2
+                      id="nodatagpt-tools-studio-title"
+                      className="font-display text-base font-bold text-white sm:text-lg"
+                    >
+                      NodataGPT Tools Studio
+                    </h2>
+                    <span className="rounded-full border border-[#22D3EE]/30 bg-[#22D3EE]/12 px-2 py-0.5 font-mono-code text-[10.5px] font-bold text-[#67E8F9]">
+                      {WEB_TOOLS_CATALOG.length} Fitur
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-[#94A3B8]">
+                    Pilih fitur siap pakai di bawah atau cari berdasarkan nama &amp; slash command
                   </p>
                 </div>
               </div>
@@ -891,22 +980,22 @@ export function ToolsStudioModal({
                 type="button"
                 onClick={onClose}
                 aria-label="Tutup Tools Studio"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] hover:bg-white/8 hover:text-white cursor-pointer"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Search + Category Tabs (No Horizontal Scrollbar Clutter) */}
-            <div className="shrink-0 space-y-2.5 border-b border-white/10 px-4 py-3 sm:px-5">
+            {/* Clean Search + Crisp Short Category Pills */}
+            <div className="shrink-0 space-y-2.5 border-b border-white/10 bg-[#050914]/75 px-4 py-3 sm:px-6">
               <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                 <input
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari OSINT WA, TikTok, IG, Nomor HP, QRIS, EXIF GPS, NIK, Domain, IP, Cuaca..."
-                  className="h-10 w-full rounded-xl border border-white/10 bg-black/50 pr-3 pl-9 text-sm text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
+                  placeholder="Cari fitur: Live CCTV, QRIS, Nomor HP, TikTok, WA, Cuaca, Lirik..."
+                  className="h-10 w-full rounded-xl border border-white/12 bg-black/55 pr-3 pl-10 text-sm text-white placeholder-[#94A3B8] transition-colors focus:border-[#22D3EE] focus:outline-none"
                 />
               </div>
 
@@ -918,28 +1007,93 @@ export function ToolsStudioModal({
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveCategory(tab.id)}
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                         active
-                          ? 'bg-[#0E7490] text-white shadow-[0_0_12px_rgba(34,211,238,0.22)]'
-                          : 'border border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:text-white'
+                          ? 'bg-gradient-to-r from-[#0E7490] to-[#0891B2] text-white shadow-[0_0_14px_rgba(34,211,238,0.24)]'
+                          : 'border border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/25 hover:text-white'
                       }`}
                     >
-                      {tab.label}
+                      <span>{tab.label}</span>
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 font-mono-code text-[10px] ${
+                          active
+                            ? 'bg-black/30 text-[#CFFAFE]'
+                            : 'bg-white/[0.06] text-[#94A3B8]'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Tool Grid */}
-            <div className="pb-safe min-h-0 flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4">
+            {/* Airy Grouped Catalog Body */}
+            <div className="pb-safe min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
+              {/* Featured Spotlight: Live Public CCTV Command Center */}
+              {!searchQuery.trim() &&
+                (activeCategory === 'all' || activeCategory === 'OSINT') &&
+                cctvToolDef && (
+                  <div
+                    data-testid="tools-cctv-spotlight"
+                    className="relative overflow-hidden rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-[#051B1B]/95 via-[#071525]/95 to-[#181008]/90 p-4 shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
+                  >
+                    <div className="flex flex-col justify-between gap-3.5 sm:flex-row sm:items-center">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-300">
+                          <Radio className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/16 px-2 py-0.5 font-mono-code text-[10px] font-bold text-emerald-300">
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                              BARU · LIVE GEOINT
+                            </span>
+                            <h3 className="font-display text-sm font-bold text-white sm:text-base">
+                              Ruang Pantau Live CCTV Indonesia &amp; Dunia
+                            </h3>
+                          </div>
+                          <p className="mt-1 text-xs leading-relaxed text-[#CBD5E1]">
+                            Pantau jalan raya ATCS kota/kabupaten se-Indonesia, Jalan Tol/Nasional, Makkah, Singapura, NYC, Tokyo &amp; NASA ISS lengkap titik Google Maps.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {onOpenCctvCommandCenter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onOpenCctvCommandCenter();
+                            }}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-[0_0_16px_rgba(16,185,129,0.28)] transition-colors hover:bg-emerald-500 cursor-pointer"
+                          >
+                            <LayoutGrid className="h-3.5 w-3.5" />
+                            <span>Ruang Pantau 2×2</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleChooseTool(cctvToolDef)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.06] px-3 text-xs font-semibold text-white transition-colors hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/15 cursor-pointer"
+                        >
+                          <Terminal className="h-3.5 w-3.5 text-[#22D3EE]" />
+                          <span>/cctv di Chat</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               {filteredTools.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-10 text-center">
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-12 text-center">
                   <p className="font-display text-sm font-semibold text-white">
                     Tidak ada tool yang cocok dengan &ldquo;{searchQuery}&rdquo;
                   </p>
                   <p className="mt-1 text-xs text-[#94A3B8]">
-                    Coba kata kunci lain atau pilih tab kategori Semua ({WEB_TOOLS_CATALOG.length}).
+                    Coba kata kunci lain atau tampilkan kembali seluruh katalog ({WEB_TOOLS_CATALOG.length} fitur).
                   </p>
                   <button
                     type="button"
@@ -947,127 +1101,170 @@ export function ToolsStudioModal({
                       setSearchQuery('');
                       setActiveCategory('all');
                     }}
-                    className="mt-3 rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-3.5 py-1.5 text-xs font-semibold text-[#67E8F9] hover:bg-[#22D3EE]/20 cursor-pointer"
+                    className="mt-3.5 rounded-xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 px-4 py-2 text-xs font-semibold text-[#67E8F9] hover:bg-[#22D3EE]/20 cursor-pointer"
                   >
                     Tampilkan Semua Tools
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {filteredTools.map((tool) => {
-                    const Icon = getToolIcon(tool);
-                    const isOrange =
-                      tool.category === 'B' || tool.category === 'E';
-                    const isOsint = tool.category === 'OSINT';
-                    const hasCatalog = Boolean(
-                      tool.commandCatalog && tool.commandCatalog.length > 0
-                    );
-
-                    return (
-                      <div
-                        key={tool.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleChooseTool(tool)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleChooseTool(tool);
-                          }
-                        }}
-                        className={`group flex flex-col justify-between rounded-2xl border border-white/9 bg-white/[0.03] p-3.5 text-left transition-all hover:border-[#22D3EE]/35 hover:bg-white/[0.06] active:scale-[0.99] cursor-pointer ${
-                          hasCatalog ? 'sm:col-span-2' : ''
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                                isOsint
-                                  ? 'border-emerald-400/35 bg-emerald-500/14 text-emerald-300'
-                                  : isOrange
-                                    ? 'border-[#FB923C]/35 bg-[#FB923C]/14 text-[#FB923C]'
-                                    : 'border-[#22D3EE]/35 bg-[#22D3EE]/14 text-[#22D3EE]'
-                              }`}
-                            >
-                              <Icon className="h-4 w-4" />
-                            </span>
-                            <span className="rounded-md border border-white/10 bg-black/50 px-1.5 py-0.5 font-mono-code text-[10px] text-[#CBD5E1]">
-                              {tool.id === 'randomimg'
-                                ? '/randomimage · /randomimg'
-                                : tool.slashCommand}
-                            </span>
-                          </div>
-
-                          <h3 className="mt-2 font-display text-sm font-bold text-white">
-                            {tool.name}
-                          </h3>
-                          <p
-                            className={`mt-1 text-xs leading-relaxed text-[#94A3B8] ${
-                              hasCatalog ? '' : 'line-clamp-2'
-                            }`}
-                          >
-                            {tool.description}
-                          </p>
-
-                          {hasCatalog && tool.commandCatalog && (
-                            <div className="mt-2.5 rounded-xl border border-[#22D3EE]/20 bg-black/50 p-2.5">
-                              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1">
-                                <span className="text-[10.5px] font-bold text-[#67E8F9]">
-                                  📌 Semua Command Random Image (Klik Mode untuk Buka):
-                                </span>
-                                <span className="font-mono-code text-[10px] text-[#FDBA74]">
-                                  Tambah ,jumlah (1–30) · misal ,10
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                                {tool.commandCatalog.map((catItem) => (
-                                  <button
-                                    key={catItem.value}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleChooseTool(tool, catItem.value);
-                                    }}
-                                    className="flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-left transition-colors hover:border-[#22D3EE]/45 hover:bg-[#22D3EE]/15 cursor-pointer"
-                                  >
-                                    <span className="truncate text-[10.5px] font-medium text-[#F1F5F9]">
-                                      {catItem.label}
-                                    </span>
-                                    <code className="shrink-0 rounded bg-black/70 px-1.5 py-0.5 font-mono-code text-[9.5px] text-[#67E8F9]">
-                                      {catItem.command}
-                                    </code>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
+                groupedSections.map((section) => (
+                  <section key={String(section.id)} className="space-y-3">
+                    {/* Clean Section Divider Header */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 font-mono-code text-[10px] font-medium ${
-                              tool.category === 'OSINT'
-                                ? 'bg-emerald-500/16 text-emerald-300 border border-emerald-400/25'
-                                : tool.category === 'A'
-                                  ? 'bg-[#22D3EE]/12 text-[#67E8F9]'
-                                  : tool.category === 'B'
-                                    ? 'bg-[#FB923C]/14 text-[#FDBA74]'
-                                    : tool.category === 'E'
-                                      ? 'bg-emerald-500/14 text-emerald-300'
-                                      : 'bg-white/10 text-[#E2E8F0]'
+                            className={`h-2 w-2 rounded-full ${
+                              section.accent === 'emerald'
+                                ? 'bg-emerald-400'
+                                : section.accent === 'orange'
+                                  ? 'bg-[#FB923C]'
+                                  : 'bg-[#22D3EE]'
                             }`}
-                          >
-                            {tool.badge}
-                          </span>
-                          <span className="text-[11px] font-semibold text-[#22D3EE] transition-transform group-hover:translate-x-0.5">
-                            Buka Tool →
+                          />
+                          <h3 className="font-display text-xs font-bold tracking-wide text-white uppercase sm:text-[13px]">
+                            {section.title}
+                          </h3>
+                          <span className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono-code text-[10px] text-[#94A3B8]">
+                            {section.tools.length}
                           </span>
                         </div>
+                        {section.subtitle && (
+                          <p className="mt-0.5 text-[11.5px] text-[#94A3B8]">
+                            {section.subtitle}
+                          </p>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="hidden h-px flex-1 bg-gradient-to-r from-white/12 to-transparent sm:block" />
+                    </div>
+
+                    {/* Airy 2-Column Tool Cards */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {section.tools.map((tool) => {
+                        const Icon = getToolIcon(tool);
+                        const isOrange =
+                          tool.category === 'B' || tool.category === 'E';
+                        const isOsint = tool.category === 'OSINT';
+                        const hasCatalog = Boolean(
+                          tool.commandCatalog && tool.commandCatalog.length > 0
+                        );
+
+                        return (
+                          <div
+                            key={tool.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleChooseTool(tool)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleChooseTool(tool);
+                              }
+                            }}
+                            className={`group flex flex-col justify-between rounded-2xl border border-white/10 bg-[#080F1E]/75 p-4 text-left transition-all duration-150 hover:border-[#22D3EE]/40 hover:bg-[#0B162B]/90 hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)] active:scale-[0.99] cursor-pointer ${
+                              hasCatalog && expandedRandomModes ? 'sm:col-span-2' : ''
+                            }`}
+                          >
+                            <div>
+                              {/* Clean Horizontal Card Header */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <span
+                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-transform duration-150 group-hover:scale-105 ${
+                                      isOsint
+                                        ? 'border-emerald-400/35 bg-emerald-500/14 text-emerald-300'
+                                        : isOrange
+                                          ? 'border-[#FB923C]/35 bg-[#FB923C]/14 text-[#FB923C]'
+                                          : 'border-[#22D3EE]/35 bg-[#22D3EE]/14 text-[#22D3EE]'
+                                    }`}
+                                  >
+                                    <Icon className="h-4.5 w-4.5" />
+                                  </span>
+
+                                  <div className="min-w-0">
+                                    <h4 className="line-clamp-1 font-display text-[13.5px] font-bold text-white group-hover:text-[#ECFEFF]">
+                                      {tool.name}
+                                    </h4>
+                                    <span
+                                      className={`mt-0.5 inline-block truncate text-[11px] font-medium ${
+                                        isOsint
+                                          ? 'text-emerald-300/90'
+                                          : isOrange
+                                            ? 'text-[#FDBA74]/90'
+                                            : 'text-[#67E8F9]/90'
+                                      }`}
+                                    >
+                                      {tool.badge}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <code className="rounded-lg border border-white/10 bg-black/55 px-2 py-0.5 font-mono-code text-[10.5px] text-[#CBD5E1] group-hover:border-[#22D3EE]/35 group-hover:text-[#A5F3FC]">
+                                    {tool.slashCommand}
+                                  </code>
+                                  <ChevronRight className="h-4 w-4 text-[#64748B] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[#22D3EE]" />
+                                </div>
+                              </div>
+
+                              {/* Clean 2-Line Description */}
+                              <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-[#94A3B8]">
+                                {tool.description}
+                              </p>
+                            </div>
+
+                            {/* Collapsible 10-Mode Quick Picker for Random Image (Zero Crowding!) */}
+                            {hasCatalog && tool.commandCatalog && (
+                              <div className="mt-3 border-t border-white/8 pt-2.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedRandomModes((v) => !v);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/10 px-2.5 py-1 text-[11px] font-semibold text-[#67E8F9] transition-colors hover:bg-[#22D3EE]/20 cursor-pointer"
+                                >
+                                  <span>
+                                    🎨 {expandedRandomModes ? 'Sembunyikan' : 'Lihat'}{' '}
+                                    {tool.commandCatalog.length} Command Mode Cepat (,1–30)
+                                  </span>
+                                  <ChevronDown
+                                    className={`h-3.5 w-3.5 transition-transform ${
+                                      expandedRandomModes ? 'rotate-180' : ''
+                                    }`}
+                                  />
+                                </button>
+
+                                {expandedRandomModes && (
+                                  <div className="mt-2.5 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                                    {tool.commandCatalog.map((catItem) => (
+                                      <button
+                                        key={catItem.value}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleChooseTool(tool, catItem.value);
+                                        }}
+                                        className="flex items-center justify-between gap-1.5 rounded-lg border border-white/10 bg-black/50 px-2.5 py-1.5 text-left transition-colors hover:border-[#22D3EE]/45 hover:bg-[#22D3EE]/15 cursor-pointer"
+                                      >
+                                        <span className="truncate text-[11px] font-medium text-[#F1F5F9]">
+                                          {catItem.label}
+                                        </span>
+                                        <code className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono-code text-[9.5px] text-[#67E8F9]">
+                                          {catItem.command}
+                                        </code>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))
               )}
             </div>
           </>

@@ -30,7 +30,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import type { ChatMessage } from '../types/chat';
+import type { CctvCameraItem, ChatMessage } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 import type { RouterStatusUpdate } from '../services/aiRouter';
 import {
@@ -44,6 +44,7 @@ import {
   triggerDirectDownload,
   type DownloadProgressInfo,
 } from '../utils/directDownload';
+import { InChatCctvDeck } from './LiveCctvPlayerCard';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ChatThreadProps {
@@ -58,6 +59,7 @@ interface ChatThreadProps {
   onFlushStream: () => void;
   onOpenImageModelPicker: () => void;
   onSummarizeTranscript?: (transcript: string) => void;
+  onOpenCctvCommandCenter?: (initialCamera?: CctvCameraItem) => void;
 }
 
 function WaifuExpressionPhoto({
@@ -578,6 +580,7 @@ export function ChatThread({
   onFlushStream,
   onOpenImageModelPicker,
   onSummarizeTranscript,
+  onOpenCctvCommandCenter,
 }: ChatThreadProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
@@ -1306,6 +1309,14 @@ export function ChatThread({
                       isStreaming={isTypingContent}
                       waifuMode={Boolean(waifuProfile)}
                     />
+
+                    {/* Live Public CCTV Multi-Camera Player Deck (/cctv) */}
+                    {msg.cctvCameras && msg.cctvCameras.length > 0 && (
+                      <InChatCctvDeck
+                        cameras={msg.cctvCameras}
+                        onOpenCommandCenter={onOpenCctvCommandCenter}
+                      />
+                    )}
 
                     {/* Direct Action Buttons (Google Maps, WhatsApp Check, Anti-Fraud Komdigi, External OSINT) */}
                     {msg.actionLinks && msg.actionLinks.length > 0 && (

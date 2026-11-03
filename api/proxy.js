@@ -142,6 +142,14 @@ const ALLOWED_HOSTS = new Set([
   't.me',
   'linktr.ee',
   'users.roblox.com',
+  // Public Official CCTV JSON Catalog Endpoints (metadata only, zero video streaming)
+  'balisatudata.baliprov.go.id',
+  'atcs.denpasarkota.go.id',
+  'cctv.jogjakota.go.id',
+  'api.data.gov.sg',
+  'cwwp2.dot.ca.gov',
+  'tie.digitraffic.fi',
+  'webcams.nyctmc.org',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [

@@ -38,6 +38,14 @@ export interface PreparedChatAttachment {
 
 export type CctvStreamKind = 'hls' | 'snapshot' | 'youtube' | 'iframe' | 'portal';
 
+export interface CctvCameraAngle {
+  label: string;
+  streamType: CctvStreamKind;
+  streamUrl: string;
+  fallbackEmbedUrl?: string;
+  proxyHlsFirst?: boolean;
+}
+
 export interface CctvCameraItem {
   id: string;
   name: string;
@@ -50,6 +58,8 @@ export interface CctvCameraItem {
   streamType: CctvStreamKind;
   streamUrl: string;
   fallbackEmbedUrl?: string;
+  proxyHlsFirst?: boolean;
+  angles?: CctvCameraAngle[];
   posterUrl?: string;
   portalUrl: string;
   operator: string;

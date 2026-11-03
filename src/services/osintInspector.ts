@@ -1,6 +1,6 @@
 import jsQR from 'jsqr';
 import type { ToolActionLink } from '../types/chat';
-import { lookupIndonesianMobileHlrDetailed } from './osintIndonesiaData';
+import { lookupIndonesianMobileHlr } from './osintIndonesiaData';
 
 export interface OsintExecutionOutput {
   content: string;
@@ -200,166 +200,19 @@ export function buildGoogleMapsSearchUrl(query: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`;
 }
 
-const INSTANT_INDONESIA_CITY_COORDS: Readonly<
-  Record<string, readonly [string, string, string]>
-> = {
-  jakarta: ['-6.2088', '106.8456', 'DKI Jakarta, Indonesia'],
-  'jakarta pusat': ['-6.1805', '106.8284', 'Jakarta Pusat, DKI Jakarta'],
-  'jakarta selatan': ['-6.2615', '106.8106', 'Jakarta Selatan, DKI Jakarta'],
-  'jakarta barat': ['-6.1683', '106.7588', 'Jakarta Barat, DKI Jakarta'],
-  'jakarta timur': ['-6.2250', '106.9004', 'Jakarta Timur, DKI Jakarta'],
-  'jakarta utara': ['-6.1214', '106.7741', 'Jakarta Utara, DKI Jakarta'],
-  tangerang: ['-6.1783', '106.6319', 'Kota Tangerang, Banten'],
-  'tangerang selatan': ['-6.2886', '106.7179', 'Kota Tangerang Selatan, Banten'],
-  bogor: ['-6.5971', '106.8060', 'Kota Bogor, Jawa Barat'],
-  depok: ['-6.4025', '106.7942', 'Kota Depok, Jawa Barat'],
-  bekasi: ['-6.2383', '106.9756', 'Kota Bekasi, Jawa Barat'],
-  serang: ['-6.1104', '106.1503', 'Kota Serang, Banten'],
-  cilegon: ['-6.0025', '106.0111', 'Kota Cilegon, Banten'],
-  pandeglang: ['-6.3086', '106.1067', 'Kab. Pandeglang, Banten'],
-  rangkasbitung: ['-6.3596', '106.2494', 'Rangkasbitung, Lebak, Banten'],
-  bandung: ['-6.9175', '107.6191', 'Kota Bandung, Jawa Barat'],
-  cirebon: ['-6.7320', '108.5523', 'Kota Cirebon, Jawa Barat'],
-  tasikmalaya: ['-7.3274', '108.2207', 'Kota Tasikmalaya, Jawa Barat'],
-  garut: ['-7.2279', '107.9087', 'Kab. Garut, Jawa Barat'],
-  sukabumi: ['-6.9277', '106.9300', 'Kota Sukabumi, Jawa Barat'],
-  cianjur: ['-6.8168', '107.1425', 'Kab. Cianjur, Jawa Barat'],
-  karawang: ['-6.3227', '107.3376', 'Kab. Karawang, Jawa Barat'],
-  purwakarta: ['-6.5569', '107.4433', 'Kab. Purwakarta, Jawa Barat'],
-  subang: ['-6.5713', '107.7587', 'Kab. Subang, Jawa Barat'],
-  sumedang: ['-6.8586', '107.9204', 'Kab. Sumedang, Jawa Barat'],
-  indramayu: ['-6.3276', '108.3249', 'Kab. Indramayu, Jawa Barat'],
-  majalengka: ['-6.8364', '108.2278', 'Kab. Majalengka, Jawa Barat'],
-  semarang: ['-6.9932', '110.4203', 'Kota Semarang, Jawa Tengah'],
-  surakarta: ['-7.5755', '110.8243', 'Kota Surakarta (Solo), Jawa Tengah'],
-  solo: ['-7.5755', '110.8243', 'Kota Surakarta (Solo), Jawa Tengah'],
-  yogyakarta: ['-7.7956', '110.3695', 'Kota Yogyakarta, DI Yogyakarta'],
-  purwokerto: ['-7.4244', '109.2302', 'Purwokerto, Banyumas, Jawa Tengah'],
-  pekalongan: ['-6.8886', '109.6753', 'Kota Pekalongan, Jawa Tengah'],
-  tegal: ['-6.8694', '109.1402', 'Kota Tegal, Jawa Tengah'],
-  kudus: ['-6.8048', '110.8405', 'Kab. Kudus, Jawa Tengah'],
-  magelang: ['-7.4797', '110.2177', 'Kota Magelang, Jawa Tengah'],
-  salatiga: ['-7.3305', '110.5084', 'Kota Salatiga, Jawa Tengah'],
-  cilacap: ['-7.7279', '109.0059', 'Kab. Cilacap, Jawa Tengah'],
-  klaten: ['-7.7058', '110.6064', 'Kab. Klaten, Jawa Tengah'],
-  kebumen: ['-7.6687', '109.6512', 'Kab. Kebumen, Jawa Tengah'],
-  surabaya: ['-7.2575', '112.7521', 'Kota Surabaya, Jawa Timur'],
-  malang: ['-7.9666', '112.6326', 'Kota Malang, Jawa Timur'],
-  kediri: ['-7.8166', '112.0114', 'Kota Kediri, Jawa Timur'],
-  madiun: ['-7.6298', '111.5239', 'Kota Madiun, Jawa Timur'],
-  jember: ['-8.1724', '113.7007', 'Kab. Jember, Jawa Timur'],
-  banyuwangi: ['-8.2192', '114.3691', 'Kab. Banyuwangi, Jawa Timur'],
-  mojokerto: ['-7.4726', '112.4341', 'Kota Mojokerto, Jawa Timur'],
-  jombang: ['-7.5468', '112.2331', 'Kab. Jombang, Jawa Timur'],
-  blitar: ['-8.0955', '112.1609', 'Kota Blitar, Jawa Timur'],
-  pasuruan: ['-7.6469', '112.9075', 'Kota Pasuruan, Jawa Timur'],
-  probolinggo: ['-7.7543', '113.2159', 'Kota Probolinggo, Jawa Timur'],
-  tuban: ['-6.8976', '112.0649', 'Kab. Tuban, Jawa Timur'],
-  tulungagung: ['-8.0657', '111.9026', 'Kab. Tulungagung, Jawa Timur'],
-  pamekasan: ['-7.1568', '113.4746', 'Kab. Pamekasan, Jawa Timur'],
-  denpasar: ['-8.6705', '115.2126', 'Kota Denpasar, Bali'],
-  singaraja: ['-8.1120', '115.0882', 'Singaraja, Buleleng, Bali'],
-  mataram: ['-8.5833', '116.1167', 'Kota Mataram, Nusa Tenggara Barat'],
-  bima: ['-8.4606', '118.7274', 'Kota Bima, Nusa Tenggara Barat'],
-  kupang: ['-10.1772', '123.6070', 'Kota Kupang, Nusa Tenggara Timur'],
-  'banda aceh': ['5.5483', '95.3238', 'Kota Banda Aceh, Aceh'],
-  lhokseumawe: ['5.1801', '97.1507', 'Kota Lhokseumawe, Aceh'],
-  medan: ['3.5952', '98.6722', 'Kota Medan, Sumatera Utara'],
-  pematangsiantar: ['2.9595', '99.0682', 'Kota Pematangsiantar, Sumatera Utara'],
-  padangsidimpuan: ['1.3788', '99.2719', 'Kota Padangsidimpuan, Sumatera Utara'],
-  padang: ['-0.9471', '100.4172', 'Kota Padang, Sumatera Barat'],
-  bukittinggi: ['-0.3056', '100.3692', 'Kota Bukittinggi, Sumatera Barat'],
-  pekanbaru: ['0.5071', '101.4478', 'Kota Pekanbaru, Riau'],
-  dumai: ['1.6675', '101.4475', 'Kota Dumai, Riau'],
-  batam: ['1.0456', '104.0305', 'Kota Batam, Kepulauan Riau'],
-  tanjungpinang: ['0.9186', '104.4467', 'Kota Tanjungpinang, Kepulauan Riau'],
-  jambi: ['-1.6101', '103.6131', 'Kota Jambi, Jambi'],
-  palembang: ['-2.9761', '104.7754', 'Kota Palembang, Sumatera Selatan'],
-  lubuklinggau: ['-3.2967', '102.8617', 'Kota Lubuklinggau, Sumatera Selatan'],
-  pangkalpinang: ['-2.1316', '106.1169', 'Kota Pangkalpinang, Bangka Belitung'],
-  bengkulu: ['-3.7928', '102.2608', 'Kota Bengkulu, Bengkulu'],
-  'bandar lampung': ['-5.4292', '105.2610', 'Kota Bandar Lampung, Lampung'],
-  metro: ['-5.1131', '105.3067', 'Kota Metro, Lampung'],
-  pontianak: ['-0.0263', '109.3425', 'Kota Pontianak, Kalimantan Barat'],
-  singkawang: ['0.9063', '108.9872', 'Kota Singkawang, Kalimantan Barat'],
-  'palangka raya': ['-2.2136', '113.9108', 'Kota Palangka Raya, Kalimantan Tengah'],
-  banjarmasin: ['-3.3194', '114.5908', 'Kota Banjarmasin, Kalimantan Selatan'],
-  samarinda: ['-0.5022', '117.1536', 'Kota Samarinda, Kalimantan Timur'],
-  balikpapan: ['-1.2379', '116.8529', 'Kota Balikpapan, Kalimantan Timur'],
-  bontang: ['0.1333', '117.5000', 'Kota Bontang, Kalimantan Timur'],
-  tarakan: ['3.3000', '117.6333', 'Kota Tarakan, Kalimantan Utara'],
-  makassar: ['-5.1477', '119.4327', 'Kota Makassar, Sulawesi Selatan'],
-  parepare: ['-4.0135', '119.6255', 'Kota Parepare, Sulawesi Selatan'],
-  manado: ['1.4748', '124.8421', 'Kota Manado, Sulawesi Utara'],
-  bitung: ['1.4451', '125.1824', 'Kota Bitung, Sulawesi Utara'],
-  palu: ['-0.8917', '119.8707', 'Kota Palu, Sulawesi Tengah'],
-  kendari: ['-3.9985', '122.5130', 'Kota Kendari, Sulawesi Tenggara'],
-  gorontalo: ['0.5435', '123.0568', 'Kota Gorontalo, Gorontalo'],
-  ambon: ['-3.6954', '128.1814', 'Kota Ambon, Maluku'],
-  ternate: ['0.7907', '127.3842', 'Kota Ternate, Maluku Utara'],
-  jayapura: ['-2.5337', '140.7181', 'Kota Jayapura, Papua'],
-  sorong: ['-0.8762', '131.2558', 'Kota Sorong, Papua Barat Daya'],
-  manokwari: ['-0.8615', '134.0620', 'Manokwari, Papua Barat'],
-  merauke: ['-8.4932', '140.4018', 'Merauke, Papua Selatan'],
-  timika: ['-4.5468', '136.8870', 'Timika, Mimika, Papua Tengah'],
-  biak: ['-1.1763', '136.0820', 'Biak Numfor, Papua'],
-};
-
 export async function geocodePlaceIndonesia(
   query: string,
   signal?: AbortSignal
 ): Promise<{ displayName: string; lat: string; lon: string } | null> {
   const clean = query.trim();
   if (!clean) return null;
-
-  // 1. Open-Meteo Geocoding API (CORS *, zero Vercel datacenter IP block, accurate to kelurahan/kecamatan!)
-  const firstSegment = clean.split(',')[0].replace(/^(Kota|Kab\.)\s+/i, '').trim();
-  const meteoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-    firstSegment || clean
-  )}&count=5&language=id&format=json`;
-  const meteoData = await fetchJsonSafe(meteoUrl, {
-    timeoutMs: 4500,
-    signal,
-  });
-  if (
-    meteoData &&
-    !Array.isArray(meteoData) &&
-    Array.isArray(meteoData.results)
-  ) {
-    const idHits = (meteoData.results as Array<Record<string, unknown>>).filter(
-      (r) => String(r.country_code || '').toUpperCase() === 'ID'
-    );
-    const best = idHits[0] || (meteoData.results as Array<Record<string, unknown>>)[0];
-    if (best && best.latitude !== undefined && best.longitude !== undefined) {
-      const nameParts = [best.name, best.admin2, best.admin1, 'Indonesia']
-        .map((x) => String(x || '').trim())
-        .filter(Boolean);
-      return {
-        displayName: Array.from(new Set(nameParts)).join(', '),
-        lat: Number(best.latitude).toFixed(5),
-        lon: Number(best.longitude).toFixed(5),
-      };
-    }
-  }
-
-  // 2. Instant Built-In Indonesian City Coordinates Table (0ms, 100% immune to upstream outages!)
-  const normKey = firstSegment.toLowerCase();
-  const builtIn = INSTANT_INDONESIA_CITY_COORDS[normKey];
-  if (builtIn) {
-    return {
-      lat: builtIn[0],
-      lon: builtIn[1],
-      displayName: builtIn[2],
-    };
-  }
-
-  // 3. Fallback to Nominatim OpenStreetMap
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=id&q=${encodeURIComponent(
     clean
   )}`;
   const data = await fetchJsonSafe(url, {
-    timeoutMs: 5500,
+    timeoutMs: 7500,
     signal,
+    proxyFirst: true,
   });
   if (!Array.isArray(data) || data.length === 0) return null;
   const first = data[0] as Record<string, unknown>;
@@ -2118,96 +1971,102 @@ const INDONESIAN_MOBILE_PREFIXES: Record<
   '0889': { operator: 'XLSMART (Smartfren)', brand: 'Smartfren 4G/5G', network: '4G LTE / 5G' },
 };
 
-// Indonesian PSTN Area Codes (4-digit checked before 3-digit)
-const INDONESIAN_PSTN_AREA_CODES: Record<string, string> = {
-  '021': 'DKI Jakarta, Tangerang, Bekasi & Depok (Jabodetabek)',
-  '022': 'Kota Bandung, Cimahi & Bandung Raya, Jawa Barat',
-  '024': 'Kota Semarang & Demak, Jawa Tengah',
-  '031': 'Kota Surabaya, Gresik & Sidoarjo, Jawa Timur',
-  '061': 'Kota Medan, Binjai & Deli Serdang, Sumatera Utara',
-  '0231': 'Cirebon, Jawa Barat',
-  '0232': 'Kuningan, Jawa Barat',
-  '0233': 'Majalengka, Jawa Barat',
-  '0234': 'Indramayu, Jawa Barat',
-  '0251': 'Kota & Kab. Bogor, Jawa Barat',
-  '0252': 'Lebak (Rangkasbitung), Banten',
-  '0253': 'Pandeglang, Banten',
-  '0254': 'Kota Serang & Cilegon, Banten',
-  '0260': 'Subang, Jawa Barat',
-  '0261': 'Sumedang, Jawa Barat',
-  '0262': 'Garut, Jawa Barat',
-  '0263': 'Cianjur, Jawa Barat',
-  '0264': 'Purwakarta & Cikampek, Jawa Barat',
-  '0265': 'Tasikmalaya, Ciamis & Banjar, Jawa Barat',
-  '0266': 'Sukabumi, Jawa Barat',
-  '0267': 'Karawang, Jawa Barat',
-  '0271': 'Surakarta (Solo), Sukoharjo, Karanganyar & Sragen, Jawa Tengah',
-  '0272': 'Klaten, Jawa Tengah',
-  '0273': 'Wonogiri, Jawa Tengah',
-  '0274': 'DI Yogyakarta (Kota Jogja, Sleman, Bantul, Gunungkidul, Kulon Progo)',
-  '0275': 'Purworejo, Jawa Tengah',
-  '0276': 'Boyolali, Jawa Tengah',
-  '0281': 'Purwokerto, Banyumas & Purbalingga, Jawa Tengah',
-  '0282': 'Cilacap, Jawa Tengah',
-  '0283': 'Tegal & Brebes, Jawa Tengah',
-  '0284': 'Pemalang, Jawa Tengah',
-  '0285': 'Pekalongan & Batang, Jawa Tengah',
-  '0286': 'Banjarnegara & Wonosobo, Jawa Tengah',
-  '0287': 'Kebumen, Jawa Tengah',
-  '0291': 'Kudus, Jepara & Demak, Jawa Tengah',
-  '0293': 'Magelang & Temanggung, Jawa Tengah',
-  '0298': 'Salatiga & Ambarawa, Jawa Tengah',
-  '0321': 'Mojokerto & Jombang, Jawa Timur',
-  '0322': 'Lamongan, Jawa Timur',
-  '0331': 'Jember, Jawa Timur',
-  '0333': 'Banyuwangi, Jawa Timur',
-  '0335': 'Probolinggo, Jawa Timur',
-  '0341': 'Kota Malang, Batu & Kab. Malang, Jawa Timur',
-  '0342': 'Blitar, Jawa Timur',
-  '0343': 'Pasuruan, Jawa Timur',
-  '0351': 'Madiun, Magetan & Ngawi, Jawa Timur',
-  '0352': 'Ponorogo, Jawa Timur',
-  '0354': 'Kediri, Jawa Timur',
-  '0355': 'Tulungagung & Trenggalek, Jawa Timur',
-  '0356': 'Tuban, Jawa Timur',
-  '0361': 'Denpasar, Badung, Gianyar & Tabanan, Bali',
-  '0362': 'Singaraja (Buleleng), Bali',
-  '0370': 'Mataram & Lombok, Nusa Tenggara Barat',
-  '0380': 'Kupang, Nusa Tenggara Timur',
-  '0401': 'Kendari, Sulawesi Tenggara',
-  '0411': 'Kota Makassar, Maros & Gowa, Sulawesi Selatan',
-  '0421': 'Parepare & Pinrang, Sulawesi Selatan',
-  '0431': 'Manado, Tomohon & Minahasa, Sulawesi Utara',
-  '0435': 'Gorontalo',
-  '0451': 'Palu, Sulawesi Tengah',
-  '0511': 'Banjarmasin & Banjarbaru, Kalimantan Selatan',
-  '0536': 'Palangka Raya, Kalimantan Tengah',
-  '0541': 'Samarinda & Tenggarong, Kalimantan Timur',
-  '0542': 'Balikpapan & IKN Nusantara, Kalimantan Timur',
-  '0548': 'Bontang, Kalimantan Timur',
-  '0551': 'Tarakan, Kalimantan Utara',
-  '0561': 'Pontianak & Kubu Raya, Kalimantan Barat',
-  '0562': 'Singkawang & Sambas, Kalimantan Barat',
-  '0641': 'Langsa, Aceh',
-  '0645': 'Lhokseumawe, Aceh',
-  '0651': 'Banda Aceh & Aceh Besar, Aceh',
-  '0711': 'Palembang & Banyuasin, Sumatera Selatan',
-  '0717': 'Pangkalpinang, Kepulauan Bangka Belitung',
-  '0721': 'Bandar Lampung, Lampung',
-  '0736': 'Kota Bengkulu',
-  '0741': 'Kota Jambi',
-  '0751': 'Kota Padang, Sumatera Barat',
-  '0752': 'Bukittinggi & Payakumbuh, Sumatera Barat',
-  '0761': 'Pekanbaru, Riau',
-  '0765': 'Dumai, Riau',
-  '0771': 'Tanjungpinang & Bintan, Kepulauan Riau',
-  '0778': 'Kota Batam, Kepulauan Riau',
-  '0911': 'Kota Ambon, Maluku',
-  '0921': 'Ternate, Maluku Utara',
-  '0951': 'Sorong, Papua Barat Daya',
-  '0967': 'Kota Jayapura, Papua',
-  '0971': 'Merauke, Papua Selatan',
-  '0986': 'Manokwari, Papua Barat',
+// Indonesian PSTN Area Codes (4-digit checked before 3-digit — 1 Primary Exchange City + 1 Province)
+interface PstnAreaInfo {
+  city: string;
+  province: string;
+  coverageNote?: string;
+}
+
+const INDONESIAN_PSTN_AREA_CODES: Record<string, PstnAreaInfo> = {
+  '021': { city: 'DKI Jakarta', province: 'DKI Jakarta', coverageNote: 'Sentral telepon tetap utama Jakarta & jaringan lokal penyangga.' },
+  '022': { city: 'Kota Bandung', province: 'Jawa Barat' },
+  '024': { city: 'Kota Semarang', province: 'Jawa Tengah' },
+  '031': { city: 'Kota Surabaya', province: 'Jawa Timur' },
+  '061': { city: 'Kota Medan', province: 'Sumatera Utara' },
+  '0231': { city: 'Kota Cirebon', province: 'Jawa Barat' },
+  '0232': { city: 'Kuningan', province: 'Jawa Barat' },
+  '0233': { city: 'Majalengka', province: 'Jawa Barat' },
+  '0234': { city: 'Indramayu', province: 'Jawa Barat' },
+  '0251': { city: 'Kota Bogor', province: 'Jawa Barat' },
+  '0252': { city: 'Rangkasbitung', province: 'Banten' },
+  '0253': { city: 'Pandeglang', province: 'Banten' },
+  '0254': { city: 'Kota Serang', province: 'Banten' },
+  '0260': { city: 'Subang', province: 'Jawa Barat' },
+  '0261': { city: 'Sumedang', province: 'Jawa Barat' },
+  '0262': { city: 'Garut', province: 'Jawa Barat' },
+  '0263': { city: 'Cianjur', province: 'Jawa Barat' },
+  '0264': { city: 'Purwakarta', province: 'Jawa Barat' },
+  '0265': { city: 'Kota Tasikmalaya', province: 'Jawa Barat' },
+  '0266': { city: 'Kota Sukabumi', province: 'Jawa Barat' },
+  '0267': { city: 'Karawang', province: 'Jawa Barat' },
+  '0271': { city: 'Kota Surakarta (Solo)', province: 'Jawa Tengah' },
+  '0272': { city: 'Klaten', province: 'Jawa Tengah' },
+  '0273': { city: 'Wonogiri', province: 'Jawa Tengah' },
+  '0274': { city: 'Kota Yogyakarta', province: 'DI Yogyakarta' },
+  '0275': { city: 'Purworejo', province: 'Jawa Tengah' },
+  '0276': { city: 'Boyolali', province: 'Jawa Tengah' },
+  '0281': { city: 'Purwokerto', province: 'Jawa Tengah' },
+  '0282': { city: 'Cilacap', province: 'Jawa Tengah' },
+  '0283': { city: 'Kota Tegal', province: 'Jawa Tengah' },
+  '0284': { city: 'Pemalang', province: 'Jawa Tengah' },
+  '0285': { city: 'Kota Pekalongan', province: 'Jawa Tengah' },
+  '0286': { city: 'Wonosobo', province: 'Jawa Tengah' },
+  '0287': { city: 'Kebumen', province: 'Jawa Tengah' },
+  '0291': { city: 'Kudus', province: 'Jawa Tengah' },
+  '0293': { city: 'Kota Magelang', province: 'Jawa Tengah' },
+  '0298': { city: 'Kota Salatiga', province: 'Jawa Tengah' },
+  '0321': { city: 'Kota Mojokerto', province: 'Jawa Timur' },
+  '0322': { city: 'Lamongan', province: 'Jawa Timur' },
+  '0331': { city: 'Jember', province: 'Jawa Timur' },
+  '0333': { city: 'Banyuwangi', province: 'Jawa Timur' },
+  '0335': { city: 'Kota Probolinggo', province: 'Jawa Timur' },
+  '0341': { city: 'Kota Malang', province: 'Jawa Timur' },
+  '0342': { city: 'Kota Blitar', province: 'Jawa Timur' },
+  '0343': { city: 'Kota Pasuruan', province: 'Jawa Timur' },
+  '0351': { city: 'Kota Madiun', province: 'Jawa Timur' },
+  '0352': { city: 'Ponorogo', province: 'Jawa Timur' },
+  '0354': { city: 'Kota Kediri', province: 'Jawa Timur' },
+  '0355': { city: 'Tulungagung', province: 'Jawa Timur' },
+  '0356': { city: 'Tuban', province: 'Jawa Timur' },
+  '0361': { city: 'Kota Denpasar', province: 'Bali' },
+  '0362': { city: 'Singaraja', province: 'Bali' },
+  '0370': { city: 'Kota Mataram', province: 'Nusa Tenggara Barat' },
+  '0380': { city: 'Kota Kupang', province: 'Nusa Tenggara Timur' },
+  '0401': { city: 'Kota Kendari', province: 'Sulawesi Tenggara' },
+  '0411': { city: 'Kota Makassar', province: 'Sulawesi Selatan' },
+  '0421': { city: 'Kota Parepare', province: 'Sulawesi Selatan' },
+  '0431': { city: 'Kota Manado', province: 'Sulawesi Utara' },
+  '0435': { city: 'Kota Gorontalo', province: 'Gorontalo' },
+  '0451': { city: 'Kota Palu', province: 'Sulawesi Tengah' },
+  '0511': { city: 'Kota Banjarmasin', province: 'Kalimantan Selatan' },
+  '0536': { city: 'Kota Palangka Raya', province: 'Kalimantan Tengah' },
+  '0541': { city: 'Kota Samarinda', province: 'Kalimantan Timur' },
+  '0542': { city: 'Kota Balikpapan', province: 'Kalimantan Timur' },
+  '0548': { city: 'Kota Bontang', province: 'Kalimantan Timur' },
+  '0551': { city: 'Kota Tarakan', province: 'Kalimantan Utara' },
+  '0561': { city: 'Kota Pontianak', province: 'Kalimantan Barat' },
+  '0562': { city: 'Kota Singkawang', province: 'Kalimantan Barat' },
+  '0641': { city: 'Kota Langsa', province: 'Aceh' },
+  '0645': { city: 'Kota Lhokseumawe', province: 'Aceh' },
+  '0651': { city: 'Kota Banda Aceh', province: 'Aceh' },
+  '0711': { city: 'Kota Palembang', province: 'Sumatera Selatan' },
+  '0717': { city: 'Kota Pangkalpinang', province: 'Kepulauan Bangka Belitung' },
+  '0721': { city: 'Kota Bandar Lampung', province: 'Lampung' },
+  '0736': { city: 'Kota Bengkulu', province: 'Bengkulu' },
+  '0741': { city: 'Kota Jambi', province: 'Jambi' },
+  '0751': { city: 'Kota Padang', province: 'Sumatera Barat' },
+  '0752': { city: 'Kota Bukittinggi', province: 'Sumatera Barat' },
+  '0761': { city: 'Kota Pekanbaru', province: 'Riau' },
+  '0765': { city: 'Kota Dumai', province: 'Riau' },
+  '0771': { city: 'Kota Tanjungpinang', province: 'Kepulauan Riau' },
+  '0778': { city: 'Kota Batam', province: 'Kepulauan Riau' },
+  '0911': { city: 'Kota Ambon', province: 'Maluku' },
+  '0921': { city: 'Kota Ternate', province: 'Maluku Utara' },
+  '0951': { city: 'Kota Sorong', province: 'Papua Barat Daya' },
+  '0967': { city: 'Kota Jayapura', province: 'Papua' },
+  '0971': { city: 'Merauke', province: 'Papua Selatan' },
+  '0986': { city: 'Manokwari', province: 'Papua Barat' },
 };
 
 export async function analyzePhoneInput(
@@ -2259,7 +2118,11 @@ export async function analyzePhoneInput(
   let operatorLabel = 'Operator Luar Negeri / Internasional';
   let brandLabel = '-';
   let networkLabel = '-';
-  let regionLabel = countryInfo.country;
+  let primaryCityLabel = countryInfo.country;
+  let provinceLabel = '';
+  let precisionBadgeLabel = '';
+  let matchedHlrPrefix = '';
+  let staticCoordinates: { lat: number; lon: number } | undefined;
   let mapSearchQuery = countryInfo.mapQuery;
   let hlrNote = '';
   let isNationalNonCityBlock = false;
@@ -2268,13 +2131,17 @@ export async function analyzePhoneInput(
     if (localIdNumber.startsWith('0800')) {
       lineType = 'Bebas Pulsa (Toll-Free 0800)';
       operatorLabel = 'Layanan Korporat / Call Center Bebas Pulsa';
-      regionLabel = 'Nasional (Indonesia)';
+      primaryCityLabel = 'Layanan Bebas Pulsa Nasional';
+      provinceLabel = 'Seluruh Indonesia (Non-Geografis)';
+      precisionBadgeLabel = 'Saluran Korporasi Nasional';
       mapSearchQuery = 'Indonesia';
       isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('1500') || localIdNumber.startsWith('01500')) {
       lineType = 'Contact Center Nasional (1500xxx)';
       operatorLabel = 'Layanan Pelanggan Korporasi';
-      regionLabel = 'Nasional (Indonesia)';
+      primaryCityLabel = 'Contact Center Nasional';
+      provinceLabel = 'Seluruh Indonesia (Non-Geografis)';
+      precisionBadgeLabel = 'Saluran Korporasi Nasional';
       mapSearchQuery = 'Indonesia';
       isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('08')) {
@@ -2288,11 +2155,15 @@ export async function analyzePhoneInput(
       } else {
         operatorLabel = `Operator Seluler Indonesia (Prefix ${p4})`;
       }
-      const hlr = await lookupIndonesianMobileHlrDetailed(localIdNumber);
-      regionLabel = hlr.region;
+      const hlr = lookupIndonesianMobileHlr(localIdNumber);
+      primaryCityLabel = hlr.city;
+      provinceLabel = hlr.province;
+      precisionBadgeLabel = hlr.precisionLabel;
+      matchedHlrPrefix = hlr.matchedPrefix;
+      staticCoordinates = hlr.coordinates;
       mapSearchQuery = hlr.mapQuery;
       hlrNote = hlr.basisNote;
-      isNationalNonCityBlock = false;
+      isNationalNonCityBlock = hlr.accuracyTier === 'national';
     } else {
       // PSTN Fixed Line (021, 022, 0274, etc.)
       lineType = 'Telepon Rumah / Kantor Tetap (PSTN Fixed-Line)';
@@ -2304,43 +2175,52 @@ export async function analyzePhoneInput(
       const matchedCode = INDONESIAN_PSTN_AREA_CODES[p4] ? p4 : p3;
       if (areaMatch) {
         brandLabel = `Kode Wilayah PSTN ${matchedCode}`;
-        regionLabel = areaMatch;
-        mapSearchQuery = `${areaMatch}, Indonesia`;
-        hlrNote = `Kode Area Geografis Tetap (${matchedCode}) — akurat sesuai kota sambungan kabel telepon rumah/kantor.`;
+        primaryCityLabel = areaMatch.city;
+        provinceLabel = areaMatch.province;
+        precisionBadgeLabel = `Presisi Sentral PSTN (${matchedCode})`;
+        matchedHlrPrefix = matchedCode;
+        mapSearchQuery = `${areaMatch.city}, ${areaMatch.province}, Indonesia`;
+        hlrNote =
+          areaMatch.coverageNote ||
+          `Kode Area Geografis Tetap (\`${matchedCode}\`) — terikat langsung pada sentral kabel telepon tetap **${areaMatch.city}**, **${areaMatch.province}**.`;
       } else {
-        regionLabel = `Wilayah Telepon Indonesia (${p4})`;
+        primaryCityLabel = `Sentral Telepon (${p4})`;
+        provinceLabel = 'Indonesia';
         mapSearchQuery = 'Indonesia';
+        isNationalNonCityBlock = true;
       }
     }
   }
 
-  // Parallel: Geocode HLR/PSTN area + Hunt Free Public Caller-ID Mentions (GetContact-style Web Footprint!)
+  // Parallel: Geocode PSTN if needed (Mobile single-city HLR already carries verified city coordinates!) + Hunt Free Public Caller-ID Mentions
   const callerIdDorkQuery = isIndonesian
     ? `"${localIdNumber}" OR "${e164Digits}" OR "+${e164Digits}"`
     : `"+${e164Digits}" OR "${e164Digits}"`;
 
   const [geo, publicMentions] = await Promise.all([
-    isIndonesian && !isNationalNonCityBlock
+    isIndonesian && !isNationalNonCityBlock && !staticCoordinates
       ? geocodePlaceIndonesia(mapSearchQuery, signal)
       : Promise.resolve(null),
     searchPublicWebSnippets(callerIdDorkQuery, 5, signal),
   ]);
 
+  const resolvedCoords =
+    staticCoordinates ||
+    (geo ? { lat: Number(geo.lat), lon: Number(geo.lon) } : undefined);
+
   const formattedInternational = isIndonesian
     ? `+62 ${localIdNumber.slice(1, 4)}-${localIdNumber.slice(4, 8)}-${localIdNumber.slice(8)}`
     : `+${e164Digits}`;
-
-  const cityShortLabel = mapSearchQuery
-    .replace(/,\s*Indonesia$/i, '')
-    .trim();
 
   const actionLinks: ToolActionLink[] = [
     {
       label: isNationalNonCityBlock
         ? '📍 Buka Peta Indonesia di Google Maps'
-        : `📍 Buka Kota (${cityShortLabel.slice(0, 28)}) di Google Maps`,
+        : `📍 Buka ${primaryCityLabel} di Google Maps`,
       url: buildGoogleMapsSearchUrl(
-        geo ? `${geo.lat},${geo.lon}` : mapSearchQuery
+        resolvedCoords
+          ? `${resolvedCoords.lat},${resolvedCoords.lon}`
+          : mapSearchQuery
       ),
       kind: 'maps',
     },
@@ -2383,7 +2263,7 @@ export async function analyzePhoneInput(
         ];
 
   const lines = [
-    `### 📱 Hasil Deep OSINT Nomor Telepon, HLR Multi-Digit & Free Caller-ID`,
+    `### 📱 Hasil Deep OSINT Nomor Telepon, HLR Presisi 1 Kota & Free Caller-ID`,
     '',
     `| Parameter | Detail Teridentifikasi |`,
     `| :--- | :--- |`,
@@ -2393,8 +2273,6 @@ export async function analyzePhoneInput(
     `| **Jenis Saluran (Line Type)** | ${lineType} |`,
     `| **Operator Telekomunikasi** | **${operatorLabel}** |`,
     brandLabel !== '-' ? `| **Produk / Kartu / Kode Area** | ${brandLabel} |` : '',
-    isIndonesian ? `| **Lokasi Kota / Wilayah HLR** | **${regionLabel}** |` : '',
-    geo ? `| **Koordinat Pusat Kota (GPS)** | \`${geo.lat}, ${geo.lon}\` |` : '',
     networkLabel !== '-' ? `| **Teknologi Jaringan** | ${networkLabel} |` : '',
     `| **Validitas Panjang Digit** | ${digitsOnly.length} digit (${
       digitsOnly.length >= 10 && digitsOnly.length <= 14
@@ -2402,15 +2280,23 @@ export async function analyzePhoneInput(
         : '⚠️ Panjang tidak lazim — periksa kembali digit'
     }) |`,
     '',
-    `#### 📍 Analisis Wilayah HLR (6–8 Digit Operator) / Kode Area`,
-    `- **Area Penerbitan Kartu (HLR)**: **${regionLabel}**`,
+    `#### 📍 Analisis Kota HLR (6–8 Digit Operator) / Sentral Area`,
+    `- **Kota Registrasi Awal (HLR)**: **${primaryCityLabel}**`,
+    provinceLabel ? `- **Provinsi**: **${provinceLabel}**` : '',
+    precisionBadgeLabel
+      ? `- **Tingkat Presisi**: \`${precisionBadgeLabel}\`${
+          matchedHlrPrefix ? ` (Prefix cocok: \`${matchedHlrPrefix}\`)` : ''
+        }`
+      : '',
     hlrNote ? `- **Basis Tabel HLR**: ${hlrNote}` : '',
-    geo ? `- **Koordinat Pusat Area HLR (OSM)**: \`${geo.lat}, ${geo.lon}\`` : '',
+    resolvedCoords
+      ? `- **Koordinat Pusat Kota**: \`${resolvedCoords.lat}, ${resolvedCoords.lon}\``
+      : '',
     '',
     `#### 🕵️ Free Caller-ID & Jejak Nama Publik di Internet (Marketplace / Medsos / Dokumen)`,
     ...mentionLines,
     '',
-    `> ℹ️ **Penting (HLR vs Lokasi Device Real-Time)**: Kode HLR mencatat **kota tempat kartu perdana diterbitkan pertama kali**, bukan GPS perangkat saat ini (jika kartu dibeli online dari kota lain atau pemilik merantau, kode HLR tetap mengikuti kota asal cetakan kartu). Posisi *device* real-time via menara BTS/SS7 dikunci oleh operator seluler sesuai **UU PDP No. 27/2022**.`,
+    `> ℹ️ **Penting (HLR vs Lokasi Device Real-Time)**: Kode HLR 6–8 digit memetakan **1 kota spesifik tempat kartu perdana diterbitkan**, bukan GPS perangkat saat ini (bila kartu dibeli online lintas kota atau pemilik merantau, kode HLR tetap mengikuti kota asal penerbitan kartu). Posisi *device* real-time via menara BTS/SS7 dikunci oleh operator seluler sesuai **UU PDP No. 27/2022**.`,
   ].filter(Boolean);
 
   return {

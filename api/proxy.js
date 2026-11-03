@@ -1,4 +1,5 @@
 import dns from 'node:dns';
+import https from 'node:https';
 import { enforceNodeApiSecurity } from '../lib/securityGate.js';
 
 try {
@@ -142,15 +143,187 @@ const ALLOWED_HOSTS = new Set([
   't.me',
   'linktr.ee',
   'users.roblox.com',
-  // Public Official CCTV JSON Catalog Endpoints (metadata only, zero video streaming)
+  // Public Official CCTV JSON Catalog Endpoints (metadata only)
+  'raw.githubusercontent.com',
   'balisatudata.baliprov.go.id',
   'atcs.denpasarkota.go.id',
-  'cctv.jogjakota.go.id',
   'api.data.gov.sg',
   'cwwp2.dot.ca.gov',
   'tie.digitraffic.fi',
   'webcams.nyctmc.org',
 ]);
+
+// Dedicated allowlist for live HLS (.m3u8 / .ts / .m4s / init.mp4) & JPEG CCTV feeds
+const ALLOWED_CCTV_STREAM_HOSTS = new Set([
+  'dki-jkt.balitower.co.id',
+  'pelindung.bandung.go.id',
+  'atcs.denpasarkota.go.id',
+  'transcode.baliprov.go.id',
+  'its.binamarga.pu.go.id',
+  'jmlive.jasamarga.com',
+  'pub2.hk-opt.com',
+  'cctv.citramarga.com',
+  'cctv.mms-corp.id',
+  'restreamer.kotabogor.go.id',
+  'restreamer1.kotabogor.go.id',
+  'restreamer2.kotabogor.go.id',
+  'restreamer3.kotabogor.go.id',
+  'restreamer4.kotabogor.go.id',
+  'restreamer5.kotabogor.go.id',
+  'restreamer6.kotabogor.go.id',
+  'eofficev2.bekasikota.go.id',
+  'atcs.tasikmalayakota.go.id',
+  'itscctv-dishub.bogorkab.go.id',
+  'cdn-globecast.akamaized.net',
+  'cwwp2.dot.ca.gov',
+  'weathercam.digitraffic.fi',
+  'webcams.nyctmc.org',
+]);
+
+const ALLOWED_CCTV_PORTS = new Set(['', '443', '7028', '3443', '8443', '8989']);
+
+const DENPASAR_ATCS_PUBLIC_HEADERS = {
+  'x-client-id': 'a194e6ae-d4dd-4b62-a0ac-388922f09303',
+  'x-client-secret': 'f430fde38a031fb657a2a7d6f84644a9aed767a4c22314d4b7c565648acc2396',
+};
+
+function getCctvRefererHeaders(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (host.endsWith('balitower.co.id')) {
+    return { Referer: 'https://jakcctv.jakarta.go.id/', Origin: 'https://jakcctv.jakarta.go.id' };
+  }
+  if (host.endsWith('jasamarga.com') || host.endsWith('binamarga.pu.go.id')) {
+    return { Referer: 'https://binamarga.pu.go.id/', Origin: 'https://binamarga.pu.go.id' };
+  }
+  if (host.endsWith('bandung.go.id')) {
+    return { Referer: 'https://pelindung.bandung.go.id/', Origin: 'https://pelindung.bandung.go.id' };
+  }
+  if (host.endsWith('kotabogor.go.id')) {
+    return { Referer: 'https://bsw.kotabogor.go.id/', Origin: 'https://bsw.kotabogor.go.id' };
+  }
+  if (host.endsWith('bekasikota.go.id')) {
+    return { Referer: 'https://bekasikota.go.id/', Origin: 'https://bekasikota.go.id' };
+  }
+  if (host.endsWith('denpasarkota.go.id')) {
+    return { Referer: 'https://atcs.denpasarkota.go.id/', Origin: 'https://atcs.denpasarkota.go.id' };
+  }
+  if (host.endsWith('baliprov.go.id')) {
+    return { Referer: 'https://balisatudata.baliprov.go.id/', Origin: 'https://balisatudata.baliprov.go.id' };
+  }
+  return {};
+}
+
+function isAllowedCctvStreamUrl(parsedUrl) {
+  if (!parsedUrl || parsedUrl.protocol !== 'https:') return false;
+  const host = parsedUrl.hostname.toLowerCase();
+  if (!ALLOWED_CCTV_STREAM_HOSTS.has(host)) return false;
+  if (!ALLOWED_CCTV_PORTS.has(parsedUrl.port || '')) return false;
+  const p = parsedUrl.pathname.toLowerCase();
+  return (
+    /\.(?:m3u8|ts|m4s|mp4|aac|jpe?g)$/i.test(p) ||
+    /^\/webcam\/[^/]+\/viewer$/i.test(p)
+  );
+}
+
+function rewriteHlsManifestForProxy(manifestText, baseManifestUrl) {
+  const toProxyHref = (rawRef) => {
+    const ref = String(rawRef || '').trim();
+    if (!ref || ref.startsWith('data:')) return ref;
+    try {
+      const resolved = new URL(ref, baseManifestUrl);
+      if (isAllowedCctvStreamUrl(resolved)) {
+        return `/api/proxy?cctvStream=1&url=${encodeURIComponent(resolved.toString())}`;
+      }
+      return resolved.toString();
+    } catch {
+      return ref;
+    }
+  };
+
+  return String(manifestText || '')
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith('#')) {
+        // Rewrite URI="..." inside #EXT-X-MAP (fMP4 init.mp4), #EXT-X-MEDIA, #EXT-X-KEY, etc.
+        return line.replace(/URI="([^"]+)"/gi, (_full, uriVal) => `URI="${toProxyHref(uriVal)}"`);
+      }
+      return toProxyHref(trimmed);
+    })
+    .join('\n');
+}
+
+function fetchPinnedHttpsBuffer(urlString, headers, timeoutMs = 5500, maxBytes = 4 * 1024 * 1024, redirectsLeft = 2) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(urlString);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+
+    const req = https.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'GET',
+        headers,
+        // Scoped strictly to pinned public Pemda/Dishub CCTV hosts whose intermediate CA chains are incomplete in OpenSSL
+        rejectUnauthorized: false,
+      },
+      (res) => {
+        const status = res.statusCode || 502;
+        const loc = res.headers.location;
+        if (status >= 300 && status < 400 && loc && redirectsLeft > 0) {
+          res.resume();
+          try {
+            const nextUrl = new URL(loc, parsed.toString());
+            if (!ALLOWED_CCTV_STREAM_HOSTS.has(nextUrl.hostname.toLowerCase())) {
+              reject(new Error('Redirect CCTV keluar dari allowlist host.'));
+              return;
+            }
+            fetchPinnedHttpsBuffer(nextUrl.toString(), headers, timeoutMs, maxBytes, redirectsLeft - 1)
+              .then(resolve)
+              .catch(reject);
+          } catch (e) {
+            reject(e);
+          }
+          return;
+        }
+
+        const chunks = [];
+        let total = 0;
+        res.on('data', (chunk) => {
+          total += chunk.length;
+          if (total > maxBytes) {
+            req.destroy(new Error('Segmen CCTV melebihi batas keamanan 4 MB.'));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => {
+          resolve({
+            status,
+            contentType: String(res.headers['content-type'] || ''),
+            buffer: Buffer.concat(chunks),
+            finalUrl: parsed.toString(),
+          });
+        });
+        res.on('error', reject);
+      }
+    );
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error('Timeout mengambil stream CCTV upstream.'));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [
   '/models',
@@ -289,6 +462,104 @@ async function fetchWithRetry(url, options, timeoutMs) {
 }
 
 export default async function handler(req, res) {
+  const isCctvStreamGet =
+    req.method === 'GET' && String(req.query?.cctvStream || '') === '1';
+
+  if (isCctvStreamGet) {
+    const mediaSec = enforceNodeApiSecurity(req, res, {
+      routeName: 'cctv-stream',
+      mode: 'media',
+      guestRatePerMin: 240,
+      vipRatePerMin: 360,
+    });
+    if (!mediaSec.allowed) return;
+
+    const rawStreamUrl =
+      typeof req.query?.url === 'string' ? req.query.url.trim() : '';
+    if (!rawStreamUrl || rawStreamUrl.length > 1024) {
+      return res.status(400).json({ ok: false, error: 'Parameter url CCTV tidak valid.' });
+    }
+
+    let parsedCctv;
+    try {
+      parsedCctv = new URL(rawStreamUrl);
+    } catch {
+      return res.status(400).json({ ok: false, error: 'Format URL CCTV tidak valid.' });
+    }
+
+    if (!isAllowedCctvStreamUrl(parsedCctv)) {
+      return res.status(403).json({
+        ok: false,
+        error: `Host/path stream CCTV tidak termasuk daftar publik resmi: ${parsedCctv.hostname}`,
+      });
+    }
+
+    try {
+      const upstreamCctv = await fetchPinnedHttpsBuffer(
+        parsedCctv.toString(),
+        {
+          Accept:
+            'application/vnd.apple.mpegurl, application/x-mpegurl, video/*, image/*, */*',
+          'User-Agent': req.headers?.['user-agent'] || DEFAULT_UA,
+          ...getCctvRefererHeaders(parsedCctv.hostname),
+        },
+        5500,
+        4 * 1024 * 1024
+      );
+
+      if (upstreamCctv.status < 200 || upstreamCctv.status >= 300 || upstreamCctv.buffer.byteLength === 0) {
+        return res.status(502).json({
+          ok: false,
+          status: upstreamCctv.status,
+          error: 'Sumber kamera CCTV sedang tidak merespons segmen aktif.',
+        });
+      }
+
+      const pathLower = parsedCctv.pathname.toLowerCase();
+      const ctLower = upstreamCctv.contentType.toLowerCase();
+      const isManifest =
+        pathLower.endsWith('.m3u8') ||
+        ctLower.includes('mpegurl') ||
+        upstreamCctv.buffer.subarray(0, 16).toString('utf8').startsWith('#EXTM3U');
+
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+
+      if (isManifest) {
+        const rawText = upstreamCctv.buffer.toString('utf8');
+        if (!rawText.includes('#EXTM3U')) {
+          return res.status(502).json({
+            ok: false,
+            error: 'Respons server kamera bukan manifest HLS (#EXTM3U) aktif.',
+          });
+        }
+        const rewritten = rewriteHlsManifestForProxy(rawText, upstreamCctv.finalUrl);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        return res.status(200).send(rewritten);
+      }
+
+      const resolvedMime = pathLower.endsWith('.ts')
+        ? 'video/mp2t'
+        : pathLower.endsWith('.m4s')
+          ? 'video/iso.segment'
+          : pathLower.endsWith('.mp4')
+            ? 'video/mp4'
+            : pathLower.endsWith('.aac')
+              ? 'audio/aac'
+              : ctLower.startsWith('image/')
+                ? ctLower.split(';')[0]
+                : upstreamCctv.contentType || 'application/octet-stream';
+
+      res.setHeader('Content-Type', resolvedMime);
+      return res.status(200).send(upstreamCctv.buffer);
+    } catch {
+      return res.status(504).json({
+        ok: false,
+        error: 'Timeout / gagal menjangkau stream CCTV pemerintah/publik.',
+      });
+    }
+  }
+
   const isProbeGet = req.method === 'GET' && String(req.query?.probe || '') === '1';
 
   let parsedBodyPreview = req.body;
@@ -586,12 +857,27 @@ export default async function handler(req, res) {
   const isApiNinjas = parsedUrl.hostname === 'api.api-ninjas.com';
   const isApiNinjasRandomImg =
     isApiNinjas && parsedUrl.pathname === '/v1/randomimage';
+  const isRawGithub = parsedUrl.hostname === 'raw.githubusercontent.com';
+  const isDenpasarAtcs = parsedUrl.hostname === 'atcs.denpasarkota.go.id';
 
   // Confused-deputy path pinning: API Ninjas is strictly restricted to /v1/randomimage
   if (isApiNinjas && !isApiNinjasRandomImg) {
     return res.status(403).json({
       ok: false,
       error: 'Endpoint API Ninjas selain /v1/randomimage tidak diizinkan.',
+    });
+  }
+
+  // Confused-deputy path pinning: raw.githubusercontent.com is strictly restricted to verified public CCTV catalogs
+  if (
+    isRawGithub &&
+    !/^\/(?:hozin-king\/cctv-id-scraper|hendraptaksu\/cctv-denpasar)\//i.test(
+      parsedUrl.pathname
+    )
+  ) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Path raw.githubusercontent.com tidak termasuk katalog CCTV publik yang diizinkan.',
     });
   }
 
@@ -627,11 +913,40 @@ export default async function handler(req, res) {
       ? 'NodataGPT-HyperLocalWeather/3.1 (https://www.nodatagpt.web.id)'
       : req.headers?.['user-agent'] || DEFAULT_UA,
     ...sanitizedExtraHeaders,
+    ...getCctvRefererHeaders(parsedUrl.hostname),
+    ...(isDenpasarAtcs ? DENPASAR_ATCS_PUBLIC_HEADERS : {}),
     ...(isPximg ? { Referer: 'https://www.pixiv.net/' } : {}),
     ...(isApiNinjasRandomImg && envNinjasKey ? { 'X-Api-Key': envNinjasKey } : {}),
   };
 
   const startedAt = Date.now();
+
+  if (isDenpasarAtcs && method === 'GET' && !probeOnly) {
+    try {
+      const denpasarResp = await fetchPinnedHttpsBuffer(
+        parsedUrl.toString(),
+        forwardHeaders,
+        Math.min(timeoutMs, 10000),
+        2 * 1024 * 1024
+      );
+      return res.status(200).json({
+        ok: denpasarResp.status >= 200 && denpasarResp.status < 300,
+        status: denpasarResp.status,
+        kind: 'text',
+        contentType: denpasarResp.contentType || 'application/json',
+        latencyMs: Date.now() - startedAt,
+        finalUrl: denpasarResp.finalUrl,
+        body: denpasarResp.buffer.toString('utf8'),
+      });
+    } catch {
+      return res.status(504).json({
+        ok: false,
+        status: 504,
+        latencyMs: Date.now() - startedAt,
+        error: 'Gagal mengambil katalog ATCS Kota Denpasar.',
+      });
+    }
+  }
 
   try {
     let upstream = await fetchWithRetry(

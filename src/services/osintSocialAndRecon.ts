@@ -438,8 +438,12 @@ export async function analyzeWhatsAppOsint(
 
     if (hlr && hlr.accuracyTier === 'high') {
       actionLinks.unshift({
-        label: `📍 Buka Wilayah HLR (${hlr.mapQuery.replace(', Indonesia', '')}) di Google Maps`,
-        url: buildGoogleMapsSearchUrl(hlr.mapQuery),
+        label: `📍 Buka ${hlr.city} di Google Maps`,
+        url: buildGoogleMapsSearchUrl(
+          hlr.coordinates
+            ? `${hlr.coordinates.lat},${hlr.coordinates.lon}`
+            : hlr.mapQuery
+        ),
         kind: 'maps',
       });
     }
@@ -461,7 +465,9 @@ export async function analyzeWhatsAppOsint(
       `| :--- | :--- |`,
       `| **Nomor Target (E.164)** | \`+${e164}\` (${local08}) |`,
       `| **Tautan Direct WA** | \`https://wa.me/${e164}\` |`,
-      hlr ? `| **Wilayah HLR Kartu** | **${hlr.region}** |` : '',
+      hlr
+        ? `| **Kota Registrasi Awal (HLR)** | **${hlr.city}** — ${hlr.province} (\`${hlr.precisionLabel}\`) |`
+        : '',
       prefilledText
         ? `| **Pesan Otomatis (\`?text=\`)** | _"${prefilledText.slice(0, 160)}"_ |`
         : '',

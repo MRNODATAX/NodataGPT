@@ -118,7 +118,9 @@ export function CctvCommandCenterModal({
     cameras[0];
 
   const quadCameras: CctvCameraItem[] = (() => {
-    const base = filteredCameras.length > 0 ? filteredCameras : cameras;
+    const rawBase = filteredCameras.length > 0 ? filteredCameras : cameras;
+    const directOnly = rawBase.filter((c) => c.streamType !== 'portal');
+    const base = directOnly.length >= 2 ? directOnly : rawBase;
     const startIdx = Math.max(
       0,
       base.findIndex((c) => c.id === activeCamera?.id)
@@ -131,7 +133,9 @@ export function CctvCommandCenterModal({
   })();
 
   const handleJumpRandom = () => {
-    const pool = filteredCameras.length > 0 ? filteredCameras : cameras;
+    const rawPool = filteredCameras.length > 0 ? filteredCameras : cameras;
+    const directPool = rawPool.filter((c) => c.streamType !== 'portal');
+    const pool = directPool.length > 0 ? directPool : rawPool;
     if (pool.length === 0) return;
     const picked = pool[Math.floor(Math.random() * pool.length)];
     setSelectedCamId(picked.id);
@@ -312,7 +316,7 @@ export function CctvCommandCenterModal({
                   ))}
                 </div>
               ) : (
-                <LiveCctvPlayerCard key={activeCamera.id} camera={activeCamera} />
+                <LiveCctvPlayerCard camera={activeCamera} />
               )
             ) : null}
           </div>
@@ -364,6 +368,9 @@ export function CctvCommandCenterModal({
                           <MapPin className="h-3 w-3 shrink-0 text-[#67E8F9]" />
                           <span>
                             {cam.city}, {cam.provinceOrCountry}
+                            {cam.angles && cam.angles.length > 1
+                              ? ` · ${cam.angles.length} Sudut`
+                              : ''}
                           </span>
                         </p>
                       </div>

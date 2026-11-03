@@ -1,5 +1,6 @@
 import jsQR from 'jsqr';
 import type { ToolActionLink } from '../types/chat';
+import { lookupIndonesianMobileHlr } from './osintIndonesiaData';
 
 export interface OsintExecutionOutput {
   content: string;
@@ -7,14 +8,128 @@ export interface OsintExecutionOutput {
   actionLinks?: ToolActionLink[];
 }
 
-function getShieldedFetch(): typeof fetch {
+export function getShieldedFetch(): typeof fetch {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
     return window.fetch.bind(window);
   }
   return fetch;
 }
 
-async function fetchJsonSafe(
+export async function fetchProxyTextSafe(
+  targetUrl: string,
+  options?: {
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  }
+): Promise<{ ok: boolean; status?: number; body: string; finalUrl?: string } | null> {
+  const fx = getShieldedFetch();
+  try {
+    const res = await fx('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        targetUrl,
+        method: 'GET',
+        headers: options?.headers || {},
+        timeoutMs: options?.timeoutMs ?? 9000,
+      }),
+      signal: options?.signal,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      ok?: boolean;
+      status?: number;
+      body?: string;
+      finalUrl?: string;
+    };
+    if (typeof json.body !== 'string') return null;
+    return {
+      ok: Boolean(json.ok),
+      status: json.status,
+      body: json.body,
+      finalUrl: json.finalUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function decodeHtmlEntities(raw: string): string {
+  return raw
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+    })
+    .replace(/&#(\d+);/g, (_, dec) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+    });
+}
+
+export interface PublicWebMention {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export async function searchPublicWebSnippets(
+  query: string,
+  maxItems = 5,
+  signal?: AbortSignal
+): Promise<PublicWebMention[]> {
+  const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const res = await fetchProxyTextSafe(ddgUrl, {
+    headers: {
+      'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8',
+    },
+    timeoutMs: 7500,
+    signal,
+  });
+  if (!res?.body) return [];
+
+  const results: PublicWebMention[] = [];
+  const blockRegex =
+    /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]{0,600}?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>)/gi;
+
+  let m: RegExpExecArray | null;
+  while ((m = blockRegex.exec(res.body)) !== null && results.length < maxItems) {
+    let rawHref = decodeHtmlEntities(m[1] || '').trim();
+    const uddgMatch = rawHref.match(/[?&]uddg=([^&]+)/);
+    if (uddgMatch) {
+      try {
+        rawHref = decodeURIComponent(uddgMatch[1]);
+      } catch {
+        // keep rawHref
+      }
+    }
+    const cleanTitle = decodeHtmlEntities((m[2] || '').replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim();
+    const cleanSnippet = decodeHtmlEntities(
+      ((m[3] || m[4] || '') as string).replace(/<[^>]+>/g, ' ')
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanTitle && /^https?:\/\//i.test(rawHref)) {
+      results.push({
+        title: cleanTitle.slice(0, 110),
+        url: rawHref,
+        snippet: cleanSnippet.slice(0, 180),
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function fetchJsonSafe(
   targetUrl: string,
   options?: {
     headers?: Record<string, string>;
@@ -85,7 +200,7 @@ export function buildGoogleMapsSearchUrl(query: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query.trim())}`;
 }
 
-async function geocodePlaceIndonesia(
+export async function geocodePlaceIndonesia(
   query: string,
   signal?: AbortSignal
 ): Promise<{ displayName: string; lat: string; lon: string } | null> {
@@ -1311,7 +1426,7 @@ interface DnsAnswerItem {
   data?: string;
 }
 
-async function queryDnsOverHttps(
+export async function queryDnsOverHttps(
   name: string,
   type: 'MX' | 'TXT' | 'A' | 'NS',
   signal?: AbortSignal
@@ -1948,83 +2063,6 @@ const INDONESIAN_PSTN_AREA_CODES: Record<string, string> = {
   '0986': 'Manokwari, Papua Barat',
 };
 
-function estimateIndonesianMobileHlrRegion(local08: string): {
-  region: string;
-  mapCity: string;
-  confidence: string;
-} {
-  const p4 = local08.slice(0, 4);
-  const fifth = local08[4] || '';
-
-  // Telkomsel / Indosat / XL classic regional HLR digit band allocation (5th/6th digit)
-  if (p4 === '0851') {
-    return {
-      region: 'Alokasi Nasional Digital (by.U / Telkomsel Nasional)',
-      mapCity: 'Jakarta, Indonesia',
-      confidence: 'Nasional (Registrasi Online / Digital)',
-    };
-  }
-
-  switch (fifth) {
-    case '1':
-    case '0':
-      return {
-        region: 'Jabodetabek (DKI Jakarta, Bogor, Depok, Tangerang, Bekasi) & Banten',
-        mapCity: 'Jakarta, Indonesia',
-        confidence: 'Estimasi Blok HLR Regional Barat-Pusat',
-      };
-    case '2':
-      return {
-        region: 'Jawa Barat (Bandung, Priangan, Cirebon & Sekitarnya)',
-        mapCity: 'Bandung, Jawa Barat',
-        confidence: 'Estimasi Blok HLR Regional Jawa Barat',
-      };
-    case '3':
-    case '4':
-      return {
-        region: 'Jawa Tengah & DI Yogyakarta (Semarang, Solo, Jogja & Sekitarnya)',
-        mapCity: 'Semarang, Jawa Tengah',
-        confidence: 'Estimasi Blok HLR Regional Jateng-DIY',
-      };
-    case '5':
-      return {
-        region: 'Jawa Timur (Surabaya, Malang, Kediri & Sekitarnya)',
-        mapCity: 'Surabaya, Jawa Timur',
-        confidence: 'Estimasi Blok HLR Regional Jawa Timur',
-      };
-    case '6':
-      return {
-        region: 'Sumatera Bagian Utara & Tengah (Medan, Pekanbaru, Batam, Padang)',
-        mapCity: 'Medan, Sumatera Utara',
-        confidence: 'Estimasi Blok HLR Regional Sumatera Utara-Tengah',
-      };
-    case '7':
-      return {
-        region: 'Sumatera Bagian Selatan (Palembang, Lampung, Jambi, Bengkulu)',
-        mapCity: 'Palembang, Sumatera Selatan',
-        confidence: 'Estimasi Blok HLR Regional Sumbagsel',
-      };
-    case '8':
-      return {
-        region: 'Bali, Nusa Tenggara & Kalimantan',
-        mapCity: 'Denpasar, Bali',
-        confidence: 'Estimasi Blok HLR Regional Bali-Nusra / Kalimantan',
-      };
-    case '9':
-      return {
-        region: 'Sulawesi, Maluku & Tanah Papua (Indonesia Timur)',
-        mapCity: 'Makassar, Sulawesi Selatan',
-        confidence: 'Estimasi Blok HLR Regional Kawasan Timur Indonesia',
-      };
-    default:
-      return {
-        region: 'Indonesia (Alokasi Seluler Nasional)',
-        mapCity: 'Indonesia',
-        confidence: 'Alokasi Nasional',
-      };
-  }
-}
-
 export async function analyzePhoneInput(
   rawInput: string,
   signal?: AbortSignal
@@ -2035,7 +2073,7 @@ export async function analyzePhoneInput(
 
   if (digitsOnly.length < 7 || digitsOnly.length > 16) {
     throw new Error(
-      'Nomor telepon tidak valid (panjang harus 7–16 digit). Contoh: `/ceknomor 081234567890` atau `/ceknomor 0215551234`.'
+      'Nomor telepon tidak valid (panjang harus 7–16 digit). Contoh: `/ceknomor 081280123456` atau `/ceknomor 0215551234`.'
     );
   }
 
@@ -2077,18 +2115,21 @@ export async function analyzePhoneInput(
   let regionLabel = countryInfo.country;
   let mapSearchQuery = countryInfo.mapQuery;
   let hlrNote = '';
+  let isNationalNonCityBlock = false;
 
   if (isIndonesian) {
     if (localIdNumber.startsWith('0800')) {
       lineType = 'Bebas Pulsa (Toll-Free 0800)';
       operatorLabel = 'Layanan Korporat / Call Center Bebas Pulsa';
       regionLabel = 'Nasional (Indonesia)';
-      mapSearchQuery = 'Jakarta, Indonesia';
+      mapSearchQuery = 'Indonesia';
+      isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('1500') || localIdNumber.startsWith('01500')) {
       lineType = 'Contact Center Nasional (1500xxx)';
       operatorLabel = 'Layanan Pelanggan Korporasi';
       regionLabel = 'Nasional (Indonesia)';
-      mapSearchQuery = 'Jakarta, Indonesia';
+      mapSearchQuery = 'Indonesia';
+      isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('08')) {
       lineType = 'Seluler / Mobile (GSM/LTE/5G)';
       const p4 = localIdNumber.slice(0, 4);
@@ -2100,10 +2141,11 @@ export async function analyzePhoneInput(
       } else {
         operatorLabel = `Operator Seluler Indonesia (Prefix ${p4})`;
       }
-      const hlr = estimateIndonesianMobileHlrRegion(localIdNumber);
+      const hlr = lookupIndonesianMobileHlr(localIdNumber);
       regionLabel = hlr.region;
-      mapSearchQuery = hlr.mapCity;
-      hlrNote = hlr.confidence;
+      mapSearchQuery = hlr.mapQuery;
+      hlrNote = hlr.basisNote;
+      isNationalNonCityBlock = hlr.accuracyTier === 'national';
     } else {
       // PSTN Fixed Line (021, 022, 0274, etc.)
       lineType = 'Telepon Rumah / Kantor Tetap (PSTN Fixed-Line)';
@@ -2117,7 +2159,7 @@ export async function analyzePhoneInput(
         brandLabel = `Kode Wilayah PSTN ${matchedCode}`;
         regionLabel = areaMatch;
         mapSearchQuery = `${areaMatch}, Indonesia`;
-        hlrNote = `Kode Area Geografis Tetap (${matchedCode})`;
+        hlrNote = `Kode Area Geografis Tetap (${matchedCode}) — akurat sesuai kota sambungan kabel telepon rumah/kantor.`;
       } else {
         regionLabel = `Wilayah Telepon Indonesia (${p4})`;
         mapSearchQuery = 'Indonesia';
@@ -2125,9 +2167,17 @@ export async function analyzePhoneInput(
     }
   }
 
-  const geo = isIndonesian
-    ? await geocodePlaceIndonesia(mapSearchQuery, signal)
-    : null;
+  // Parallel: Geocode HLR/PSTN area + Hunt Free Public Caller-ID Mentions (GetContact-style Web Footprint!)
+  const callerIdDorkQuery = isIndonesian
+    ? `"${localIdNumber}" OR "${e164Digits}" OR "+${e164Digits}"`
+    : `"+${e164Digits}" OR "${e164Digits}"`;
+
+  const [geo, publicMentions] = await Promise.all([
+    isIndonesian && !isNationalNonCityBlock
+      ? geocodePlaceIndonesia(mapSearchQuery, signal)
+      : Promise.resolve(null),
+    searchPublicWebSnippets(callerIdDorkQuery, 5, signal),
+  ]);
 
   const formattedInternational = isIndonesian
     ? `+62 ${localIdNumber.slice(1, 4)}-${localIdNumber.slice(4, 8)}-${localIdNumber.slice(8)}`
@@ -2135,28 +2185,54 @@ export async function analyzePhoneInput(
 
   const actionLinks: ToolActionLink[] = [
     {
-      label: `📍 Buka Wilayah (${
-        mapSearchQuery.replace(', Indonesia', '').slice(0, 26)
-      }) di Google Maps`,
+      label: isNationalNonCityBlock
+        ? '📍 Buka Peta Indonesia di Google Maps'
+        : `📍 Buka Wilayah HLR (${mapSearchQuery.replace(', Indonesia', '').slice(0, 24)}) di Google Maps`,
       url: buildGoogleMapsSearchUrl(
         geo ? `${geo.lat},${geo.lon}` : mapSearchQuery
       ),
       kind: 'maps',
     },
     {
-      label: '💬 Cek Akun WhatsApp (wa.me)',
+      label: '💬 Cek Profil & Nama Bisnis WA (wa.me)',
       url: `https://wa.me/${e164Digits}`,
       kind: 'whatsapp',
     },
     {
-      label: '🛡️ Cek Riwayat Penipuan E-Wallet/Rekening (Komdigi)',
+      label: '🔍 Cek Nama Caller-ID (Truecaller Web)',
+      url: `https://www.truecaller.com/search/${
+        isIndonesian ? 'id' : 'global'
+      }/${encodeURIComponent(isIndonesian ? localIdNumber : `+${e164Digits}`)}`,
+      kind: 'external',
+    },
+    {
+      label: '📞 Cek Laporan Spam Telepon (Tellows)',
+      url: `https://id.tellows.com/num/${encodeURIComponent(
+        isIndonesian ? localIdNumber : `+${e164Digits}`
+      )}`,
+      kind: 'verify',
+    },
+    {
+      label: '🛡️ CekRekening / E-Wallet Penipu (Komdigi)',
       url: 'https://cekrekening.id/',
       kind: 'verify',
     },
   ];
 
+  const mentionLines =
+    publicMentions.length > 0
+      ? publicMentions.map(
+          (item, i) =>
+            `${i + 1}. **[${item.title}](${item.url})**\n   _${item.snippet || 'Tercantum di halaman publik.'}_`
+        )
+      : [
+          `- Tidak ditemukan eksposur publik terbuka di mesin pencari untuk nomor \`${
+            localIdNumber || `+${e164Digits}`
+          }\` (pertanda pemilik menjaga privasi nomor di web publik). Gunakan tombol **Cek Profil WA** atau **Truecaller Web** di bawah untuk pengecekan nama kontak langsung.`,
+        ];
+
   const lines = [
-    `### 📱 Hasil OSINT Nomor Telepon, Operator & Area HLR`,
+    `### 📱 Hasil Deep OSINT Nomor Telepon, HLR Multi-Digit & Free Caller-ID`,
     '',
     `| Parameter | Detail Teridentifikasi |`,
     `| :--- | :--- |`,
@@ -2167,22 +2243,21 @@ export async function analyzePhoneInput(
     `| **Operator Telekomunikasi** | **${operatorLabel}** |`,
     brandLabel !== '-' ? `| **Produk / Kartu / Kode Area** | ${brandLabel} |` : '',
     networkLabel !== '-' ? `| **Teknologi Jaringan** | ${networkLabel} |` : '',
-    `| ** Panjang Digit** | ${digitsOnly.length} digit (${
+    `| **Validitas Panjang Digit** | ${digitsOnly.length} digit (${
       digitsOnly.length >= 10 && digitsOnly.length <= 14
-        ? '✅ Panjang wajar standar seluler/PSTN'
-        : '⚠️ Panjang tidak lazim — periksa ulang digit'
+        ? '✅ Standar valid seluler/PSTN'
+        : '⚠️ Panjang tidak lazim — periksa kembali digit'
     }) |`,
     '',
-    `#### 📍 Analisis Wilayah Registrasi / Kode Area`,
-    `- **Wilayah Teridentifikasi**: **${regionLabel}**`,
-    hlrNote ? `- **Basis Identifikasi**: ${hlrNote}` : '',
-    geo ? `- **Koordinat Pusat Wilayah (OSM)**: \`${geo.lat}, ${geo.lon}\`` : '',
+    `#### 📍 Analisis Wilayah HLR (6–8 Digit Operator) / Kode Area`,
+    `- **Area Penerbitan Kartu (HLR)**: **${regionLabel}**`,
+    hlrNote ? `- **Basis Tabel HLR**: ${hlrNote}` : '',
+    geo ? `- **Koordinat Pusat Area HLR (OSM)**: \`${geo.lat}, ${geo.lon}\`` : '',
     '',
-    `#### 🛡️ Panduan Verifikasi & Anti-Penipuan`,
-    `- **Cek Profil WhatsApp**: Klik tombol **Cek Akun WhatsApp** di bawah untuk melihat apakah nomor aktif di WA beserta foto profil/nama bisnis publiknya.`,
-    `- **Verifikasi E-Wallet (DANA / OVO / GoPay / ShopeePay)**: Sebelum transfer, pastikan nama inisial akun e-wallet tujuan cocok dan periksa di portal resmi **CekRekening Komdigi**.`,
+    `#### 🕵️ Free Caller-ID & Jejak Nama Publik di Internet (Marketplace / Medsos / Dokumen)`,
+    ...mentionLines,
     '',
-    `> ℹ️ **Catatan Akurasi & Privasi (UU PDP No. 27/2022)**: Untuk nomor seluler \`08xx\`, blok HLR menunjukkan **wilayah distribusi/registrasi kartu perdana awal**, bukan pelacakan menara BTS/GPS real-time pemilik saat ini (karena kartu SIM dapat dibawa bepergian ke seluruh Indonesia).`,
+    `> ℹ️ **Penting (HLR vs Lokasi Device Real-Time)**: Kode HLR mencatat **kota tempat kartu perdana diterbitkan pertama kali**, bukan GPS perangkat saat ini (jika kartu dibeli online dari kota lain atau pemilik merantau, kode HLR tetap mengikuti kota asal cetakan kartu). Posisi *device* real-time via menara BTS/SS7 dikunci oleh operator seluler sesuai **UU PDP No. 27/2022**.`,
   ].filter(Boolean);
 
   return {

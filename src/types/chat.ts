@@ -32,6 +32,7 @@ export interface PreparedChatAttachment {
   imageThumbDataUrl?: string;
   imageMimeType?: string;
   imageMeta?: string;
+  rawExifToken?: string;
   pendingPublicUrlPromise?: Promise<string | undefined>;
 }
 

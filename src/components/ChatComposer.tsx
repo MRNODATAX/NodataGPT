@@ -35,6 +35,7 @@ import {
   isImageAttachmentCandidate,
   uploadCompressedImageToPublicUrl,
 } from '../utils/imageAttachment';
+import { extractExifTokenFromFile } from '../services/osintSocialAndRecon';
 
 interface ChatComposerProps {
   value: string;
@@ -238,7 +239,10 @@ export function ChatComposer({
       setIsCompressingFile(true);
 
       try {
-        const compressed = await compressImageFileForChat(file);
+        const [rawExifToken, compressed] = await Promise.all([
+          extractExifTokenFromFile(file).catch(() => undefined),
+          compressImageFileForChat(file),
+        ]);
         if (uploadCtrl.signal.aborted) return;
 
         const uploadPromise = uploadCompressedImageToPublicUrl(
@@ -264,6 +268,7 @@ export function ChatComposer({
           imageThumbDataUrl: compressed.thumbDataUrl,
           imageMimeType: compressed.mimeType,
           imageMeta: compressed.metaLabel,
+          rawExifToken,
           pendingPublicUrlPromise: uploadPromise,
         });
 

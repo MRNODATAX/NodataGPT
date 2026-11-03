@@ -2828,6 +2828,7 @@ export interface VisionImageAttachmentInput {
   dataUrl?: string;
   mimeType?: string;
   name?: string;
+  rawExifToken?: string;
 }
 
 const KEYLESS_VISION_MODELS: Array<{
@@ -3320,6 +3321,19 @@ export async function sendMultiModelChat({
     ) {
       webToolCommand.arg = attachmentImage.dataUrl || attachmentImage.publicUrl || '';
     }
+    if (
+      webToolCommand.toolId === 'exif' &&
+      !webToolCommand.arg.trim() &&
+      (attachmentImage?.rawExifToken ||
+        attachmentImage?.dataUrl ||
+        attachmentImage?.publicUrl)
+    ) {
+      webToolCommand.arg =
+        attachmentImage.rawExifToken ||
+        attachmentImage.dataUrl ||
+        attachmentImage.publicUrl ||
+        '';
+    }
     const toolRes = await executeWebToolCommand({
       command: webToolCommand,
       signal,
@@ -3383,6 +3397,46 @@ export async function sendMultiModelChat({
       };
     } catch {
       // If QR barcode couldn't be decoded cleanly, continue to Vision AI seamlessly
+    }
+  }
+
+  // 0.3 Natural EXIF / Camera GPS Photo Inspection in Composer (e.g. user attaches original photo + "cek exif foto ini")
+  if (
+    !waifuProfile &&
+    (attachmentImage?.rawExifToken ||
+      attachmentImage?.dataUrl ||
+      attachmentImage?.publicUrl) &&
+    /\b(exif|koordinat\s*gps|metadata\s*foto|lokasi\s*gps\s*foto)\b/i.test(prompt)
+  ) {
+    try {
+      const exifToolRes = await executeWebToolCommand({
+        command: {
+          toolId: 'exif',
+          arg:
+            attachmentImage.rawExifToken ||
+            attachmentImage.dataUrl ||
+            attachmentImage.publicUrl ||
+            '',
+        },
+        signal,
+        onStatus: (info) => {
+          onStatus?.({
+            modelName: `${info.toolName} · ${info.mirrorName}`,
+            attempt: info.attempt,
+            isFallback: info.isFallback,
+          });
+        },
+      });
+      return {
+        content: exifToolRes.content,
+        answeredById: exifToolRes.answeredById,
+        answeredByName: exifToolRes.answeredByName,
+        usedFallback: exifToolRes.usedFallback,
+        attemptsCount: 1,
+        actionLinks: exifToolRes.actionLinks,
+      };
+    } catch {
+      // Fallback to Vision AI if EXIF handler errors
     }
   }
 

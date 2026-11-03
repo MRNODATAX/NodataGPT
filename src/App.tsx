@@ -743,6 +743,7 @@ export function App() {
         dataUrl?: string;
         mimeType?: string;
         name?: string;
+        rawExifToken?: string;
         pendingPublicUrlPromise?: Promise<string | undefined>;
       };
       asImage?: boolean;
@@ -769,6 +770,7 @@ export function App() {
             dataUrl: attachmentImage.dataUrl,
             mimeType: attachmentImage.mimeType,
             name: attachmentImage.name,
+            rawExifToken: attachmentImage.rawExifToken,
           }
         : undefined;
 
@@ -1078,7 +1080,7 @@ export function App() {
       }
       if (checkSendCooldownRemainingMs() > 0) return;
 
-      const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
+      const isWebTool = Boolean(detectWebToolCommand(trimmed));
       const implicitCasualWaifu =
         !activeConversation && sidebarMode === 'waifu' && !isWebTool
           ? buildCasualAyangSnapshot(activeWaifu)
@@ -1197,6 +1199,7 @@ export function App() {
               dataUrl: attachment?.imageDataUrl,
               mimeType: attachment?.imageMimeType,
               name: attachment?.name,
+              rawExifToken: attachment?.rawExifToken,
               pendingPublicUrlPromise: attachment?.pendingPublicUrlPromise,
             }
           : undefined,
@@ -1220,7 +1223,7 @@ export function App() {
   );
 
   const handleRunDirectCommand = useCallback(
-    async (commandText: string) => {
+    async (commandText: string, displayLabel?: string) => {
       const clean = commandText.trim();
       if (!clean || isLoading) return;
       if (isGateLockedForSettings(getAccessGateState(), settings)) {
@@ -1229,13 +1232,14 @@ export function App() {
       }
       if (checkSendCooldownRemainingMs() > 0) return;
 
+      const visibleUserText = (displayLabel || clean).trim();
       const isWebTool = Boolean(detectWebToolCommand(clean));
       const useImage = !isWebTool && parseImagePromptIntent(clean).isImageIntent;
 
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
-        content: clean,
+        content: visibleUserText,
         createdAt: Date.now(),
         isImageRequest: useImage,
       };
@@ -1254,7 +1258,7 @@ export function App() {
       if (!chatId) {
         const newChat: Conversation = {
           id: generateId(),
-          title: deriveChatTitle(clean),
+          title: deriveChatTitle(visibleUserText),
           createdAt: Date.now(),
           updatedAt: Date.now(),
           messages: [userMsg, assistantPlaceholder],
@@ -1780,7 +1784,7 @@ export function App() {
               type="button"
               onClick={() => setToolsStudioOpen(true)}
               aria-label="Buka Web Tools Studio"
-              title="Web Tools Studio (Downloader, Video AI, Cuaca, Sholat, Kurs, Emas, Crypto & Saham)"
+              title="Web Tools & OSINT Studio (OSINT WA/TikTok/IG/Nomor/QRIS/EXIF, Downloader, Video AI, Cuaca & Finansial)"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/[0.08] px-3 text-xs font-semibold text-[#E2E8F0] transition-colors hover:border-[#22D3EE]/60 hover:bg-[#22D3EE]/16 hover:text-white sm:h-10 sm:px-3.5 cursor-pointer"
             >
               <ToolsIcon className="h-4 w-4 shrink-0 text-[#22D3EE]" />

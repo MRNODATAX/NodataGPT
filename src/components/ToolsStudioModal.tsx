@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Aperture,
   ArrowLeft,
+  Camera,
   Check,
   ClipboardPaste,
   CloudSun,
+  CreditCard,
   Download,
+  FileText,
   Film,
+  Globe,
   ImagePlus,
   Loader2,
   LocateFixed,
   Mail,
+  MessageCircle,
   PhoneCall,
   Play,
   QrCode,
+  Radar,
   ScanSearch,
   Search,
   Sparkles,
   Terminal,
+  UserCheck,
+  Video,
   Wand2,
   X,
 } from 'lucide-react';
@@ -28,12 +37,17 @@ import {
   uploadImageToTempPublicUrl,
 } from '../services/webTools';
 import { decodeQrFromFile } from '../services/osintInspector';
+import {
+  EXIF_PARSED_PREFIX,
+  WA_TXT_EXPORT_PREFIX,
+  extractExifTokenFromFile,
+} from '../services/osintSocialAndRecon';
 import { ToolsIcon } from './ToolsIcon';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRunCommand: (commandText: string) => void;
+  onRunCommand: (commandText: string, displayLabel?: string) => void;
   onInsertCommand: (commandText: string) => void;
 }
 
@@ -44,7 +58,7 @@ const CATEGORY_TABS: Array<{
   { id: 'all', label: `Semua (${WEB_TOOLS_CATALOG.length})` },
   {
     id: 'OSINT',
-    label: `OSINT · QRIS, Email & Nomor (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'OSINT').length})`,
+    label: `OSINT · Lacak & Forensik (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'OSINT').length})`,
   },
   {
     id: 'A',
@@ -83,11 +97,13 @@ export function ToolsStudioModal({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
+  const [uploadedPayloadLabel, setUploadedPayloadLabel] = useState('');
   const [locatingGps, setLocatingGps] = useState(false);
   const [gpsNotice, setGpsNotice] = useState('');
   const [pastedFeedback, setPastedFeedback] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textFileInputRef = useRef<HTMLInputElement | null>(null);
   const toolInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -98,6 +114,7 @@ export function ToolsStudioModal({
       setUploadingPhoto(false);
       setUploadError('');
       setUploadedPreviewUrl('');
+      setUploadedPayloadLabel('');
       setPastedFeedback(false);
       return;
     }
@@ -151,6 +168,7 @@ export function ToolsStudioModal({
     setCountValue(tool.countSelector?.defaultCount || 8);
     setUploadError('');
     setUploadedPreviewUrl('');
+    setUploadedPayloadLabel('');
     setLocatingGps(false);
     setGpsNotice('');
     setPastedFeedback(false);
@@ -212,7 +230,22 @@ export function ToolsStudioModal({
     setUploadingPhoto(true);
     setUploadError('');
     try {
-      // Client-side private QRIS barcode decode (0 external upload needed when QR is readable!)
+      // 1. Raw Binary EXIF + GPS Reader (100% client-side, ZERO canvas stripping!)
+      if (selectedTool?.id === 'exif') {
+        const exifToken = await extractExifTokenFromFile(file);
+        const readerUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+        setInputValue(exifToken);
+        setUploadedPreviewUrl(readerUrl);
+        setUploadedPayloadLabel(`[Scan Foto Asli: ${file.name}]`);
+        return;
+      }
+
+      // 2. Client-side private QRIS barcode decode (0 external upload needed when QR is readable!)
       if (selectedTool?.id === 'qris') {
         const localDecoded = await decodeQrFromFile(file);
         if (localDecoded) {
@@ -224,6 +257,7 @@ export function ToolsStudioModal({
           });
           setInputValue(localDecoded);
           setUploadedPreviewUrl(readerUrl);
+          setUploadedPayloadLabel('');
           return;
         }
         throw new Error(
@@ -234,6 +268,7 @@ export function ToolsStudioModal({
       const publicUrl = await uploadImageToTempPublicUrl(file);
       setInputValue(publicUrl);
       setUploadedPreviewUrl(publicUrl);
+      setUploadedPayloadLabel('');
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : 'Gagal mengunggah berkas foto.'
@@ -246,6 +281,33 @@ export function ToolsStudioModal({
     }
   };
 
+  const handleTextFileUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingPhoto(true);
+    setUploadError('');
+    try {
+      const rawText = await file.text();
+      if (!rawText.trim()) {
+        throw new Error('Berkas .txt kosong.');
+      }
+      setInputValue(`${WA_TXT_EXPORT_PREFIX}${rawText.slice(0, 450000)}`);
+      setUploadedPayloadLabel(`[Export Chat WA: ${file.name}]`);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : 'Gagal membaca berkas teks.'
+      );
+    } finally {
+      setUploadingPhoto(false);
+      if (textFileInputRef.current) {
+        textFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const isBinaryPayloadLoaded =
+    inputValue.startsWith(EXIF_PARSED_PREFIX) ||
+    inputValue.startsWith(WA_TXT_EXPORT_PREFIX);
+
   const canRunSelected = Boolean(
     selectedTool &&
       !uploadingPhoto &&
@@ -255,8 +317,10 @@ export function ToolsStudioModal({
   const liveCommandPreview = selectedTool
     ? buildSlashCommandFromTool(
         selectedTool,
-        inputValue ||
-          (selectedTool.requiresInput ? selectedTool.exampleInput : ''),
+        isBinaryPayloadLoaded
+          ? uploadedPayloadLabel || '[Berkas Siap Dianalisis]'
+          : inputValue ||
+              (selectedTool.requiresInput ? selectedTool.exampleInput : ''),
         subOption,
         selectedTool.countSelector ? countValue : undefined
       )
@@ -270,12 +334,24 @@ export function ToolsStudioModal({
       subOption,
       selectedTool.countSelector ? countValue : undefined
     );
+    const displayCmd = isBinaryPayloadLoaded
+      ? buildSlashCommandFromTool(
+          selectedTool,
+          uploadedPayloadLabel || '[Berkas Dianalisis]',
+          subOption,
+          selectedTool.countSelector ? countValue : undefined
+        )
+      : undefined;
     onClose();
-    onRunCommand(cmd);
+    onRunCommand(cmd, displayCmd);
   };
 
   const handleInsertSelected = () => {
     if (!selectedTool || !canRunSelected) return;
+    if (isBinaryPayloadLoaded) {
+      handleExecuteSelected();
+      return;
+    }
     const cmd = buildSlashCommandFromTool(
       selectedTool,
       inputValue,
@@ -288,8 +364,16 @@ export function ToolsStudioModal({
 
   const getToolIcon = (tool: WebToolDefinition) => {
     if (tool.id === 'qris') return QrCode;
-    if (tool.id === 'cekemail') return Mail;
     if (tool.id === 'ceknomor') return PhoneCall;
+    if (tool.id === 'waosint') return MessageCircle;
+    if (tool.id === 'ttosint') return Video;
+    if (tool.id === 'igosint') return Camera;
+    if (tool.id === 'cekemail') return Mail;
+    if (tool.id === 'exif') return Aperture;
+    if (tool.id === 'username') return UserCheck;
+    if (tool.id === 'domain') return Globe;
+    if (tool.id === 'ip') return Radar;
+    if (tool.id === 'ceknik') return CreditCard;
     if (tool.category === 'OSINT') return ScanSearch;
     if (tool.category === 'A') return Download;
     if (tool.category === 'B') return Film;
@@ -434,7 +518,11 @@ export function ToolsStudioModal({
                     {inputValue.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => setInputValue('')}
+                        onClick={() => {
+                          setInputValue('');
+                          setUploadedPreviewUrl('');
+                          setUploadedPayloadLabel('');
+                        }}
                         aria-label="Kosongkan input"
                         className="inline-flex h-7 items-center rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[11px] text-[#94A3B8] hover:bg-white/10 hover:text-white cursor-pointer"
                       >
@@ -448,8 +536,11 @@ export function ToolsStudioModal({
                   id="nodatagpt-tool-runner-input"
                   ref={toolInputRef}
                   type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
+                  value={isBinaryPayloadLoaded ? uploadedPayloadLabel : inputValue}
+                  onChange={(e) => {
+                    setUploadedPayloadLabel('');
+                    setInputValue(e.target.value);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -469,7 +560,7 @@ export function ToolsStudioModal({
                 </div>
               </div>
 
-              {/* Photo Upload Helper (RemoveBG, HD, NanoBanana, ToFigure, OCR) */}
+              {/* Photo Upload Helper (QRIS, EXIF, RemoveBG, HD, NanoBanana, ToFigure, OCR) */}
               {selectedTool.acceptsImageUpload && (
                 <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/12 bg-black/45 p-3.5">
                   <input
@@ -496,10 +587,14 @@ export function ToolsStudioModal({
                       {uploadingPhoto
                         ? selectedTool.id === 'qris'
                           ? 'Memindai Barcode QRIS...'
-                          : 'Mengunggah Foto...'
+                          : selectedTool.id === 'exif'
+                            ? 'Membaca EXIF & GPS Asli...'
+                            : 'Mengunggah Foto...'
                         : selectedTool.id === 'qris'
                           ? 'Scan Foto / Screenshot QRIS'
-                          : 'Upload Foto dari Perangkat'}
+                          : selectedTool.id === 'exif'
+                            ? 'Scan Foto Asli EXIF & GPS (Tanpa Kompresi)'
+                            : 'Upload Foto dari Perangkat'}
                     </span>
                   </button>
 
@@ -513,9 +608,45 @@ export function ToolsStudioModal({
                       <span>
                         {selectedTool.id === 'qris'
                           ? 'QRIS berhasil terbaca dari foto — klik Jalankan Sekarang!'
-                          : 'Foto siap diproses — tekan Jalankan!'}
+                          : selectedTool.id === 'exif'
+                            ? 'Biner foto asli siap dianalisis — klik Jalankan Sekarang!'
+                            : 'Foto siap diproses — tekan Jalankan!'}
                       </span>
                     </div>
+                  )}
+
+                  {uploadError && (
+                    <span className="text-xs text-rose-300">{uploadError}</span>
+                  )}
+                </div>
+              )}
+
+              {/* Local Text Export Upload Helper (WhatsApp .txt Chat Forensics) */}
+              {selectedTool.acceptsTextFileUpload && (
+                <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-emerald-400/25 bg-black/45 p-3.5">
+                  <input
+                    ref={textFileInputRef}
+                    type="file"
+                    accept=".txt,text/plain"
+                    onChange={(e) =>
+                      void handleTextFileUpload(e.target.files?.[0])
+                    }
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingPhoto}
+                    onClick={() => textFileInputRef.current?.click()}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-400/45 bg-emerald-500/15 px-3.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/25 disabled:opacity-50 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4 text-emerald-300" />
+                    <span>Upload File .txt Export Chat WA (100% Lokal)</span>
+                  </button>
+
+                  {inputValue.startsWith(WA_TXT_EXPORT_PREFIX) && (
+                    <span className="text-xs text-emerald-300">
+                      ✅ {uploadedPayloadLabel} siap diaudit — klik Jalankan Sekarang!
+                    </span>
                   )}
 
                   {uploadError && (
@@ -751,7 +882,7 @@ export function ToolsStudioModal({
                     NodataGPT Web Tools Studio
                   </h2>
                   <p className="text-xs text-[#94A3B8]">
-                    {WEB_TOOLS_CATALOG.length} fitur aktif (OSINT QRIS/Email/Nomor, Downloader, Audio/Video AI, Cuaca &amp; Finansial)
+                    {WEB_TOOLS_CATALOG.length} fitur aktif (11 OSINT Medsos/Nomor/QRIS/EXIF, Downloader, Audio/Video AI, Cuaca &amp; Finansial)
                   </p>
                 </div>
               </div>
@@ -774,7 +905,7 @@ export function ToolsStudioModal({
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari QRIS, Cek Email, Cek Nomor HP, TikTok, YouTube, Cuaca, Sholat, Kurs..."
+                  placeholder="Cari OSINT WA, TikTok, IG, Nomor HP, QRIS, EXIF GPS, NIK, Domain, IP, Cuaca..."
                   className="h-10 w-full rounded-xl border border-white/10 bg-black/50 pr-3 pl-9 text-sm text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
                 />
               </div>

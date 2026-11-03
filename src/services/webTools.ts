@@ -4,6 +4,16 @@ import {
   analyzePhoneInput,
   analyzeQrisInput,
 } from './osintInspector';
+import {
+  analyzeDomainOsint,
+  analyzeInstagramOsint,
+  analyzeIpOsint,
+  analyzeNikOsint,
+  analyzePhotoExifOsint,
+  analyzeTikTokOsint,
+  analyzeUsernameOsint,
+  analyzeWhatsAppOsint,
+} from './osintSocialAndRecon';
 
 export type WebToolCategoryId = 'OSINT' | 'A' | 'B' | 'D' | 'E';
 
@@ -90,6 +100,7 @@ export interface WebToolDefinition {
   exampleInput: string;
   requiresInput: boolean;
   acceptsImageUpload?: boolean;
+  acceptsTextFileUpload?: boolean;
   acceptsGeoLocation?: boolean;
   secondarySelect?: {
     label: string;
@@ -140,11 +151,11 @@ export interface WebToolStatusCallback {
 
 // Strictly OSINT + Categories A, B, D, and E (Category C intentionally excluded per user directive)
 export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
-  // === CATEGORY OSINT: QRIS, EMAIL & PHONE METADATA INSPECTOR ===
+  // === CATEGORY OSINT: FULL 11-TOOL OSINT & DIGITAL FORENSICS SUITE ===
   {
     id: 'qris',
     category: 'OSINT',
-    categoryLabel: 'OSINT · QRIS, Email & Nomor',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
     name: 'QRIS Analyzer & Pelacak Area Merchant',
     shortName: 'QRIS & Lokasi',
     slashCommand: '/qris',
@@ -169,9 +180,99 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     },
   },
   {
+    id: 'ceknomor',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'OSINT Nomor HP, HLR 6–8 Digit & Caller-ID',
+    shortName: 'OSINT Nomor HP',
+    slashCommand: '/ceknomor',
+    badge: 'HLR Akurat + Caller-ID + Maps',
+    description:
+      'Database HLR 6–8 digit spesifik per operator (Telkomsel, Indosat, XL, Axis, Tri, Smartfren), pemburu jejak nama kontak gratis di web/marketplace, tombol Truecaller Web, Tellows, WA, CekRekening & Google Maps.',
+    placeholder: 'Masukkan nomor HP atau telepon rumah (contoh: 081280123456 / 0274512345)',
+    exampleInput: '081280123456',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai OSINT Nomor Telepon, HLR 6–8 Digit & Caller-ID',
+      syntax: '/ceknomor <08xx / +62xx / 021xx>',
+      notes:
+        'Menggunakan tabel blok HLR 6–8 digit asli tiap operator Indonesia, membedakan nomor Alokasi Nasional/Digital secara jujur, memindai jejak Caller-ID publik, dan membuka wilayah di Google Maps.',
+      examples: ['/ceknomor 081280123456', '/ceknomor 081220123456', '/ceknomor 0274556677'],
+    },
+  },
+  {
+    id: 'waosint',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'WhatsApp OSINT (Grup, Saluran, Nomor & Forensik Chat)',
+    shortName: 'WhatsApp OSINT',
+    slashCommand: '/waosint',
+    badge: 'Grup/Channel + Forensik .txt',
+    description:
+      '4-in-1 WhatsApp OSINT: inspeksi tautan grup chat.whatsapp.com (Aktif/Dicabut + foto HD), saluran WA, jejak wa.me & nomor bisnis, pencari grup WA publik, serta forensik lokal file .txt export chat WA.',
+    placeholder:
+      'Masukkan link chat.whatsapp.com/..., nomor WA, kata kunci grup, atau upload .txt chat...',
+    exampleInput: 'https://chat.whatsapp.com/InviteSampleCode123456',
+    requiresInput: true,
+    acceptsTextFileUpload: true,
+    usageNotice: {
+      title: 'Cara Pakai 4-in-1 WhatsApp OSINT Suite',
+      syntax: '/waosint <link grup / link channel / nomor WA / kata kunci grup>',
+      notes:
+        'Bisa juga klik "Upload File .txt Export Chat WA" untuk menganalisis statistik pengirim tersering, jam puncak, tautan & nomor di dalam riwayat obrolan secara 100% lokal.',
+      examples: [
+        '/waosint 081280123456',
+        '/waosint https://chat.whatsapp.com/InviteSampleCode123456',
+        '/waosint komunitas coding indonesia',
+      ],
+    },
+  },
+  {
+    id: 'ttosint',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'TikTok Deep OSINT & Timestamp Decoder',
+    shortName: 'TikTok OSINT',
+    slashCommand: '/ttosint',
+    badge: 'Tanggal Buat Akun + Snowflake',
+    description:
+      'Bongkar tanggal eksak pembuatan akun TikTok (createTime), riwayat ganti username, User ID numerik, region, status TikTok Shop Seller, audit rasio followers palsu, serta dekode jam upload video dari Snowflake ID.',
+    placeholder: 'Masukkan @username TikTok atau URL profil / URL video TikTok...',
+    exampleInput: '@khaby.lame',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai TikTok Deep OSINT & Video Timestamp',
+      syntax: '/ttosint <@username atau URL video TikTok>',
+      notes:
+        'Tanpa perlu login akun TikTok. Menampilkan waktu pembuatan akun ke presisi detik WIB, audit rasio interaksi, ekstraksi kontak/kota di bio + tombol Google Maps.',
+      examples: ['/ttosint @khaby.lame', '/ttosint https://www.tiktok.com/@tiktok'],
+    },
+  },
+  {
+    id: 'igosint',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'Instagram (IG) Public Profile & Bio OSINT',
+    shortName: 'Instagram OSINT',
+    slashCommand: '/igosint',
+    badge: 'Tanpa Login + Ekstrak Kontak',
+    description:
+      'Investigasi profil publik Instagram tanpa risiko banned akun: statistik Followers/Following/Posts, kategori bisnis, ekstraksi otomatis WA/email/Linktree & kota toko dari bio ke Google Maps, plus pivot Threads.',
+    placeholder: 'Masukkan @username Instagram atau URL instagram.com/...',
+    exampleInput: '@instagram',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai Instagram Public OSINT',
+      syntax: '/igosint <@username atau URL profil IG>',
+      notes:
+        'Aman tanpa login akun pribadi. Mengekstrak nomor WA/email/alamat kota di bio dan membuka titik lokasi toko di Google Maps.',
+      examples: ['/igosint @instagram', '/igosint https://www.instagram.com/natgeo/'],
+    },
+  },
+  {
     id: 'cekemail',
     category: 'OSINT',
-    categoryLabel: 'OSINT · QRIS, Email & Nomor',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
     name: 'Deep Email OSINT & Keamanan Domain',
     shortName: 'OSINT Email',
     slashCommand: '/cekemail',
@@ -190,24 +291,112 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     },
   },
   {
-    id: 'ceknomor',
+    id: 'exif',
     category: 'OSINT',
-    categoryLabel: 'OSINT · QRIS, Email & Nomor',
-    name: 'OSINT Nomor HP, Operator & Area HLR',
-    shortName: 'OSINT Nomor HP',
-    slashCommand: '/ceknomor',
-    badge: 'Operator + HLR + Maps',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'Photo EXIF Forensics & Pelacak GPS Kamera',
+    shortName: 'EXIF & GPS Foto',
+    slashCommand: '/exif',
+    badge: '100% Lokal + Pin Google Maps',
     description:
-      'Analisis nomor telepon/HP (08xx, +62, kode area 021–0986 & internasional): normalisasi E.164, identifikasi operator & kartu perdana, estimasi wilayah registrasi HLR/kode area kota, tombol Google Maps, cek WhatsApp & CekRekening Komdigi.',
-    placeholder: 'Masukkan nomor HP atau telepon rumah (contoh: 081234567890 / 0274512345)',
-    exampleInput: '081220123456',
+      'Baca biner asli foto kamera (JPEG/TIFF) tanpa kompresi: ekstrak merek/tipe HP & lensa, tanggal/jam jepretan asli, ISO/shutter, serta koordinat GPS tersembunyi langsung menjadi alamat & pin Google Maps.',
+    placeholder: 'Klik "Scan Foto Asli EXIF & GPS" di bawah atau tempel URL file .jpg asli...',
+    exampleInput: 'https://raw.githubusercontent.com/ianare/exif-samples/master/jpg/gps/DSCN0010.jpg',
+    requiresInput: true,
+    acceptsImageUpload: true,
+    usageNotice: {
+      title: 'Cara Pakai Forensik EXIF & Pelacak Titik GPS Foto',
+      syntax: '/exif <URL file .jpg asli>  (atau klik Scan Foto Asli EXIF & GPS)',
+      notes:
+        'Penting: Foto dari chat WA/IG biasa sudah dihapus EXIF-nya oleh aplikasi. Gunakan file foto asli dari Galeri kamera atau foto yang dikirim sebagai Dokumen (Document).',
+      examples: [
+        'Klik tombol "Scan Foto Asli EXIF & GPS" lalu pilih foto kamera',
+        '/exif https://raw.githubusercontent.com/ianare/exif-samples/master/jpg/gps/DSCN0010.jpg',
+      ],
+    },
+  },
+  {
+    id: 'username',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'Sherlock Username Hunter (Multi-Platform)',
+    shortName: 'Lacak Username',
+    slashCommand: '/username',
+    badge: '13+ Jaringan Publik Serentak',
+    description:
+      'Lacak keberadaan satu username secara serentak di GitHub, GitLab, Reddit, TikTok, Telegram, Linktree, Keybase, Dev.to, HackerNews, NPM, DockerHub, Chess.com & Lichess lengkap dengan pivot IG/Threads/Shopee.',
+    placeholder: 'Masukkan satu username tanpa spasi (contoh: torvalds)...',
+    exampleInput: 'torvalds',
     requiresInput: true,
     usageNotice: {
-      title: 'Cara Pakai OSINT Nomor Telepon & HLR',
-      syntax: '/ceknomor <08xx / +62xx / 021xx>',
+      title: 'Cara Pakai Sherlock Username Recon',
+      syntax: '/username <handle>',
       notes:
-        'Mendukung seluruh prefix seluler Indonesia (Telkomsel, Indosat/Tri, XL/Axis/Smartfren), 130+ kode telepon rumah/kantor kota Indonesia, dan kode negara internasional dengan tombol buka wilayah di Google Maps.',
-      examples: ['/ceknomor 081220123456', '/ceknomor 0274556677', '/ceknomor +6285712345678'],
+        'Memeriksa belasan API profil publik secara paralel untuk memetakan jejak digital lintas platform dari satu nama akun.',
+      examples: ['/username torvalds', '/username mrnodata'],
+    },
+  },
+  {
+    id: 'domain',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'Domain Recon, Subdomain SSL (crt.sh) & RDAP',
+    shortName: 'OSINT Domain',
+    slashCommand: '/domain',
+    badge: 'Subdomain crt.sh + Lokasi Server',
+    description:
+      'Audit lengkap nama domain/website: umur registrasi RDAP/WHOIS, enumerasi subdomain dari log sertifikat SSL (crt.sh), DNS A/MX/NS/TXT, arsip Wayback Machine, serta lokasi fisik IP server di Google Maps.',
+    placeholder: 'Masukkan nama domain atau URL website (contoh: blognodata.my.id)...',
+    exampleInput: 'cloudflare.com',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai Deep Domain & Subdomain Recon',
+      syntax: '/domain <namadomain.com>',
+      notes:
+        'Sangat berguna untuk mengecek umur website toko online mencurigakan (anti-phishing), memetakan subdomain aktif, dan melihat lokasi data center server di Google Maps.',
+      examples: ['/domain cloudflare.com', '/domain blognodata.my.id'],
+    },
+  },
+  {
+    id: 'ip',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'IP Address, ASN, ISP & Geolocation Tracker',
+    shortName: 'Lacak IP & ISP',
+    slashCommand: '/ip',
+    badge: 'ASN/ISP + Koordinat Maps',
+    description:
+      'Lacak detail alamat IPv4/IPv6 publik: kota & negara, penyedia layanan internet (ISP) & nomor ASN, deteksi jaringan Cloud/Data Center/VPN vs ISP rumahan, Reverse DNS, dan tombol Google Maps.',
+    placeholder: 'Masukkan alamat IPv4 atau IPv6 publik (contoh: 1.1.1.1 / 8.8.8.8)...',
+    exampleInput: '1.1.1.1',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai Pelacak IP, ASN & Geolokasi',
+      syntax: '/ip <alamat_ip>',
+      notes:
+        'Menampilkan organisasi pemilik blok IP (ASN/ISP), zona waktu, klasifikasi jaringan, dan tombol pembuka titik koordinat di Google Maps.',
+      examples: ['/ip 1.1.1.1', '/ip 8.8.8.8'],
+    },
+  },
+  {
+    id: 'ceknik',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · Lacak, Medsos & Forensik',
+    name: 'Dekoder Struktur 16-Digit NIK Kemendagri',
+    shortName: 'Dekode 16-Digit NIK',
+    slashCommand: '/ceknik',
+    badge: '38 Provinsi + Weton + Maps',
+    description:
+      'Uraikan struktur matematis 16 digit NIK secara offline & legal: Provinsi (38 provinsi), Kabupaten/Kota, kode Kecamatan, jenis kelamin, tanggal lahir, usia, weton pasaran, zodiak & tombol wilayah Google Maps.',
+    placeholder: 'Masukkan 16 digit angka NIK untuk didekode strukturnya...',
+    exampleInput: '3171011708980001',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai Dekoder Struktur NIK Kemendagri (Offline Legal)',
+      syntax: '/ceknik <16_digit_angka>',
+      notes:
+        '100% berbasis rumus kode wilayah resmi Kemendagri RI & kalender tanpa mengakses server tertutup Dukcapil. Dilengkapi tombol buka wilayah Kabupaten/Kota di Google Maps.',
+      examples: ['/ceknik 3171011708980001', '/ceknik 3273015708010002'],
     },
   },
 
@@ -1071,6 +1260,11 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       return { toolId: 'qris', arg: trimmed };
     }
 
+    // Direct WhatsApp Group Invite Link pasted without slash command
+    if (/^https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?[A-Za-z0-9]{18,26}\/?$/i.test(trimmed)) {
+      return { toolId: 'waosint', arg: trimmed };
+    }
+
     if (
       trimmed.length <= 720 &&
       !/\b(?:perbedaan|pengertian|definisi|jelaskan|apa\s+itu|buat(?:kan)?|kode|script|html|aplikasi|website|puisi|cerita)\b/i.test(
@@ -1096,6 +1290,55 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       );
       if (natPhone && natPhone[1]?.trim()) {
         return { toolId: 'ceknomor', arg: natPhone[1].trim() };
+      }
+
+      const natWa = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|osint|periksa|lacak)\s+(?:grup\s+wa|wa|whatsapp)\s+([^\n?]{4,180})\??$/i
+      );
+      if (natWa && natWa[1]?.trim()) {
+        return { toolId: 'waosint', arg: natWa[1].trim() };
+      }
+
+      const natTt = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:osint|cek\s+akun|investigasi)\s+tiktok\s+(@?[A-Za-z0-9._-]+|https?:\/\/\S+)\??$/i
+      );
+      if (natTt && natTt[1]?.trim()) {
+        return { toolId: 'ttosint', arg: natTt[1].trim() };
+      }
+
+      const natIg = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:osint|cek(?:\s+akun)?|investigasi)\s+(?:ig|instagram)\s+(@?[A-Za-z0-9._]+|https?:\/\/\S+)\??$/i
+      );
+      if (natIg && natIg[1]?.trim()) {
+        return { toolId: 'igosint', arg: natIg[1].trim() };
+      }
+
+      const natUser = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|lacak|cari|osint)\s+username\s+(@?[A-Za-z0-9._-]{2,36})\??$/i
+      );
+      if (natUser && natUser[1]?.trim()) {
+        return { toolId: 'username', arg: natUser[1].trim() };
+      }
+
+      const natDomain = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek\s+domain|osint\s+domain|whois|cek\s+subdomain)\s+([a-z0-9.-]+\.[a-z]{2,24})\??$/i
+      );
+      if (natDomain && natDomain[1]?.trim()) {
+        return { toolId: 'domain', arg: natDomain[1].trim() };
+      }
+
+      const natIp = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|lacak|osint)\s+ip\s+([0-9a-fA-F:.]{7,39})\??$/i
+      );
+      if (natIp && natIp[1]?.trim()) {
+        return { toolId: 'ip', arg: natIp[1].trim() };
+      }
+
+      const natNik = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|dekode|parse|analisa|analisis)\s+nik\s+(\d{16})\??$/i
+      );
+      if (natNik && natNik[1]?.trim()) {
+        return { toolId: 'ceknik', arg: natNik[1].trim() };
       }
     }
 
@@ -1422,7 +1665,47 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'phoneosint':
     case 'hlr':
     case 'lacaknomor':
+    case 'callerid':
       return { toolId: 'ceknomor', arg: rest };
+    case 'waosint':
+    case 'cekwa':
+    case 'wagrup':
+    case 'wacheck':
+      return { toolId: 'waosint', arg: rest };
+    case 'ttosint':
+    case 'cektt':
+    case 'tiktokosint':
+      return { toolId: 'ttosint', arg: rest };
+    case 'igosint':
+    case 'cekig':
+    case 'insta':
+    case 'instagramosint':
+      return { toolId: 'igosint', arg: rest };
+    case 'exif':
+    case 'cekexif':
+    case 'gpsfoto':
+    case 'lokasifoto':
+      return { toolId: 'exif', arg: rest };
+    case 'username':
+    case 'cekuser':
+    case 'sherlock':
+    case 'cariakun':
+      return { toolId: 'username', arg: rest };
+    case 'domain':
+    case 'cekdomain':
+    case 'whois':
+    case 'subdomain':
+    case 'rdap':
+      return { toolId: 'domain', arg: rest };
+    case 'ip':
+    case 'cekip':
+    case 'lacakip':
+    case 'ipgeo':
+      return { toolId: 'ip', arg: rest };
+    case 'ceknik':
+    case 'nik':
+    case 'parsenik':
+      return { toolId: 'ceknik', arg: rest };
     default:
       return null;
   }
@@ -6066,8 +6349,8 @@ export async function executeWebToolCommand({
 
   if (toolId === 'ceknomor') {
     onStatus?.({
-      toolName: 'OSINT Nomor & HLR',
-      mirrorName: 'Operator + Kode Area + Google Maps',
+      toolName: 'OSINT Nomor, HLR & Caller-ID',
+      mirrorName: 'HLR 6–8 Digit + Jejak Publik + Maps',
       attempt: 1,
       isFallback: false,
     });
@@ -6075,7 +6358,143 @@ export async function executeWebToolCommand({
     return {
       content: out.content,
       answeredById: 'osint-phone-hlr',
-      answeredByName: 'OSINT Studio · Nomor HP & Area HLR',
+      answeredByName: 'OSINT Studio · Nomor HP, HLR & Caller-ID',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'waosint') {
+    onStatus?.({
+      toolName: 'WhatsApp OSINT Suite',
+      mirrorName: 'Grup / Saluran / wa.me / Forensik Chat',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeWhatsAppOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-whatsapp-suite',
+      answeredByName: 'OSINT Studio · WhatsApp Suite',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'ttosint') {
+    onStatus?.({
+      toolName: 'TikTok Deep OSINT',
+      mirrorName: 'Rehydration + Snowflake Timestamp',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeTikTokOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-tiktok-deep',
+      answeredByName: 'OSINT Studio · TikTok Deep Inspector',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'igosint') {
+    onStatus?.({
+      toolName: 'Instagram Public OSINT',
+      mirrorName: 'Metadata Publik + Bio Contact Extractor',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeInstagramOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-instagram-public',
+      answeredByName: 'OSINT Studio · Instagram Public Recon',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'exif') {
+    onStatus?.({
+      toolName: 'Photo EXIF & GPS Forensics',
+      mirrorName: 'Binary TIFF/EXIF + Koordinat Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzePhotoExifOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-photo-exif',
+      answeredByName: 'OSINT Studio · EXIF & GPS Forensics',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'username') {
+    onStatus?.({
+      toolName: 'Sherlock Username Hunter',
+      mirrorName: '13+ Jaringan Publik Serentak',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeUsernameOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-username-sherlock',
+      answeredByName: 'OSINT Studio · Sherlock Username Recon',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'domain') {
+    onStatus?.({
+      toolName: 'Deep Domain & SSL Recon',
+      mirrorName: 'RDAP + crt.sh Subdomains + Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeDomainOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-domain-recon',
+      answeredByName: 'OSINT Studio · Domain, RDAP & crt.sh',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'ip') {
+    onStatus?.({
+      toolName: 'IP, ASN & Geo Tracker',
+      mirrorName: 'ISP/ASN + Koordinat Google Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeIpOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-ip-asn',
+      answeredByName: 'OSINT Studio · IP, ASN & Geolocation',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'ceknik') {
+    onStatus?.({
+      toolName: 'Dekoder 16-Digit NIK',
+      mirrorName: 'Kode Wilayah Kemendagri + Google Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeNikOsint(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-nik-kemendagri',
+      answeredByName: 'OSINT Studio · Dekoder Struktur NIK',
       usedFallback: false,
       actionLinks: out.actionLinks,
     };

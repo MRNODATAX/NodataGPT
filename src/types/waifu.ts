@@ -20,9 +20,18 @@ export interface WaifuMoodState {
   lastGainExp: number;
 }
 
+export type WaifuScenarioCategory =
+  | 'night'
+  | 'home'
+  | 'outing'
+  | 'classic'
+  | 'custom';
+
 export interface WaifuScenarioPreset {
   id: string;
   title: string;
+  category?: WaifuScenarioCategory;
+  shortHint?: string;
   scenario: string;
   firstMessage: string;
 }

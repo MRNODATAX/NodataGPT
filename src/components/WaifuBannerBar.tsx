@@ -136,6 +136,7 @@ interface WaifuBannerBarProps {
   onChangeMode: (nextMode: WaifuCardMode) => void;
   onOpenEditor: () => void;
   onSelectScenario: (preset: WaifuScenarioPreset) => void;
+  onOpenScenarioBubble?: () => void;
   onToggleExpressions?: () => void;
 }
 
@@ -147,6 +148,7 @@ export function WaifuBannerBar({
   onChangeMode,
   onOpenEditor,
   onSelectScenario,
+  onOpenScenarioBubble,
   onToggleExpressions,
 }: WaifuBannerBarProps) {
   const [scenarioMenuOpen, setScenarioMenuOpen] = useState(false);
@@ -324,14 +326,20 @@ export function WaifuBannerBar({
               <div className="relative hidden sm:block">
                 <button
                   type="button"
-                  onClick={() => setScenarioMenuOpen((v) => !v)}
-                  title="Ganti Skenario"
+                  onClick={() => {
+                    if (onOpenScenarioBubble) {
+                      onOpenScenarioBubble();
+                    } else {
+                      setScenarioMenuOpen((v) => !v);
+                    }
+                  }}
+                  title="Pilih atau Edit Skenario Baru"
                   className="inline-flex h-8 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-medium text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white cursor-pointer"
                 >
                   <BookOpen className="h-3.5 w-3.5 text-[#22D3EE]" />
                   <span>Skenario</span>
                 </button>
-                {renderScenarioDropdown()}
+                {!onOpenScenarioBubble && renderScenarioDropdown()}
               </div>
             )}
 
@@ -490,14 +498,22 @@ export function WaifuBannerBar({
             <div className="static sm:relative">
               <button
                 type="button"
-                onClick={() => setScenarioMenuOpen((v) => !v)}
+                onClick={() => {
+                  if (onOpenScenarioBubble) {
+                    onOpenScenarioBubble();
+                  } else {
+                    setScenarioMenuOpen((v) => !v);
+                  }
+                }}
                 className="inline-flex h-8 w-full items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-[#CBD5E1] transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white sm:w-auto sm:px-2.5 cursor-pointer"
               >
                 <BookOpen className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" />
                 <span className="truncate">Skenario</span>
-                <ChevronDown className="h-3 w-3 shrink-0 opacity-75" />
+                {!onOpenScenarioBubble && (
+                  <ChevronDown className="h-3 w-3 shrink-0 opacity-75" />
+                )}
               </button>
-              {renderScenarioDropdown()}
+              {!onOpenScenarioBubble && renderScenarioDropdown()}
             </div>
           )}
 

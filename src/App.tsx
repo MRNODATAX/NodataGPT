@@ -11,7 +11,7 @@ import {
 import { ToolsIcon } from './components/ToolsIcon';
 import { StarfieldBackground } from './components/StarfieldBackground';
 import { SplashScreen } from './components/SplashScreen';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, type SidebarChatMode } from './components/Sidebar';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ChatThread } from './components/ChatThread';
 import { ChatComposer } from './components/ChatComposer';
@@ -28,6 +28,7 @@ import {
   type WaifuCardMode,
 } from './components/WaifuBannerBar';
 import { WaifuStudioModal } from './components/WaifuStudioModal';
+import { WaifuScenarioBubbleModal } from './components/WaifuScenarioBubbleModal';
 import {
   DEFAULT_MIKU_ID,
   createDefaultMikuProfile,
@@ -129,6 +130,11 @@ export function App() {
   const [waifuStore, setWaifuStore] = useState<WaifuStoreState>(() =>
     loadWaifuStore()
   );
+  const [sidebarMode, setSidebarMode] = useState<SidebarChatMode>(() => {
+    const initialActive = conversations.find((c) => c.id === activeChatId);
+    return initialActive?.mode === 'waifu' ? 'waifu' : 'ai';
+  });
+  const [waifuScenarioBubbleOpen, setWaifuScenarioBubbleOpen] = useState(false);
   const [waifuStudioOpen, setWaifuStudioOpen] = useState(false);
   const [waifuCardMode, setWaifuCardMode] = useState<WaifuCardMode>(() =>
     loadInitialWaifuCardMode()
@@ -435,6 +441,7 @@ export function App() {
       setIsLoading(false);
       setRouterStatus(null);
     }
+    setSidebarMode('ai');
     setActiveChatId(null);
     setDraft('');
     setImageMode(false);
@@ -461,7 +468,14 @@ export function App() {
           c.mode === 'waifu' && c.waifuId === cleanProfile.id
             ? {
                 ...c,
-                waifuProfileSnapshot: cleanProfile,
+                waifuProfileSnapshot: {
+                  ...cleanProfile,
+                  scenario:
+                    c.waifuProfileSnapshot?.scenario || cleanProfile.scenario,
+                  firstMessage:
+                    c.waifuProfileSnapshot?.firstMessage ||
+                    cleanProfile.firstMessage,
+                },
               }
             : c
         )
@@ -539,12 +553,86 @@ export function App() {
       };
 
       setConversations((prev) => [newWaifuChat, ...prev]);
+      setSidebarMode('waifu');
       setActiveChatId(newWaifuChat.id);
       setDraft('');
       setImageMode(false);
       setDeepThink(false);
     },
     [activeWaifu, handleFlushStream, handleSaveWaifuProfile]
+  );
+
+  const handleOpenWaifuScenarioBubble = useCallback(() => {
+    setSidebarMode('waifu');
+    setWaifuScenarioBubbleOpen(true);
+  }, []);
+
+  const handleConfirmScenarioBubbleStart = useCallback(
+    ({
+      profile,
+      scenarioTitle,
+      scenario,
+      firstMessage,
+      saveAsDefault,
+    }: {
+      profile: WaifuProfile;
+      scenarioTitle: string;
+      scenario: string;
+      firstMessage: string;
+      saveAsDefault: boolean;
+    }) => {
+      if (pendingStreamRef.current) {
+        handleFlushStream();
+      } else if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        turnStartRef.current = 0;
+        setIsLoading(false);
+        setRouterStatus(null);
+      }
+
+      const sessionSnapshot: WaifuProfile = {
+        ...profile,
+        scenario: scenario.trim() || profile.scenario,
+        firstMessage: firstMessage.trim() || profile.firstMessage,
+        updatedAt: Date.now(),
+      };
+
+      if (saveAsDefault) {
+        handleSaveWaifuProfile(sessionSnapshot, true);
+      } else if (profile.id !== waifuStore.activeWaifuId) {
+        setWaifuStore((prev) => ({ ...prev, activeWaifuId: profile.id }));
+      }
+
+      const greetingMsg: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: sessionSnapshot.firstMessage.trim(),
+        answeredById: 'waifu-greeting',
+        answeredByName: sessionSnapshot.name,
+        status: 'done',
+        createdAt: Date.now(),
+      };
+
+      const newWaifuChat: Conversation = {
+        id: generateId(),
+        title: `${sessionSnapshot.name} · ${scenarioTitle.trim() || 'Chat Waifu'}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        mode: 'waifu',
+        waifuId: sessionSnapshot.id,
+        waifuProfileSnapshot: sessionSnapshot,
+        messages: [greetingMsg],
+      };
+
+      setConversations((prev) => [newWaifuChat, ...prev]);
+      setSidebarMode('waifu');
+      setActiveChatId(newWaifuChat.id);
+      setDraft('');
+      setImageMode(false);
+      setDeepThink(false);
+    },
+    [handleFlushStream, handleSaveWaifuProfile, waifuStore.activeWaifuId]
   );
 
   const handleSelectWaifuScenario = useCallback(
@@ -960,6 +1048,7 @@ export function App() {
           messages: [userMsg, assistantPlaceholder],
         };
         chatId = newChat.id;
+        setSidebarMode('ai');
         setConversations((prev) => [newChat, ...prev]);
         setActiveChatId(chatId);
       } else {
@@ -1042,6 +1131,7 @@ export function App() {
           messages: [userMsg, assistantPlaceholder],
         };
         chatId = newChat.id;
+        setSidebarMode('ai');
         setConversations((prev) => [newChat, ...prev]);
         setActiveChatId(chatId);
       } else {
@@ -1411,18 +1501,24 @@ export function App() {
         conversations={conversations}
         activeChatId={activeChatId}
         activeWaifu={activeWaifu}
+        sidebarMode={sidebarMode}
         collapsed={sidebarCollapsed}
         mobileOpen={mobileSidebarOpen}
         isPwaInstalled={isInstalled}
         hasActiveMessages={Boolean(activeConversation?.messages.length)}
+        onChangeSidebarMode={setSidebarMode}
         onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onNewChat={handleNewChat}
-        onStartWaifuChat={() => handleStartWaifuChat()}
+        onStartWaifuChat={handleOpenWaifuScenarioBubble}
         onOpenWaifuStudio={() => setWaifuStudioOpen(true)}
         onSelectChat={(id) => {
           if (pendingStreamRef.current && pendingStreamRef.current.chatId !== id) {
             handleFlushStream();
+          }
+          const target = conversations.find((c) => c.id === id);
+          if (target) {
+            setSidebarMode(target.mode === 'waifu' ? 'waifu' : 'ai');
           }
           setActiveChatId(id);
         }}
@@ -1657,7 +1753,7 @@ export function App() {
                 onSelectStarter={handleSelectStarter}
                 onOpenModelPicker={() => openModelPicker(imageMode ? 'image' : 'chat')}
                 onOpenToolsStudio={() => setToolsStudioOpen(true)}
-                onStartWaifuChat={() => handleStartWaifuChat()}
+                onStartWaifuChat={handleOpenWaifuScenarioBubble}
               />
             </div>
           ) : (
@@ -1671,6 +1767,7 @@ export function App() {
                   onChangeMode={handleChangeWaifuCardMode}
                   onOpenEditor={() => setWaifuStudioOpen(true)}
                   onSelectScenario={handleSelectWaifuScenario}
+                  onOpenScenarioBubble={handleOpenWaifuScenarioBubble}
                   onToggleExpressions={handleToggleWaifuExpressions}
                 />
               )}
@@ -1720,6 +1817,15 @@ export function App() {
           />
         </main>
       </div>
+
+      <WaifuScenarioBubbleModal
+        isOpen={waifuScenarioBubbleOpen}
+        profiles={waifuStore.profiles}
+        initialWaifu={activeConversationWaifu ?? activeWaifu}
+        onClose={() => setWaifuScenarioBubbleOpen(false)}
+        onConfirmStartChat={handleConfirmScenarioBubbleStart}
+        onOpenCharacterStudio={() => setWaifuStudioOpen(true)}
+      />
 
       <WaifuStudioModal
         isOpen={waifuStudioOpen}

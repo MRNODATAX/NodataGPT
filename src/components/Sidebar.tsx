@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Settings,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -21,14 +22,18 @@ import {
 import type { Conversation } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 
+export type SidebarChatMode = 'ai' | 'waifu';
+
 interface SidebarProps {
   conversations: Conversation[];
   activeChatId: string | null;
   activeWaifu: WaifuProfile;
+  sidebarMode: SidebarChatMode;
   collapsed: boolean;
   mobileOpen: boolean;
   isPwaInstalled: boolean;
   hasActiveMessages: boolean;
+  onChangeSidebarMode: (mode: SidebarChatMode) => void;
   onToggleCollapse: () => void;
   onCloseMobile: () => void;
   onNewChat: () => void;
@@ -47,10 +52,12 @@ export function Sidebar({
   conversations,
   activeChatId,
   activeWaifu,
+  sidebarMode,
   collapsed,
   mobileOpen,
   isPwaInstalled,
   hasActiveMessages,
+  onChangeSidebarMode,
   onToggleCollapse,
   onCloseMobile,
   onNewChat,
@@ -66,9 +73,22 @@ export function Sidebar({
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
+  const { aiCount, waifuCount } = useMemo(() => {
+    let ai = 0;
+    let waifu = 0;
+    for (const c of conversations) {
+      if (c.mode === 'waifu') waifu += 1;
+      else ai += 1;
+    }
+    return { aiCount: ai, waifuCount: waifu };
+  }, [conversations]);
+
   const filteredConversations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const sorted = [...conversations].sort((a, b) => {
+    const byMode = conversations.filter((c) =>
+      sidebarMode === 'waifu' ? c.mode === 'waifu' : c.mode !== 'waifu'
+    );
+    const sorted = [...byMode].sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) {
         return a.pinned ? -1 : 1;
       }
@@ -80,7 +100,7 @@ export function Sidebar({
         c.title.toLowerCase().includes(q) ||
         c.messages.some((m) => m.content.toLowerCase().includes(q))
     );
-  }, [conversations, searchQuery]);
+  }, [conversations, sidebarMode, searchQuery]);
 
   const pinnedConversations = useMemo(
     () => filteredConversations.filter((c) => Boolean(c.pinned)),
@@ -93,6 +113,7 @@ export function Sidebar({
   );
 
   const showExpanded = mobileOpen || !collapsed;
+  const activeWaifuAvatarSrc = resolveWaifuAvatarUrl(activeWaifu.avatarUrl);
 
   const renderChatRow = (chat: Conversation) => {
     const isActive = chat.id === activeChatId;
@@ -101,7 +122,9 @@ export function Sidebar({
         <div
           className={`group flex min-h-[42px] items-center justify-between gap-1 rounded-xl px-2.5 py-1.5 text-sm transition-colors ${
             isActive
-              ? 'border border-[#22D3EE]/30 bg-[#22D3EE]/12 text-white'
+              ? chat.mode === 'waifu'
+                ? 'border border-[#FB923C]/35 bg-gradient-to-r from-[#22D3EE]/12 to-[#FB923C]/14 text-white'
+                : 'border border-[#22D3EE]/30 bg-[#22D3EE]/12 text-white'
               : 'text-[#CBD5E1] hover:bg-white/[0.05] hover:text-white'
           }`}
         >
@@ -126,7 +149,7 @@ export function Sidebar({
                 onError={(e) => {
                   e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
                 }}
-                className="h-[18px] w-[18px] shrink-0 rounded-full border border-[#22D3EE]/40 object-cover"
+                className="h-[18px] w-[18px] shrink-0 rounded-full border border-[#22D3EE]/45 object-cover"
               />
             ) : (
               <MessageSquare
@@ -223,95 +246,209 @@ export function Sidebar({
           )}
         </div>
 
-        {/* New Chat + Chat Waifu Primary Actions */}
-        <div className="space-y-1.5 px-3 py-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              onNewChat();
-              onCloseMobile();
-            }}
-            aria-label="Percakapan baru"
-            title="Percakapan baru"
-            className={`nd-glass-card flex min-h-[44px] w-full items-center gap-2.5 rounded-xl font-medium text-white cursor-pointer ${
-              showExpanded ? 'px-3.5 py-2.5 text-sm' : 'justify-center p-2.5'
-            }`}
-          >
-            <Plus className="h-5 w-5 shrink-0 text-[#22D3EE]" />
-            {showExpanded && <span>Percakapan Baru</span>}
-          </button>
-
+        {/* Mode Pill Switcher (AI Biasa | Waifu) + Mode-Aware Add New Chat */}
+        <div className="space-y-2 px-3 py-1.5">
           {showExpanded ? (
-            <div className="flex min-h-[44px] w-full items-center justify-between gap-1.5 rounded-xl border border-[#FB923C]/30 bg-gradient-to-r from-[#22D3EE]/[0.08] via-[#0B1324]/90 to-[#FB923C]/[0.1] p-1.5 transition-colors hover:border-[#22D3EE]/50">
-              <button
-                type="button"
-                onClick={() => {
-                  onStartWaifuChat();
-                  onCloseMobile();
-                }}
-                aria-label={`Mulai Chat Waifu bersama ${activeWaifu.name}`}
-                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1 text-left cursor-pointer"
+            <>
+              {/* Segmented Mode Pill */}
+              <div
+                role="tablist"
+                aria-label="Pilih mode percakapan"
+                className="grid grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-black/50 p-1"
               >
-                <img
-                  src={resolveWaifuAvatarUrl(activeWaifu.avatarUrl)}
-                  alt={activeWaifu.name}
-                  width={24}
-                  height={24}
-                  onError={(e) => {
-                    e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={sidebarMode === 'ai'}
+                  onClick={() => onChangeSidebarMode('ai')}
+                  className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all cursor-pointer ${
+                    sidebarMode === 'ai'
+                      ? 'border border-[#22D3EE]/45 bg-[#22D3EE]/16 text-white shadow-[0_0_14px_rgba(34,211,238,0.16)]'
+                      : 'border border-transparent text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <MessageSquare
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      sidebarMode === 'ai' ? 'text-[#22D3EE]' : 'text-[#94A3B8]'
+                    }`}
+                  />
+                  <span className="truncate">AI Biasa</span>
+                  {aiCount > 0 && (
+                    <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.2 font-mono-code text-[9.5px] text-[#CBD5E1]">
+                      {aiCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={sidebarMode === 'waifu'}
+                  onClick={() => onChangeSidebarMode('waifu')}
+                  className={`flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all cursor-pointer ${
+                    sidebarMode === 'waifu'
+                      ? 'border border-[#FB923C]/50 bg-gradient-to-r from-[#22D3EE]/16 via-[#0F1A30] to-[#FB923C]/22 text-white shadow-[0_0_14px_rgba(251,146,60,0.16)]'
+                      : 'border border-transparent text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <img
+                    src={activeWaifuAvatarSrc}
+                    alt=""
+                    width={16}
+                    height={16}
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                    }}
+                    className="h-4 w-4 shrink-0 rounded-full border border-[#22D3EE]/55 object-cover"
+                  />
+                  <span className="truncate">Waifu</span>
+                  {waifuCount > 0 && (
+                    <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.2 font-mono-code text-[9.5px] text-[#FED7AA]">
+                      {waifuCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Context-Adaptive Primary "New Chat" Action */}
+              {sidebarMode === 'ai' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNewChat();
+                    onCloseMobile();
                   }}
-                  className="h-6 w-6 shrink-0 rounded-full border border-[#22D3EE]/55 object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-xs font-bold text-white">
-                      Chat Waifu
-                    </span>
-                    <span className="rounded-full bg-[#FB923C]/20 px-1.5 py-0.2 text-[9.5px] font-semibold text-[#FED7AA]">
-                      Baru
-                    </span>
-                  </div>
-                  <div className="truncate text-[10.5px] text-[#94A3B8]">
-                    {activeWaifu.name}
-                  </div>
+                  aria-label="Percakapan AI baru"
+                  title="Buat percakapan AI biasa baru"
+                  className="nd-glass-card flex min-h-[44px] w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-white cursor-pointer"
+                >
+                  <Plus className="h-4.5 w-4.5 shrink-0 text-[#22D3EE]" />
+                  <span className="truncate">Chat AI Baru</span>
+                </button>
+              ) : (
+                <div className="flex min-h-[46px] w-full items-center justify-between gap-1.5 rounded-xl border border-[#FB923C]/35 bg-gradient-to-r from-[#22D3EE]/[0.1] via-[#0B1324]/92 to-[#FB923C]/[0.14] p-1.5 transition-colors hover:border-[#22D3EE]/55">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onStartWaifuChat();
+                      onCloseMobile();
+                    }}
+                    aria-label={`Tambah Chat Waifu baru bersama ${activeWaifu.name}`}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1 text-left cursor-pointer"
+                  >
+                    <div className="relative shrink-0">
+                      <img
+                        src={activeWaifuAvatarSrc}
+                        alt={activeWaifu.name}
+                        width={26}
+                        height={26}
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                        }}
+                        className="h-6.5 w-6.5 rounded-full border border-[#22D3EE]/60 object-cover"
+                      />
+                      <span className="absolute -right-1 -bottom-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#22D3EE] text-[#041019] shadow">
+                        <Plus className="h-2.5 w-2.5 stroke-[3]" />
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-bold text-white">
+                          Chat Waifu Baru
+                        </span>
+                      </div>
+                      <div className="truncate text-[10.5px] text-[#94A3B8]">
+                        {activeWaifu.name} · Pilih Skenario
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenWaifuStudio();
+                      onCloseMobile();
+                    }}
+                    aria-label="Edit karakter Waifu"
+                    title="Edit karakter & personalisasi Waifu"
+                    className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/45 text-[#CBD5E1] transition-colors hover:border-[#FB923C]/55 hover:text-white cursor-pointer"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-[#FB923C]" />
+                  </button>
                 </div>
-              </button>
+              )}
+            </>
+          ) : (
+            /* Collapsed Desktop Rail (72px): Mode Pills + Mode-Aware Add Button */
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-white/10 bg-black/45 p-1">
+                <button
+                  type="button"
+                  onClick={() => onChangeSidebarMode('ai')}
+                  aria-label="Mode Chat AI Biasa"
+                  title={`Mode AI Biasa (${aiCount})`}
+                  className={`flex h-9 w-full items-center justify-center rounded-xl transition-all cursor-pointer ${
+                    sidebarMode === 'ai'
+                      ? 'border border-[#22D3EE]/50 bg-[#22D3EE]/16 text-[#22D3EE]'
+                      : 'text-[#94A3B8] hover:text-white'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onChangeSidebarMode('waifu')}
+                  aria-label="Mode Chat Waifu"
+                  title={`Mode Chat Waifu · ${activeWaifu.name} (${waifuCount})`}
+                  className={`flex h-9 w-full items-center justify-center rounded-xl transition-all cursor-pointer ${
+                    sidebarMode === 'waifu'
+                      ? 'border border-[#FB923C]/55 bg-[#FB923C]/16'
+                      : 'opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <img
+                    src={activeWaifuAvatarSrc}
+                    alt={activeWaifu.name}
+                    width={22}
+                    height={22}
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
+                    }}
+                    className="h-5.5 w-5.5 rounded-full border border-[#22D3EE]/55 object-cover"
+                  />
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={() => {
-                  onOpenWaifuStudio();
-                  onCloseMobile();
+                  if (sidebarMode === 'waifu') {
+                    onStartWaifuChat();
+                  } else {
+                    onNewChat();
+                  }
                 }}
-                aria-label="Edit karakter Waifu"
-                title="Edit karakter & personalisasi Waifu"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-[#CBD5E1] transition-colors hover:border-[#FB923C]/50 hover:text-white cursor-pointer"
+                aria-label={
+                  sidebarMode === 'waifu'
+                    ? `Tambah Chat Waifu baru (${activeWaifu.name})`
+                    : 'Tambah Chat AI baru'
+                }
+                title={
+                  sidebarMode === 'waifu'
+                    ? `Chat Waifu Baru · ${activeWaifu.name}`
+                    : 'Chat AI Baru'
+                }
+                className="nd-glass-card flex min-h-[44px] w-full items-center justify-center rounded-xl p-2.5 text-white cursor-pointer"
               >
-                <Pencil className="h-3.5 w-3.5 text-[#FB923C]" />
+                <Plus
+                  className={`h-5 w-5 ${
+                    sidebarMode === 'waifu' ? 'text-[#FB923C]' : 'text-[#22D3EE]'
+                  }`}
+                />
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                onStartWaifuChat();
-                onCloseMobile();
-              }}
-              aria-label={`Chat Waifu (${activeWaifu.name})`}
-              title={`Chat Waifu · ${activeWaifu.name}`}
-              className="nd-glass-card flex min-h-[44px] w-full items-center justify-center rounded-xl p-2 cursor-pointer"
-            >
-              <img
-                src={resolveWaifuAvatarUrl(activeWaifu.avatarUrl)}
-                alt={activeWaifu.name}
-                width={26}
-                height={26}
-                onError={(e) => {
-                  e.currentTarget.src = DEFAULT_MIKU_AVATAR_URL;
-                }}
-                className="h-6.5 w-6.5 rounded-full border border-[#22D3EE]/55 object-cover"
-              />
-            </button>
           )}
         </div>
 
@@ -324,7 +461,11 @@ export function Sidebar({
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Cari riwayat chat..."
+                placeholder={
+                  sidebarMode === 'waifu'
+                    ? 'Cari riwayat Waifu...'
+                    : 'Cari riwayat AI...'
+                }
                 aria-label="Cari riwayat percakapan"
                 className="h-9 w-full rounded-lg border border-white/10 bg-black/40 pr-3 pl-9 text-xs text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
               />
@@ -332,19 +473,38 @@ export function Sidebar({
           </div>
         )}
 
-        {/* History List */}
+        {/* Separated History List */}
         <div className="flex-1 overflow-y-auto px-2.5 py-1.5">
           {showExpanded ? (
             <>
               {filteredConversations.length === 0 ? (
                 <>
                   <div className="mb-1.5 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                    Riwayat Percakapan
+                    {sidebarMode === 'waifu'
+                      ? 'Riwayat Chat Waifu'
+                      : 'Riwayat AI Biasa'}
                   </div>
                   <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-3 py-5 text-center text-xs text-[#94A3B8]">
-                    {searchQuery
-                      ? 'Tidak ada percakapan yang cocok.'
-                      : 'Belum ada riwayat percakapan.'}
+                    {searchQuery ? (
+                      'Tidak ada percakapan yang cocok.'
+                    ) : sidebarMode === 'waifu' ? (
+                      <div className="space-y-2.5">
+                        <p>Belum ada riwayat Chat Waifu.</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onStartWaifuChat();
+                            onCloseMobile();
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#FB923C]/40 bg-[#FB923C]/14 px-3 py-1.5 text-[11px] font-semibold text-[#FED7AA] transition-colors hover:border-[#FB923C]/65 hover:text-white cursor-pointer"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>Pilih Skenario & Mulai</span>
+                        </button>
+                      </div>
+                    ) : (
+                      'Belum ada riwayat chat AI biasa.'
+                    )}
                   </div>
                 </>
               ) : (
@@ -365,8 +525,12 @@ export function Sidebar({
                     <div>
                       <div className="mb-1 px-2 font-mono-code text-[10px] font-semibold uppercase tracking-wider text-[#94A3B8]">
                         {pinnedConversations.length > 0
-                          ? 'Riwayat Terbaru'
-                          : 'Riwayat Percakapan'}
+                          ? sidebarMode === 'waifu'
+                            ? 'Waifu Terbaru'
+                            : 'AI Terbaru'
+                          : sidebarMode === 'waifu'
+                            ? 'Riwayat Chat Waifu'
+                            : 'Riwayat AI Biasa'}
                       </div>
                       <ul className="space-y-1">
                         {recentConversations.map(renderChatRow)}

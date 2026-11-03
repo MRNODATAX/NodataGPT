@@ -103,6 +103,16 @@ const ALLOWED_HOSTS = new Set([
   'api.api-ninjas.com',
   'api.niellku.web.id',
   'api-synhs.my.id',
+  'cloudflare-dns.com',
+  'dns.google',
+  'en.gravatar.com',
+  'www.gravatar.com',
+  'secure.gravatar.com',
+  'api.github.com',
+  'ipwho.is',
+  'ipapi.co',
+  'kodepos.vercel.app',
+  'api.zippopotam.us',
 ]);
 
 const ALLOWED_ROUTER_PATH_SUFFIXES = [

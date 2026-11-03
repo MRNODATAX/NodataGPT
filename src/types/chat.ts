@@ -17,6 +17,12 @@ export interface MediaDownloadItem {
   kind?: 'video' | 'audio' | 'image' | 'file';
 }
 
+export interface ToolActionLink {
+  label: string;
+  url: string;
+  kind?: 'maps' | 'whatsapp' | 'verify' | 'external';
+}
+
 export interface PreparedChatAttachment {
   kind: 'text' | 'image';
   name: string;
@@ -51,6 +57,7 @@ export interface ChatMessage {
   galleryDownloadUrls?: string[];
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
+  actionLinks?: ToolActionLink[];
   summarizeTranscript?: string;
   isImageRequest?: boolean;
   waifuExpressionUrl?: string;

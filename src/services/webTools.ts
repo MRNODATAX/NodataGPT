@@ -1,6 +1,11 @@
-import type { MediaDownloadItem } from '../types/chat';
+import type { MediaDownloadItem, ToolActionLink } from '../types/chat';
+import {
+  analyzeEmailInput,
+  analyzePhoneInput,
+  analyzeQrisInput,
+} from './osintInspector';
 
-export type WebToolCategoryId = 'A' | 'B' | 'D' | 'E';
+export type WebToolCategoryId = 'OSINT' | 'A' | 'B' | 'D' | 'E';
 
 export interface WebToolCommandCatalogItem {
   value: string;
@@ -120,6 +125,7 @@ export interface WebToolExecutionResult {
   galleryDownloadUrls?: string[];
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
+  actionLinks?: ToolActionLink[];
   summarizeTranscript?: string;
 }
 
@@ -132,8 +138,79 @@ export interface WebToolStatusCallback {
   }): void;
 }
 
-// Strictly Categories A, B, and D ONLY (Category C intentionally excluded per user directive)
+// Strictly OSINT + Categories A, B, D, and E (Category C intentionally excluded per user directive)
 export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
+  // === CATEGORY OSINT: QRIS, EMAIL & PHONE METADATA INSPECTOR ===
+  {
+    id: 'qris',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · QRIS, Email & Nomor',
+    name: 'QRIS Analyzer & Pelacak Area Merchant',
+    shortName: 'QRIS & Lokasi',
+    slashCommand: '/qris',
+    badge: 'EMVCo + Google Maps',
+    description:
+      'Dekode foto/string QRIS (EMVCo TLV + CRC-16), identifikasi Bank/E-Wallet Acquirer, NMID, skala usaha, audit anti-penipuan/quishing, resolusi Kode Pos ke Kecamatan/Kelurahan, dan tombol langsung ke Google Maps.',
+    placeholder:
+      'Upload foto QRIS, tempel string EMVCo (000201...), atau URL gambar QRIS...',
+    exampleInput:
+      '00020101021126620015ID.CO.GOPAY.WWW01189360091431234567890210G1234567890303UMI51440014ID.CO.QRIS.WWW0215ID10243210987650303UMI5204581253033605802ID5922KOPI NUSANTARA MENTENG6013JAKARTA PUSAT61051031063047B39',
+    requiresInput: true,
+    acceptsImageUpload: true,
+    usageNotice: {
+      title: 'Cara Pakai QRIS Deep Analyzer & Google Maps',
+      syntax: '/qris <000201... atau URL gambar>  (atau Upload Foto QRIS langsung)',
+      notes:
+        'Dekode barcode foto QRIS diproses langsung di browser Anda (aman & privat). Menampilkan tombol interaktif untuk membuka titik pencarian toko & area kode pos di Google Maps.',
+      examples: [
+        '/qris 00020101021126620015ID.CO.GOPAY.WWW...63047B39',
+        'Lampirkan screenshot QRIS di kolom chat lalu ketik /qris',
+      ],
+    },
+  },
+  {
+    id: 'cekemail',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · QRIS, Email & Nomor',
+    name: 'Deep Email OSINT & Keamanan Domain',
+    shortName: 'OSINT Email',
+    slashCommand: '/cekemail',
+    badge: 'DNS MX/DMARC + Footprint',
+    description:
+      'Investigasi alamat email secara mendalam: validasi kanonik/alias, deteksi email sekali pakai (burner/temp-mail), live DNS MX/SPF/DMARC anti-spoofing, profil publik Gravatar/GitHub, serta geolokasi server ke Google Maps.',
+    placeholder: 'Masukkan alamat email target (contoh: admin@perusahaan.co.id)',
+    exampleInput: 'security@cloudflare.com',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai Deep Email OSINT',
+      syntax: '/cekemail <alamat@domain.com>',
+      notes:
+        'Memeriksa infrastruktur Mail Server (MX), kebijakan keamanan SPF/DMARC, deteksi burner mail, profil publik Gravatar & GitHub, serta lokasi server domain kustom.',
+      examples: ['/cekemail security@cloudflare.com', '/cekemail cs@tokopedia.com'],
+    },
+  },
+  {
+    id: 'ceknomor',
+    category: 'OSINT',
+    categoryLabel: 'OSINT · QRIS, Email & Nomor',
+    name: 'OSINT Nomor HP, Operator & Area HLR',
+    shortName: 'OSINT Nomor HP',
+    slashCommand: '/ceknomor',
+    badge: 'Operator + HLR + Maps',
+    description:
+      'Analisis nomor telepon/HP (08xx, +62, kode area 021–0986 & internasional): normalisasi E.164, identifikasi operator & kartu perdana, estimasi wilayah registrasi HLR/kode area kota, tombol Google Maps, cek WhatsApp & CekRekening Komdigi.',
+    placeholder: 'Masukkan nomor HP atau telepon rumah (contoh: 081234567890 / 0274512345)',
+    exampleInput: '081220123456',
+    requiresInput: true,
+    usageNotice: {
+      title: 'Cara Pakai OSINT Nomor Telepon & HLR',
+      syntax: '/ceknomor <08xx / +62xx / 021xx>',
+      notes:
+        'Mendukung seluruh prefix seluler Indonesia (Telkomsel, Indosat/Tri, XL/Axis/Smartfren), 130+ kode telepon rumah/kantor kota Indonesia, dan kode negara internasional dengan tombol buka wilayah di Google Maps.',
+      examples: ['/ceknomor 081220123456', '/ceknomor 0274556677', '/ceknomor +6285712345678'],
+    },
+  },
+
   // === CATEGORY A: MEDIA & SOCIAL DOWNLOADER ===
   {
     id: 'tiktok',
@@ -989,6 +1066,39 @@ export function extractTrailingImageCount(
 export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | null {
   const trimmed = rawInput.trim();
   if (!trimmed.startsWith('/')) {
+    // Direct raw EMVCo QRIS string pasted without slash command
+    if (/^000201[\x20-\x7E]{20,650}6304[0-9A-Fa-f]{4}$/.test(trimmed)) {
+      return { toolId: 'qris', arg: trimmed };
+    }
+
+    if (
+      trimmed.length <= 720 &&
+      !/\b(?:perbedaan|pengertian|definisi|jelaskan|apa\s+itu|buat(?:kan)?|kode|script|html|aplikasi|website|puisi|cerita)\b/i.test(
+        trimmed
+      )
+    ) {
+      const natQris = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|analisa|analisis|scan|lacak(?:\s+lokasi)?)\s+qris\s+(000201[\s\S]+|https?:\/\/\S+)\??$/i
+      );
+      if (natQris && natQris[1]?.trim()) {
+        return { toolId: 'qris', arg: natQris[1].trim() };
+      }
+
+      const natEmail = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|osint|investigasi|periksa|lacak)\s+email\s+([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24})\??$/i
+      );
+      if (natEmail && natEmail[1]?.trim()) {
+        return { toolId: 'cekemail', arg: natEmail[1].trim() };
+      }
+
+      const natPhone = trimmed.match(
+        /^(?:tolong\s+|coba\s+)?(?:cek|osint|lacak|periksa)\s+(?:nomor|no\.?\s*hp|nomor\s+hp|nomor\s+telepon|hlr)\s+([+0-9][0-9\s().-]{6,20})\??$/i
+      );
+      if (natPhone && natPhone[1]?.trim()) {
+        return { toolId: 'ceknomor', arg: natPhone[1].trim() };
+      }
+    }
+
     if (
       trimmed.length <= 120 &&
       !/\b(?:perbedaan|pengertian|definisi|jelaskan|apa\s+itu|buat(?:kan)?|kode|script|html|aplikasi|website|puisi|cerita)\b/i.test(
@@ -1298,6 +1408,21 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'kutipan':
     case 'motivasi':
       return { toolId: 'quote', arg: rest };
+    case 'qris':
+    case 'cekqris':
+    case 'scanqris':
+    case 'qrisosint':
+      return { toolId: 'qris', arg: rest };
+    case 'cekemail':
+    case 'emailosint':
+    case 'osintemail':
+      return { toolId: 'cekemail', arg: rest };
+    case 'ceknomor':
+    case 'cekhp':
+    case 'phoneosint':
+    case 'hlr':
+    case 'lacaknomor':
+      return { toolId: 'ceknomor', arg: rest };
     default:
       return null;
   }
@@ -5898,6 +6023,62 @@ export async function executeWebToolCommand({
     }
 
     throw new Error('Gagal memuat gambar acak saat ini. Silakan coba klik Jalankan kembali.');
+  }
+
+  // =========================================================================
+  // CATEGORY OSINT: QRIS, EMAIL & PHONE METADATA INSPECTOR
+  // =========================================================================
+  if (toolId === 'qris') {
+    onStatus?.({
+      toolName: 'QRIS Deep Analyzer',
+      mirrorName: 'EMVCo TLV + Kode Pos + Google Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeQrisInput(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-qris-emvco',
+      answeredByName: 'OSINT Studio · QRIS & Lokasi Merchant',
+      usedFallback: false,
+      imageUrl: out.imageUrl,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'cekemail') {
+    onStatus?.({
+      toolName: 'Deep Email OSINT',
+      mirrorName: 'DNS MX/SPF/DMARC + Footprint',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzeEmailInput(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-email-inspector',
+      answeredByName: 'OSINT Studio · Deep Email Inspector',
+      usedFallback: false,
+      imageUrl: out.imageUrl,
+      actionLinks: out.actionLinks,
+    };
+  }
+
+  if (toolId === 'ceknomor') {
+    onStatus?.({
+      toolName: 'OSINT Nomor & HLR',
+      mirrorName: 'Operator + Kode Area + Google Maps',
+      attempt: 1,
+      isFallback: false,
+    });
+    const out = await analyzePhoneInput(arg, signal);
+    return {
+      content: out.content,
+      answeredById: 'osint-phone-hlr',
+      answeredByName: 'OSINT Studio · Nomor HP & Area HLR',
+      usedFallback: false,
+      actionLinks: out.actionLinks,
+    };
   }
 
   throw new Error(`Perintah tool "${toolId}" tidak dikenali.`);

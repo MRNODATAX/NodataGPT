@@ -9,7 +9,11 @@ import {
   ImagePlus,
   Loader2,
   LocateFixed,
+  Mail,
+  PhoneCall,
   Play,
+  QrCode,
+  ScanSearch,
   Search,
   Sparkles,
   Terminal,
@@ -23,6 +27,7 @@ import {
   buildSlashCommandFromTool,
   uploadImageToTempPublicUrl,
 } from '../services/webTools';
+import { decodeQrFromFile } from '../services/osintInspector';
 import { ToolsIcon } from './ToolsIcon';
 
 interface ToolsStudioModalProps {
@@ -37,6 +42,10 @@ const CATEGORY_TABS: Array<{
   label: string;
 }> = [
   { id: 'all', label: `Semua (${WEB_TOOLS_CATALOG.length})` },
+  {
+    id: 'OSINT',
+    label: `OSINT · QRIS, Email & Nomor (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'OSINT').length})`,
+  },
   {
     id: 'A',
     label: `A · Downloader (${WEB_TOOLS_CATALOG.filter((t) => t.category === 'A').length})`,
@@ -203,6 +212,25 @@ export function ToolsStudioModal({
     setUploadingPhoto(true);
     setUploadError('');
     try {
+      // Client-side private QRIS barcode decode (0 external upload needed when QR is readable!)
+      if (selectedTool?.id === 'qris') {
+        const localDecoded = await decodeQrFromFile(file);
+        if (localDecoded) {
+          const readerUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => resolve('');
+            reader.readAsDataURL(file);
+          });
+          setInputValue(localDecoded);
+          setUploadedPreviewUrl(readerUrl);
+          return;
+        }
+        throw new Error(
+          'Barcode QR tidak terdeteksi jelas pada foto ini. Pastikan kotak QRIS tidak terpotong, terang, dan tidak buram.'
+        );
+      }
+
       const publicUrl = await uploadImageToTempPublicUrl(file);
       setInputValue(publicUrl);
       setUploadedPreviewUrl(publicUrl);
@@ -258,10 +286,14 @@ export function ToolsStudioModal({
     onInsertCommand(cmd);
   };
 
-  const getCategoryIcon = (cat: WebToolCategoryId) => {
-    if (cat === 'A') return Download;
-    if (cat === 'B') return Film;
-    if (cat === 'E') return CloudSun;
+  const getToolIcon = (tool: WebToolDefinition) => {
+    if (tool.id === 'qris') return QrCode;
+    if (tool.id === 'cekemail') return Mail;
+    if (tool.id === 'ceknomor') return PhoneCall;
+    if (tool.category === 'OSINT') return ScanSearch;
+    if (tool.category === 'A') return Download;
+    if (tool.category === 'B') return Film;
+    if (tool.category === 'E') return CloudSun;
     return Sparkles;
   };
 
@@ -319,16 +351,19 @@ export function ToolsStudioModal({
               <div className="rounded-2xl border border-[#22D3EE]/25 bg-gradient-to-br from-[#071829]/95 via-[#091220]/95 to-[#1A1008]/85 p-3.5 sm:p-4">
                 <div className="flex items-start gap-3">
                   {(() => {
-                    const ActiveIcon = getCategoryIcon(selectedTool.category);
+                    const ActiveIcon = getToolIcon(selectedTool);
                     const isOrange =
                       selectedTool.category === 'B' ||
                       selectedTool.category === 'E';
+                    const isOsint = selectedTool.category === 'OSINT';
                     return (
                       <span
                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
-                          isOrange
-                            ? 'border-[#FB923C]/40 bg-[#FB923C]/14 text-[#FB923C]'
-                            : 'border-[#22D3EE]/40 bg-[#22D3EE]/14 text-[#22D3EE]'
+                          isOsint
+                            ? 'border-emerald-400/45 bg-emerald-500/15 text-emerald-300'
+                            : isOrange
+                              ? 'border-[#FB923C]/40 bg-[#FB923C]/14 text-[#FB923C]'
+                              : 'border-[#22D3EE]/40 bg-[#22D3EE]/14 text-[#22D3EE]'
                         }`}
                       >
                         <ActiveIcon className="h-5 w-5" />
@@ -459,8 +494,12 @@ export function ToolsStudioModal({
                     )}
                     <span>
                       {uploadingPhoto
-                        ? 'Mengunggah Foto...'
-                        : 'Upload Foto dari Perangkat'}
+                        ? selectedTool.id === 'qris'
+                          ? 'Memindai Barcode QRIS...'
+                          : 'Mengunggah Foto...'
+                        : selectedTool.id === 'qris'
+                          ? 'Scan Foto / Screenshot QRIS'
+                          : 'Upload Foto dari Perangkat'}
                     </span>
                   </button>
 
@@ -471,7 +510,11 @@ export function ToolsStudioModal({
                         alt="Pratinjau foto"
                         className="h-9 w-9 rounded-lg border border-white/15 object-cover"
                       />
-                      <span>Foto siap diproses — tekan Jalankan!</span>
+                      <span>
+                        {selectedTool.id === 'qris'
+                          ? 'QRIS berhasil terbaca dari foto — klik Jalankan Sekarang!'
+                          : 'Foto siap diproses — tekan Jalankan!'}
+                      </span>
                     </div>
                   )}
 
@@ -708,7 +751,7 @@ export function ToolsStudioModal({
                     NodataGPT Web Tools Studio
                   </h2>
                   <p className="text-xs text-[#94A3B8]">
-                    {WEB_TOOLS_CATALOG.length} fitur aktif (Downloader, Audio/Video AI, Cuaca, Sholat, Kurs, Emas, Crypto &amp; Saham) dengan Auto-Fallback
+                    {WEB_TOOLS_CATALOG.length} fitur aktif (OSINT QRIS/Email/Nomor, Downloader, Audio/Video AI, Cuaca &amp; Finansial)
                   </p>
                 </div>
               </div>
@@ -731,7 +774,7 @@ export function ToolsStudioModal({
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari TikTok, YouTube, Cuaca, Sholat, Kurs, Emas, Crypto, IHSG, RemoveBG..."
+                  placeholder="Cari QRIS, Cek Email, Cek Nomor HP, TikTok, YouTube, Cuaca, Sholat, Kurs..."
                   className="h-10 w-full rounded-xl border border-white/10 bg-black/50 pr-3 pl-9 text-sm text-white placeholder-[#94A3B8] focus:border-[#22D3EE] focus:outline-none"
                 />
               </div>
@@ -781,9 +824,10 @@ export function ToolsStudioModal({
               ) : (
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   {filteredTools.map((tool) => {
-                    const Icon = getCategoryIcon(tool.category);
+                    const Icon = getToolIcon(tool);
                     const isOrange =
                       tool.category === 'B' || tool.category === 'E';
+                    const isOsint = tool.category === 'OSINT';
                     const hasCatalog = Boolean(
                       tool.commandCatalog && tool.commandCatalog.length > 0
                     );
@@ -808,9 +852,11 @@ export function ToolsStudioModal({
                           <div className="flex items-center justify-between gap-2">
                             <span
                               className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                                isOrange
-                                  ? 'border-[#FB923C]/35 bg-[#FB923C]/14 text-[#FB923C]'
-                                  : 'border-[#22D3EE]/35 bg-[#22D3EE]/14 text-[#22D3EE]'
+                                isOsint
+                                  ? 'border-emerald-400/35 bg-emerald-500/14 text-emerald-300'
+                                  : isOrange
+                                    ? 'border-[#FB923C]/35 bg-[#FB923C]/14 text-[#FB923C]'
+                                    : 'border-[#22D3EE]/35 bg-[#22D3EE]/14 text-[#22D3EE]'
                               }`}
                             >
                               <Icon className="h-4 w-4" />
@@ -870,13 +916,15 @@ export function ToolsStudioModal({
                         <div className="mt-2.5 flex items-center justify-between gap-2 pt-1">
                           <span
                             className={`rounded-full px-2 py-0.5 font-mono-code text-[10px] font-medium ${
-                              tool.category === 'A'
-                                ? 'bg-[#22D3EE]/12 text-[#67E8F9]'
-                                : tool.category === 'B'
-                                  ? 'bg-[#FB923C]/14 text-[#FDBA74]'
-                                  : tool.category === 'E'
-                                    ? 'bg-emerald-500/14 text-emerald-300'
-                                    : 'bg-white/10 text-[#E2E8F0]'
+                              tool.category === 'OSINT'
+                                ? 'bg-emerald-500/16 text-emerald-300 border border-emerald-400/25'
+                                : tool.category === 'A'
+                                  ? 'bg-[#22D3EE]/12 text-[#67E8F9]'
+                                  : tool.category === 'B'
+                                    ? 'bg-[#FB923C]/14 text-[#FDBA74]'
+                                    : tool.category === 'E'
+                                      ? 'bg-emerald-500/14 text-emerald-300'
+                                      : 'bg-white/10 text-[#E2E8F0]'
                             }`}
                           >
                             {tool.badge}

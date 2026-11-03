@@ -3,6 +3,7 @@ import type {
   AppSettings,
   ChatMessage,
   MediaDownloadItem,
+  ToolActionLink,
 } from '../types/chat';
 import type { WaifuProfile } from '../types/waifu';
 import {
@@ -2818,6 +2819,7 @@ export interface RouterResult {
   galleryDownloadUrls?: string[];
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
+  actionLinks?: ToolActionLink[];
   summarizeTranscript?: string;
 }
 
@@ -3301,7 +3303,7 @@ export async function sendMultiModelChat({
   signal?: AbortSignal;
   onStatus?: (status: RouterStatusUpdate) => void;
 }): Promise<RouterResult> {
-  // 0. Check Phase 2 Web Tools (Categories A, B, and D slash commands)
+  // 0. Check Web Tools & OSINT Suite slash / natural commands
   const webToolCommand = detectWebToolCommand(prompt);
   if (webToolCommand) {
     if (
@@ -3310,6 +3312,13 @@ export async function sendMultiModelChat({
       attachmentImage?.publicUrl
     ) {
       webToolCommand.arg = attachmentImage.publicUrl;
+    }
+    if (
+      webToolCommand.toolId === 'qris' &&
+      !webToolCommand.arg.trim() &&
+      (attachmentImage?.dataUrl || attachmentImage?.publicUrl)
+    ) {
+      webToolCommand.arg = attachmentImage.dataUrl || attachmentImage.publicUrl || '';
     }
     const toolRes = await executeWebToolCommand({
       command: webToolCommand,
@@ -3337,8 +3346,44 @@ export async function sendMultiModelChat({
       galleryDownloadUrls: toolRes.galleryDownloadUrls,
       galleryAspect: toolRes.galleryAspect,
       downloadItems: toolRes.downloadItems,
+      actionLinks: toolRes.actionLinks,
       summarizeTranscript: toolRes.summarizeTranscript,
     };
+  }
+
+  // 0.25 Natural QRIS Photo Upload Inspection in Composer (e.g. user uploads photo + "cek qris ini")
+  if (
+    !waifuProfile &&
+    (attachmentImage?.dataUrl || attachmentImage?.publicUrl) &&
+    /\bqris\b/i.test(prompt)
+  ) {
+    try {
+      const qrisToolRes = await executeWebToolCommand({
+        command: {
+          toolId: 'qris',
+          arg: attachmentImage.dataUrl || attachmentImage.publicUrl || '',
+        },
+        signal,
+        onStatus: (info) => {
+          onStatus?.({
+            modelName: `${info.toolName} · ${info.mirrorName}`,
+            attempt: info.attempt,
+            isFallback: info.isFallback,
+          });
+        },
+      });
+      return {
+        content: qrisToolRes.content,
+        answeredById: qrisToolRes.answeredById,
+        answeredByName: qrisToolRes.answeredByName,
+        usedFallback: qrisToolRes.usedFallback,
+        attemptsCount: 1,
+        imageUrl: qrisToolRes.imageUrl,
+        actionLinks: qrisToolRes.actionLinks,
+      };
+    } catch {
+      // If QR barcode couldn't be decoded cleanly, continue to Vision AI seamlessly
+    }
   }
 
   // 0.5 Multimodal Vision Routing when user attached a personal photo/screenshot

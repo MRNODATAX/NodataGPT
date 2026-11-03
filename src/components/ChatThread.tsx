@@ -9,17 +9,21 @@ import {
   Clock,
   Copy,
   Download,
+  ExternalLink,
   FastForward,
   FileText,
   Film,
   ImageIcon,
   Loader2,
+  MapPin,
   Maximize2,
+  MessageCircle,
   Music,
   Pencil,
   Play,
   RefreshCw,
   Send,
+  ShieldCheck,
   Shuffle,
   Sparkles,
   Volume2,
@@ -1302,6 +1306,49 @@ export function ChatThread({
                       isStreaming={isTypingContent}
                       waifuMode={Boolean(waifuProfile)}
                     />
+
+                    {/* Direct Action Buttons (Google Maps, WhatsApp Check, Anti-Fraud Komdigi, External OSINT) */}
+                    {msg.actionLinks && msg.actionLinks.length > 0 && (
+                      <div
+                        data-testid="message-action-links"
+                        className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-white/[0.08] pt-3"
+                      >
+                        {msg.actionLinks.map((act, actIdx) => {
+                          const isMaps = act.kind === 'maps';
+                          const isWa = act.kind === 'whatsapp';
+                          const isVerify = act.kind === 'verify';
+                          return (
+                            <a
+                              key={`${msg.id}-act-${actIdx}`}
+                              href={act.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`inline-flex min-h-[38px] items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all active:scale-[0.98] ${
+                                isMaps
+                                  ? 'border-[#22D3EE]/55 bg-gradient-to-r from-[#0E7490]/85 to-[#0F766E]/85 text-white shadow-[0_0_16px_rgba(34,211,238,0.25)] hover:border-[#67E8F9] hover:brightness-110'
+                                  : isWa
+                                    ? 'border-emerald-400/45 bg-emerald-500/16 text-emerald-200 hover:bg-emerald-500/26 hover:text-white'
+                                    : isVerify
+                                      ? 'border-[#FB923C]/45 bg-[#FB923C]/14 text-[#FED7AA] hover:bg-[#FB923C]/24 hover:text-white'
+                                      : 'border-white/18 bg-white/[0.06] text-[#E2E8F0] hover:border-[#22D3EE]/40 hover:bg-[#22D3EE]/14 hover:text-white'
+                              }`}
+                            >
+                              {isMaps ? (
+                                <MapPin className="h-3.5 w-3.5 shrink-0 text-[#67E8F9]" />
+                              ) : isWa ? (
+                                <MessageCircle className="h-3.5 w-3.5 shrink-0 text-emerald-300" />
+                              ) : isVerify ? (
+                                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#FB923C]" />
+                              ) : (
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#67E8F9]" />
+                              )}
+                              <span>{act.label}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0 opacity-75" />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Extra Download Pills & 1-Click Transcript AI Summary */}
                     {((msg.downloadItems && msg.downloadItems.length > 0) ||

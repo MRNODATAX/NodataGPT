@@ -87,6 +87,7 @@ import type {
   Conversation,
   MediaDownloadItem,
   PreparedChatAttachment,
+  ToolActionLink,
 } from './types/chat';
 import type {
   WaifuProfile,
@@ -107,6 +108,7 @@ interface PendingStreamState {
   waifuExpressionLabel?: string;
   waifuExpressionObjectPosition?: string;
   downloadItems?: MediaDownloadItem[];
+  actionLinks?: ToolActionLink[];
   summarizeTranscript?: string;
 }
 
@@ -283,6 +285,7 @@ export function App() {
                 waifuExpressionLabel: pending.waifuExpressionLabel,
                 waifuExpressionObjectPosition: pending.waifuExpressionObjectPosition,
                 downloadItems: pending.downloadItems,
+                actionLinks: pending.actionLinks,
                 summarizeTranscript: pending.summarizeTranscript,
                 status: 'done',
                 durationMs: finalDuration,
@@ -319,6 +322,9 @@ export function App() {
             if (m.content.trim().length > 0) {
               return {
                 ...m,
+                downloadItems: pending.downloadItems,
+                actionLinks: pending.actionLinks,
+                summarizeTranscript: pending.summarizeTranscript,
                 status: 'done',
                 durationMs: stopDuration,
               };
@@ -884,6 +890,7 @@ export function App() {
                     galleryDownloadUrls: result.galleryDownloadUrls,
                     galleryAspect: result.galleryAspect,
                     downloadItems: result.downloadItems,
+                    actionLinks: result.actionLinks,
                     summarizeTranscript: result.summarizeTranscript,
                     status: 'done',
                     isError: false,
@@ -911,6 +918,7 @@ export function App() {
           waifuExpressionLabel: selectedWaifuExpr?.label,
           waifuExpressionObjectPosition: selectedWaifuExpr?.objectPosition,
           downloadItems: result.downloadItems,
+          actionLinks: result.actionLinks,
           summarizeTranscript: result.summarizeTranscript,
         };
 
@@ -941,6 +949,7 @@ export function App() {
                     waifuExpressionObjectPosition:
                       selectedWaifuExpr?.objectPosition,
                     downloadItems: finished ? result.downloadItems : undefined,
+                    actionLinks: result.actionLinks,
                     summarizeTranscript: finished
                       ? result.summarizeTranscript
                       : undefined,
@@ -1069,13 +1078,12 @@ export function App() {
       }
       if (checkSendCooldownRemainingMs() > 0) return;
 
+      const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
       const implicitCasualWaifu =
-        !activeConversation && sidebarMode === 'waifu'
+        !activeConversation && sidebarMode === 'waifu' && !isWebTool
           ? buildCasualAyangSnapshot(activeWaifu)
           : undefined;
       const effectiveTurnWaifu = activeConversationWaifu ?? implicitCasualWaifu;
-
-      const isWebTool = Boolean(!attachmentText && detectWebToolCommand(trimmed));
       const isWaifuPapTurn = Boolean(
         !hasImageAttachment &&
           effectiveTurnWaifu &&

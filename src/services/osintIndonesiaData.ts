@@ -4,11 +4,16 @@ export interface HlrLookupMatch {
   city: string;
   province: string;
   region: string;
+  clusterCoverage?: string;
   mapQuery: string;
   coordinates?: { lat: number; lon: number };
   matchedPrefix: string;
-  accuracyTier: 'high' | 'national';
-  precisionLevel: 'city_6_8_digit' | 'city_5_digit' | 'national_pool';
+  accuracyTier: 'high' | 'cluster' | 'national';
+  precisionLevel:
+    | 'city_6_8_digit'
+    | 'city_5_digit'
+    | 'regional_cluster'
+    | 'national_pool';
   precisionLabel: string;
   basisNote: string;
 }
@@ -23,9 +28,11 @@ interface CityGeoInfo {
 const CITY_GEO_REGISTRY = {
   // DKI Jakarta, Banten & Bodetabek
   jakarta: { city: 'DKI Jakarta', province: 'DKI Jakarta', lat: -6.2088, lon: 106.8456 },
+  jakartapusat: { city: 'Jakarta Pusat', province: 'DKI Jakarta', lat: -6.1805, lon: 106.8284 },
   bogor: { city: 'Kota Bogor', province: 'Jawa Barat', lat: -6.5971, lon: 106.806 },
   depok: { city: 'Kota Depok', province: 'Jawa Barat', lat: -6.4025, lon: 106.7942 },
   tangerang: { city: 'Kota Tangerang', province: 'Banten', lat: -6.1783, lon: 106.6319 },
+  tangsel: { city: 'Kota Tangerang Selatan', province: 'Banten', lat: -6.2886, lon: 106.7179 },
   bekasi: { city: 'Kota Bekasi', province: 'Jawa Barat', lat: -6.2383, lon: 106.9756 },
   serang: { city: 'Kota Serang', province: 'Banten', lat: -6.1104, lon: 106.164 },
   cilegon: { city: 'Kota Cilegon', province: 'Banten', lat: -6.0025, lon: 106.0111 },
@@ -101,7 +108,11 @@ const CITY_GEO_REGISTRY = {
   // Sumatera
   bandaaceh: { city: 'Kota Banda Aceh', province: 'Aceh', lat: 5.5483, lon: 95.3238 },
   lhokseumawe: { city: 'Kota Lhokseumawe', province: 'Aceh', lat: 5.1801, lon: 97.1507 },
+  langsa: { city: 'Kota Langsa', province: 'Aceh', lat: 4.4683, lon: 97.9683 },
   medan: { city: 'Kota Medan', province: 'Sumatera Utara', lat: 3.5952, lon: 98.6722 },
+  deliserdang: { city: 'Kab. Deli Serdang', province: 'Sumatera Utara', lat: 3.4214, lon: 98.8658 },
+  binjai: { city: 'Kota Binjai', province: 'Sumatera Utara', lat: 3.6001, lon: 98.4854 },
+  kabanjahe: { city: 'Kabanjahe', province: 'Sumatera Utara', lat: 3.1003, lon: 98.4908 },
   pematangsiantar: { city: 'Kota Pematangsiantar', province: 'Sumatera Utara', lat: 2.9595, lon: 99.0682 },
   tebingtinggi: { city: 'Kota Tebing Tinggi', province: 'Sumatera Utara', lat: 3.3285, lon: 99.1625 },
   tanjungbalai: { city: 'Kota Tanjungbalai', province: 'Sumatera Utara', lat: 2.9668, lon: 99.7989 },
@@ -177,6 +188,60 @@ const CITY_GEO_REGISTRY = {
   manokwari: { city: 'Manokwari', province: 'Papua Barat', lat: -0.8615, lon: 134.062 },
   timika: { city: 'Timika', province: 'Papua Tengah', lat: -4.5467, lon: 136.8872 },
   merauke: { city: 'Merauke', province: 'Papua Selatan', lat: -8.4932, lon: 140.4018 },
+
+  // Additional HLR Regency / Exchange Cities (Jateng, Jatim, Kalsel, Sulsel, Sulbar, NTB/NTT)
+  pemalang: { city: 'Pemalang', province: 'Jawa Tengah', lat: -6.8906, lon: 109.3808 },
+  brebes: { city: 'Brebes', province: 'Jawa Tengah', lat: -6.8706, lon: 109.0426 },
+  rembang: { city: 'Rembang', province: 'Jawa Tengah', lat: -6.7086, lon: 111.3416 },
+  jepara: { city: 'Jepara', province: 'Jawa Tengah', lat: -6.5889, lon: 110.6684 },
+  sragen: { city: 'Sragen', province: 'Jawa Tengah', lat: -7.4265, lon: 111.0221 },
+  karanganyar: { city: 'Karanganyar', province: 'Jawa Tengah', lat: -7.596, lon: 110.9508 },
+  sukoharjo: { city: 'Sukoharjo', province: 'Jawa Tengah', lat: -7.683, lon: 110.8406 },
+  wonogiri: { city: 'Wonogiri', province: 'Jawa Tengah', lat: -7.8147, lon: 110.9234 },
+  purworejo: { city: 'Purworejo', province: 'Jawa Tengah', lat: -7.7133, lon: 110.0082 },
+  temanggung: { city: 'Temanggung', province: 'Jawa Tengah', lat: -7.3161, lon: 110.175 },
+  banjarnegara: { city: 'Banjarnegara', province: 'Jawa Tengah', lat: -7.3991, lon: 109.6967 },
+  purbalingga: { city: 'Purbalingga', province: 'Jawa Tengah', lat: -7.3881, lon: 109.3639 },
+  sidoarjo: { city: 'Sidoarjo', province: 'Jawa Timur', lat: -7.4478, lon: 112.7183 },
+  gresik: { city: 'Gresik', province: 'Jawa Timur', lat: -7.1567, lon: 112.6555 },
+  pamekasan: { city: 'Pamekasan', province: 'Jawa Timur', lat: -7.1568, lon: 113.4746 },
+  situbondo: { city: 'Situbondo', province: 'Jawa Timur', lat: -7.7062, lon: 114.0098 },
+  banjarbaru: { city: 'Kota Banjarbaru', province: 'Kalimantan Selatan', lat: -3.4404, lon: 114.8308 },
+  palopo: { city: 'Kota Palopo', province: 'Sulawesi Selatan', lat: -2.9926, lon: 120.1969 },
+  watampone: { city: 'Watampone (Bone)', province: 'Sulawesi Selatan', lat: -4.5386, lon: 120.3279 },
+  bulukumba: { city: 'Bulukumba', province: 'Sulawesi Selatan', lat: -5.5539, lon: 120.1928 },
+  baubau: { city: 'Kota Baubau', province: 'Sulawesi Tenggara', lat: -5.4667, lon: 122.6333 },
+  mamuju: { city: 'Mamuju', province: 'Sulawesi Barat', lat: -2.6778, lon: 118.887 },
+  bima: { city: 'Kota Bima', province: 'Nusa Tenggara Barat', lat: -8.4606, lon: 118.7267 },
+  ende: { city: 'Ende', province: 'Nusa Tenggara Timur', lat: -8.8432, lon: 121.6623 },
+  maumere: { city: 'Maumere', province: 'Nusa Tenggara Timur', lat: -8.6189, lon: 122.2122 },
+  labuanbajo: { city: 'Labuan Bajo', province: 'Nusa Tenggara Timur', lat: -8.4964, lon: 119.8877 },
+  waingapu: { city: 'Waingapu', province: 'Nusa Tenggara Timur', lat: -9.6567, lon: 120.2641 },
+  majalengka: { city: 'Kab. Majalengka', province: 'Jawa Barat', lat: -6.8364, lon: 108.2279 },
+  sampang: { city: 'Kab. Sampang', province: 'Jawa Timur', lat: -7.1872, lon: 113.2394 },
+  sumenep: { city: 'Kab. Sumenep', province: 'Jawa Timur', lat: -7.0056, lon: 113.8628 },
+  negara: { city: 'Negara (Jembrana)', province: 'Bali', lat: -8.3569, lon: 114.6261 },
+  selong: { city: 'Selong (Lombok Timur)', province: 'Nusa Tenggara Barat', lat: -8.6508, lon: 116.5361 },
+  sabang: { city: 'Kota Sabang', province: 'Aceh', lat: 5.8916, lon: 95.3222 },
+  sigli: { city: 'Sigli (Pidie)', province: 'Aceh', lat: 5.3848, lon: 95.9609 },
+  meulaboh: { city: 'Meulaboh (Aceh Barat)', province: 'Aceh', lat: 4.1363, lon: 96.1269 },
+  ranai: { city: 'Ranai (Natuna)', province: 'Kepulauan Riau', lat: 3.9403, lon: 108.3881 },
+  dabosingkep: { city: 'Dabo Singkep (Lingga)', province: 'Kepulauan Riau', lat: -0.4958, lon: 104.5625 },
+  kualatungkal: { city: 'Kuala Tungkal', province: 'Jambi', lat: -0.8165, lon: 103.4614 },
+  muarabungo: { city: 'Muara Bungo', province: 'Jambi', lat: -1.5022, lon: 102.1153 },
+  curup: { city: 'Curup (Rejang Lebong)', province: 'Bengkulu', lat: -3.4704, lon: 102.5208 },
+  sekayu: { city: 'Sekayu (Musi Banyuasin)', province: 'Sumatera Selatan', lat: -2.8906, lon: 103.8314 },
+  kayuagung: { city: 'Kayuagung (OKI)', province: 'Sumatera Selatan', lat: -3.3936, lon: 104.8306 },
+  mentok: { city: 'Mentok (Bangka Barat)', province: 'Kepulauan Bangka Belitung', lat: -2.0653, lon: 105.1636 },
+  menggala: { city: 'Menggala (Tulang Bawang)', province: 'Lampung', lat: -4.4697, lon: 105.2422 },
+  pringsewu: { city: 'Kab. Pringsewu', province: 'Lampung', lat: -5.3582, lon: 104.9744 },
+  mempawah: { city: 'Kab. Mempawah', province: 'Kalimantan Barat', lat: 0.3694, lon: 108.9597 },
+  sanggau: { city: 'Kab. Sanggau', province: 'Kalimantan Barat', lat: 0.1231, lon: 110.5892 },
+  sintang: { city: 'Kab. Sintang', province: 'Kalimantan Barat', lat: 0.0725, lon: 111.4903 },
+  kotamobagu: { city: 'Kota Kotamobagu', province: 'Sulawesi Utara', lat: 0.7267, lon: 124.3111 },
+  tual: { city: 'Kota Tual', province: 'Maluku', lat: -5.6317, lon: 132.7508 },
+  nabire: { city: 'Nabire', province: 'Papua Tengah', lat: -3.3622, lon: 135.5019 },
+  wamena: { city: 'Wamena', province: 'Papua Pegunungan', lat: -4.0956, lon: 138.9531 },
 } as const satisfies Record<string, CityGeoInfo>;
 
 type CityId = keyof typeof CITY_GEO_REGISTRY;
@@ -1038,10 +1103,706 @@ const SINGLE_CITY_HLR_RULES: SingleCityHlrRule[] = [
     ],
   },
   { cityId: 'merauke', prefixes: ['0812482', '082198', '08152750'] },
+
+  // --- INTERNET-VERIFIED TRI (0895-0899), AXIS (0831-0838), SMARTFREN (0881-0889) & EKS-FLEXI (08510x) ---
+  {
+    cityId: 'jakarta',
+    prefixes: [
+      '085100', '085108', '085109',
+      '08950', '08951', '08960', '08963', '08964', ...expandRange('0896', 50, 54),
+      '08972', '08979', '08980', '089867', '08988', '08989',
+      '089900', '089916', '08996', '08998', '08999', '089997',
+      '08380', '08387', '08388', '08389', '083891',
+      '08811', '088188', '088199', '088210', '088211', '08829', '08880', '08881', '08888', '08889',
+    ],
+  },
+  {
+    cityId: 'bekasi',
+    prefixes: ['0895224', '08952243', '088213', '0882134'],
+  },
+  {
+    cityId: 'tangsel',
+    prefixes: ['0896478'],
+  },
+  {
+    cityId: 'tangerang',
+    prefixes: ['083813', '088214'],
+  },
+  {
+    cityId: 'bogor',
+    prefixes: ['0899955', '083810', '083811', '083819', '088212'],
+  },
+  {
+    cityId: 'serang',
+    prefixes: ['083812'],
+  },
+  {
+    cityId: 'karawang',
+    prefixes: ['083814'],
+  },
+  {
+    cityId: 'purwakarta',
+    prefixes: ['083816'],
+  },
+  {
+    cityId: 'cianjur',
+    prefixes: ['083817'],
+  },
+  {
+    cityId: 'sukabumi',
+    prefixes: ['083818'],
+  },
+  {
+    cityId: 'bandung',
+    prefixes: [
+      '085101',
+      '089520', '089521', '089655', '089656', '089657', '089660', '089662',
+      '089757', '089777', '08986', '089869', '08987', '089878', '089888', '089977', '089979',
+      '083820', '083821', '083822', '083827', '083828', '083829',
+      '088120', '088121', '088122', '088123', '088218', '088222', '088223', '088820', '088821',
+    ],
+  },
+  {
+    cityId: 'cirebon',
+    prefixes: ['089873', '083823', '083824'],
+  },
+  {
+    cityId: 'sumedang',
+    prefixes: ['083825'],
+  },
+  {
+    cityId: 'tasikmalaya',
+    prefixes: ['083826'],
+  },
+  {
+    cityId: 'semarang',
+    prefixes: [
+      '085102',
+      '089541', '089759', '089768', '08985', '089860', '089866', '08995', '089953',
+      '083838', '083842', '083862',
+      '088124', '088137', '088138', '088215', '088216', '088226', '088227', '088232', '088233',
+    ],
+  },
+  {
+    cityId: 'kudus',
+    prefixes: ['089955'],
+  },
+  {
+    cityId: 'pekalongan',
+    prefixes: ['0838618', '0838619'],
+  },
+  {
+    cityId: 'purwokerto',
+    prefixes: ['0899961', '0838370', '083863'],
+  },
+  {
+    cityId: 'solo',
+    prefixes: ['089855', '083864', '083865', '083866', '088126'],
+  },
+  {
+    cityId: 'yogyakarta',
+    prefixes: [
+      '089883', '089950', '089951', '089954', ...expandRange('0899', 70, 76), '089985', '089995',
+      '083840', '083867', '083868', '083869',
+      '088127', '088128', '088225',
+    ],
+  },
+  {
+    cityId: 'surabaya',
+    prefixes: [
+      '085103',
+      '089530', '089531', '089532', '089533', '089667', '089675', '089676', '089677', '089678',
+      '089705', '089706', '089707', '08973', '089734', '08978',
+      '08983', '089833', '089834', '089835', '089837', '089838', '089839', '08993',
+      '08310', '08313', ...expandRange('0831', 50, 55), '083157', '083158', '083159',
+      '083830', '083831', '083832', '083833', '083839', '083849', '08385',
+      '083854', '083856', '083857', '083858', '083859', '083860',
+      '088130', '088131', '088132', '088133', '088134', '088135', '08819',
+      '088217', '088228', '088231', '088234', '088235', '08883', '08884', '08885',
+    ],
+  },
+  {
+    cityId: 'pasuruan',
+    prefixes: ['0831551', '083837'],
+  },
+  {
+    cityId: 'malang',
+    prefixes: [
+      '089703', '089836', '089903', '089935',
+      '083156', '083834', '083835', '083848',
+      '088136', '088155', '088230',
+    ],
+  },
+  {
+    cityId: 'jember',
+    prefixes: ['089670', '089700', '089701', '089702'],
+  },
+  {
+    cityId: 'denpasar',
+    prefixes: [
+      '089722', '089898', '0899018', '089911', '089912',
+      '08311', '083117', '083118', '083119', '083881', '083883',
+      '08818', '088236', '088733', '088734', '088736',
+    ],
+  },
+  {
+    cityId: 'mataram',
+    prefixes: ['083129', '088735'],
+  },
+  {
+    cityId: 'pontianak',
+    prefixes: ['089852'],
+  },
+  {
+    cityId: 'palangkaraya',
+    prefixes: ['089850'],
+  },
+  {
+    cityId: 'balikpapan',
+    prefixes: ['085105', '089708', '089859', '0899875'],
+  },
+  {
+    cityId: 'makassar',
+    prefixes: ['085104', '089818', '0898725', '089915', '089925'],
+  },
+  {
+    cityId: 'medan',
+    prefixes: [
+      '085106',
+      '089535', '0895351', '0895353', '089560', '089561', '089613', '089828', '089829', '089845', '089848',
+      '08319', '083198',
+      '08816', '08826', '08886',
+    ],
+  },
+  {
+    cityId: 'deliserdang',
+    prefixes: ['0895613'],
+  },
+  {
+    cityId: 'kabanjahe',
+    prefixes: ['083191'],
+  },
+  {
+    cityId: 'rantauprapat',
+    prefixes: ['083193'],
+  },
+  {
+    cityId: 'pematangsiantar',
+    prefixes: ['083196'],
+  },
+  {
+    cityId: 'bandaaceh',
+    prefixes: ['089841', '083189'],
+  },
+  {
+    cityId: 'lhokseumawe',
+    prefixes: ['083188'],
+  },
+  {
+    cityId: 'padang',
+    prefixes: ['083181'],
+  },
+  {
+    cityId: 'bukittinggi',
+    prefixes: ['083180'],
+  },
+  {
+    cityId: 'pekanbaru',
+    prefixes: ['083186', '083378', '08827'],
+  },
+  {
+    cityId: 'dumai',
+    prefixes: ['083185'],
+  },
+  {
+    cityId: 'batam',
+    prefixes: ['089766', '089840', '083183'],
+  },
+  {
+    cityId: 'tanjungpinang',
+    prefixes: ['0899200', '083372'],
+  },
+  {
+    cityId: 'jambi',
+    prefixes: ['0899880', '083171'],
+  },
+  {
+    cityId: 'palembang',
+    prefixes: [
+      '085107',
+      '089627', '089822', '089823', '089844', '089923',
+      '083177',
+      '08817', '08828', '08887',
+    ],
+  },
+  {
+    cityId: 'muaraenim',
+    prefixes: ['083176'],
+  },
+  {
+    cityId: 'bandarlampung',
+    prefixes: ['089842', '089922', '083170'],
+  },
+  {
+    cityId: 'kotabumi',
+    prefixes: ['083169'],
+  },
 ];
 
-// Build deduplicated O(1) prefix map + normalized city coordinate lookup
+// ============================================================================
+// REGIONAL CLUSTER HLR RULES (RESTORED VERSI PERTAMA + MULTI-DIGIT SAFETY NET)
+// Used when an operator prefix covers a multi-city MSC cluster (e.g. Jabodetabek,
+// Priangan/Jabar, Jateng-DIY, Jatim, Sumbagut, Sumbagsel, Kalimantan, Sulawesi).
+// Every cluster maps to a REAL primary HLR hub city + GPS + explicit coverage!
+// ============================================================================
+interface ClusterHlrRule {
+  hubCityId: CityId;
+  clusterTitle?: string;
+  coverage: string;
+  provinceLabel?: string;
+  prefixes: string[];
+}
+
+const CLUSTER_HLR_RULES: ClusterHlrRule[] = [
+  {
+    hubCityId: 'jakarta',
+    clusterTitle: 'DKI Jakarta (Cluster Jabodetabek)',
+    coverage: 'DKI Jakarta, Bekasi, Tangerang, Bogor & Depok',
+    provinceLabel: 'DKI Jakarta / Jawa Barat / Banten',
+    prefixes: [
+      '08810', '088108',
+      ...expandRange('0812', 80, 99),
+      ...expandRange('0813', 10, 19),
+      ...expandRange('0813', 80, 89),
+      ...expandRange('0821', 10, 14),
+      ...expandRange('0821', 22, 25),
+      ...expandRange('0822', 10, 13),
+      ...expandRange('0822', 98, 99),
+      ...expandRange('0823', 10, 12),
+      ...expandRange('0852', 10, 19),
+      ...expandRange('0852', 80, 89),
+      ...expandRange('0853', 10, 13),
+      ...expandRange('0814', 10, 13),
+      ...expandRange('0815', 10, 19),
+      ...expandRange('0815', 80, 86),
+      ...expandRange('0815', 90, 99),
+      ...expandRange('0816', 10, 19),
+      ...expandRange('0855', 10, 19),
+      ...expandRange('0855', 70, 99),
+      ...expandRange('0856', 10, 19),
+      ...expandRange('0856', 70, 99),
+      ...expandRange('0857', 10, 19),
+      ...expandRange('0857', 70, 82),
+      ...expandRange('0858', 10, 19),
+      ...expandRange('0858', 80, 94),
+      ...expandRange('0817', 0, 19),
+      ...expandRange('0817', 60, 79),
+      ...expandRange('0818', 0, 19),
+      ...expandRange('0818', 60, 89),
+      ...expandRange('0819', 0, 9),
+      ...expandRange('0819', 30, 32),
+      ...expandRange('0859', 20, 29),
+      ...expandRange('0859', 45, 47),
+      ...expandRange('0859', 59, 60),
+      ...expandRange('0877', 70, 89),
+      ...expandRange('0878', 0, 9),
+      ...expandRange('0878', 70, 89),
+      ...expandRange('0838', 0, 19),
+      ...expandRange('0838', 70, 79),
+      ...expandRange('0838', 90, 99),
+      ...expandRange('0895', 0, 19),
+      ...expandRange('0895', 32, 34),
+      ...expandRange('0896', 0, 6),
+      ...expandRange('0896', 30, 39),
+      ...expandRange('0896', 50, 54),
+      ...expandRange('0882', 10, 14),
+      ...expandRange('0882', 89, 99),
+    ],
+  },
+  {
+    hubCityId: 'bandung',
+    clusterTitle: 'Kota Bandung (Cluster Jawa Barat)',
+    coverage: 'Kota Bandung, Cimahi, Cirebon, Sukabumi, Tasikmalaya & Karawang',
+    prefixes: [
+      '08812', '08882',
+      ...expandRange('0812', 14, 14),
+      ...expandRange('0812', 20, 24),
+      ...expandRange('0813', 20, 24),
+      ...expandRange('0813', 94, 95),
+      ...expandRange('0821', 15, 21),
+      ...expandRange('0821', 26, 30),
+      ...expandRange('0822', 14, 19),
+      ...expandRange('0822', 40, 40),
+      ...expandRange('0823', 15, 21),
+      ...expandRange('0852', 20, 24),
+      ...expandRange('0852', 94, 95),
+      ...expandRange('0853', 14, 24),
+      ...expandRange('0814', 60, 62),
+      ...expandRange('0815', 60, 64),
+      ...expandRange('0815', 70, 73),
+      ...expandRange('0855', 20, 24),
+      ...expandRange('0856', 20, 24),
+      ...expandRange('0856', 59, 59),
+      ...expandRange('0857', 20, 24),
+      ...expandRange('0857', 93, 98),
+      ...expandRange('0858', 60, 64),
+      ...expandRange('0858', 71, 72),
+      ...expandRange('0817', 20, 23),
+      ...expandRange('0817', 42, 43),
+      ...expandRange('0818', 20, 23),
+      ...expandRange('0819', 10, 12),
+      ...expandRange('0859', 56, 56),
+      ...expandRange('0859', 74, 75),
+      ...expandRange('0877', 20, 29),
+      ...expandRange('0878', 20, 29),
+      ...expandRange('0831', 0, 9),
+      ...expandRange('0838', 20, 29),
+      ...expandRange('0896', 55, 58),
+      ...expandRange('0882', 18, 23),
+    ],
+  },
+  {
+    hubCityId: 'semarang',
+    clusterTitle: 'Kota Semarang (Cluster Jateng & DIY)',
+    coverage: 'Kota Semarang, Surakarta (Solo), Yogyakarta, Purwokerto, Tegal & Pekalongan',
+    provinceLabel: 'Jawa Tengah / DI Yogyakarta',
+    prefixes: [
+      '08814', '08815',
+      ...expandRange('0812', 15, 15),
+      ...expandRange('0812', 25, 29),
+      ...expandRange('0813', 25, 29),
+      ...expandRange('0813', 90, 93),
+      ...expandRange('0821', 33, 38),
+      ...expandRange('0822', 20, 27),
+      ...expandRange('0822', 41, 43),
+      ...expandRange('0823', 22, 29),
+      ...expandRange('0852', 25, 29),
+      ...expandRange('0852', 90, 93),
+      ...expandRange('0853', 25, 29),
+      ...expandRange('0815', 42, 42),
+      ...expandRange('0815', 65, 69),
+      ...expandRange('0815', 75, 79),
+      ...expandRange('0855', 26, 29),
+      ...expandRange('0856', 40, 43),
+      ...expandRange('0856', 47, 47),
+      ...expandRange('0857', 25, 29),
+      ...expandRange('0857', 40, 43),
+      ...expandRange('0857', 47, 47),
+      ...expandRange('0858', 65, 70),
+      ...expandRange('0858', 75, 79),
+      ...expandRange('0817', 24, 29),
+      ...expandRange('0817', 40, 41),
+      ...expandRange('0817', 44, 46),
+      ...expandRange('0818', 24, 29),
+      ...expandRange('0819', 14, 15),
+      ...expandRange('0859', 50, 52),
+      ...expandRange('0877', 30, 39),
+      ...expandRange('0878', 30, 39),
+      ...expandRange('0831', 20, 29),
+      ...expandRange('0838', 38, 44),
+      ...expandRange('0838', 60, 69),
+      ...expandRange('0895', 35, 42),
+      ...expandRange('0896', 65, 74),
+      ...expandRange('0882', 15, 16),
+      ...expandRange('0882', 24, 27),
+      ...expandRange('0882', 32, 33),
+    ],
+  },
+  {
+    hubCityId: 'surabaya',
+    clusterTitle: 'Kota Surabaya (Cluster Jawa Timur)',
+    coverage: 'Kota Surabaya, Sidoarjo, Gresik, Malang, Kediri, Madiun & Jember',
+    prefixes: [
+      '08813',
+      ...expandRange('0812', 16, 17),
+      ...expandRange('0812', 30, 35),
+      ...expandRange('0812', 49, 49),
+      ...expandRange('0812', 52, 52),
+      ...expandRange('0812', 59, 59),
+      ...expandRange('0813', 30, 36),
+      ...expandRange('0813', 57, 59),
+      ...expandRange('0821', 31, 32),
+      ...expandRange('0821', 39, 43),
+      ...expandRange('0822', 28, 34),
+      ...expandRange('0822', 44, 45),
+      ...expandRange('0822', 57, 57),
+      ...expandRange('0823', 30, 38),
+      ...expandRange('0852', 30, 36),
+      ...expandRange('0852', 57, 59),
+      ...expandRange('0853', 30, 36),
+      ...expandRange('0815', 15, 15),
+      ...expandRange('0815', 50, 56),
+      ...expandRange('0855', 30, 36),
+      ...expandRange('0855', 46, 49),
+      ...expandRange('0856', 30, 36),
+      ...expandRange('0856', 45, 46),
+      ...expandRange('0856', 48, 50),
+      ...expandRange('0856', 55, 55),
+      ...expandRange('0857', 30, 36),
+      ...expandRange('0857', 45, 46),
+      ...expandRange('0857', 48, 50),
+      ...expandRange('0857', 84, 85),
+      ...expandRange('0857', 90, 92),
+      ...expandRange('0858', 50, 56),
+      ...expandRange('0858', 95, 95),
+      ...expandRange('0817', 30, 39),
+      ...expandRange('0817', 50, 52),
+      ...expandRange('0818', 30, 39),
+      ...expandRange('0818', 50, 59),
+      ...expandRange('0819', 13, 13),
+      ...expandRange('0819', 36, 39),
+      ...expandRange('0859', 31, 36),
+      ...expandRange('0859', 54, 54),
+      ...expandRange('0877', 50, 59),
+      ...expandRange('0878', 50, 59),
+      ...expandRange('0831', 10, 19),
+      ...expandRange('0838', 30, 37),
+      ...expandRange('0838', 45, 59),
+      ...expandRange('0896', 75, 84),
+      ...expandRange('0882', 17, 17),
+      ...expandRange('0882', 28, 31),
+      ...expandRange('0882', 34, 35),
+    ],
+  },
+  {
+    hubCityId: 'denpasar',
+    clusterTitle: 'Kota Denpasar (Cluster Bali & Nusra)',
+    coverage: 'Kota Denpasar, Badung, Singaraja, Mataram (NTB) & Kupang (NTT)',
+    provinceLabel: 'Bali / NTB / NTT',
+    prefixes: [
+      ...expandRange('0812', 36, 39),
+      ...expandRange('0812', 46, 46),
+      ...expandRange('0813', 37, 39),
+      ...expandRange('0813', 53, 53),
+      ...expandRange('0821', 44, 47),
+      ...expandRange('0822', 35, 37),
+      ...expandRange('0822', 47, 47),
+      ...expandRange('0823', 39, 42),
+      ...expandRange('0852', 37, 39),
+      ...expandRange('0852', 53, 53),
+      ...expandRange('0853', 37, 39),
+      ...expandRange('0815', 57, 58),
+      ...expandRange('0856', 37, 39),
+      ...expandRange('0857', 37, 39),
+      ...expandRange('0857', 92, 92),
+      ...expandRange('0858', 57, 58),
+      ...expandRange('0817', 47, 47),
+      ...expandRange('0817', 55, 57),
+      ...expandRange('0818', 55, 56),
+      ...expandRange('0819', 16, 17),
+      ...expandRange('0819', 99, 99),
+      ...expandRange('0859', 35, 35),
+      ...expandRange('0877', 60, 65),
+      ...expandRange('0878', 60, 66),
+      ...expandRange('0831', 14, 19),
+      ...expandRange('0896', 85, 86),
+    ],
+  },
+  {
+    hubCityId: 'medan',
+    clusterTitle: 'Kota Medan (Cluster Sumatera Utara & Aceh)',
+    coverage: 'Kota Medan, Deli Serdang, Binjai, Pematangsiantar, Banda Aceh & Lhokseumawe',
+    provinceLabel: 'Sumatera Utara / Aceh',
+    prefixes: [
+      ...expandRange('0812', 60, 65),
+      ...expandRange('0813', 60, 62),
+      ...expandRange('0813', 70, 70),
+      ...expandRange('0813', 75, 77),
+      ...expandRange('0813', 96, 97),
+      ...expandRange('0821', 60, 68),
+      ...expandRange('0822', 72, 77),
+      ...expandRange('0823', 60, 70),
+      ...expandRange('0852', 60, 62),
+      ...expandRange('0852', 70, 70),
+      ...expandRange('0852', 75, 77),
+      ...expandRange('0852', 96, 97),
+      ...expandRange('0853', 58, 62),
+      ...expandRange('0853', 70, 73),
+      ...expandRange('0815', 30, 34),
+      ...expandRange('0856', 60, 63),
+      ...expandRange('0857', 60, 63),
+      ...expandRange('0858', 30, 34),
+      ...expandRange('0817', 48, 49),
+      ...expandRange('0819', 20, 21),
+      ...expandRange('0819', 72, 73),
+      ...expandRange('0877', 66, 69),
+      ...expandRange('0878', 67, 69),
+      ...expandRange('0831', 90, 99),
+    ],
+  },
+  {
+    hubCityId: 'pekanbaru',
+    clusterTitle: 'Kota Pekanbaru (Cluster Sumatera Bagian Tengah)',
+    coverage: 'Kota Pekanbaru, Dumai, Padang, Bukittinggi, Batam & Tanjungpinang',
+    provinceLabel: 'Riau / Sumatera Barat / Kepulauan Riau',
+    prefixes: [
+      ...expandRange('0812', 66, 68),
+      ...expandRange('0812', 70, 70),
+      ...expandRange('0812', 75, 77),
+      ...expandRange('0813', 63, 65),
+      ...expandRange('0813', 71, 72),
+      ...expandRange('0813', 74, 74),
+      ...expandRange('0813', 78, 78),
+      ...expandRange('0821', 69, 74),
+      ...expandRange('0822', 68, 68),
+      ...expandRange('0822', 83, 88),
+      ...expandRange('0823', 81, 92),
+      ...expandRange('0852', 63, 65),
+      ...expandRange('0852', 71, 72),
+      ...expandRange('0852', 74, 74),
+      ...expandRange('0852', 78, 78),
+      ...expandRange('0853', 63, 65),
+      ...expandRange('0853', 74, 76),
+      ...expandRange('0815', 35, 37),
+      ...expandRange('0856', 65, 68),
+      ...expandRange('0857', 65, 67),
+      ...expandRange('0858', 35, 37),
+      ...expandRange('0819', 27, 29),
+      ...expandRange('0819', 91, 93),
+      ...expandRange('0877', 91, 93),
+      ...expandRange('0878', 93, 95),
+      ...expandRange('0831', 80, 89),
+    ],
+  },
+  {
+    hubCityId: 'palembang',
+    clusterTitle: 'Kota Palembang (Cluster Sumatera Bagian Selatan)',
+    coverage: 'Kota Palembang, Bandar Lampung, Jambi, Bengkulu & Pangkalpinang',
+    provinceLabel: 'Sumatera Selatan / Lampung / Jambi / Bengkulu / Babel',
+    prefixes: [
+      ...expandRange('0812', 71, 74),
+      ...expandRange('0812', 78, 79),
+      ...expandRange('0813', 66, 69),
+      ...expandRange('0813', 73, 73),
+      ...expandRange('0813', 79, 79),
+      ...expandRange('0821', 75, 86),
+      ...expandRange('0822', 69, 71),
+      ...expandRange('0822', 78, 82),
+      ...expandRange('0822', 89, 89),
+      ...expandRange('0823', 71, 80),
+      ...expandRange('0852', 66, 69),
+      ...expandRange('0852', 73, 73),
+      ...expandRange('0852', 79, 79),
+      ...expandRange('0853', 66, 69),
+      ...expandRange('0853', 77, 84),
+      ...expandRange('0815', 38, 41),
+      ...expandRange('0856', 58, 58),
+      ...expandRange('0856', 64, 64),
+      ...expandRange('0856', 69, 69),
+      ...expandRange('0857', 58, 58),
+      ...expandRange('0857', 64, 64),
+      ...expandRange('0857', 68, 69),
+      ...expandRange('0857', 83, 83),
+      ...expandRange('0857', 88, 89),
+      ...expandRange('0858', 38, 41),
+      ...expandRange('0819', 29, 29),
+      ...expandRange('0819', 58, 58),
+      ...expandRange('0819', 77, 79),
+      ...expandRange('0819', 94, 96),
+      ...expandRange('0877', 94, 99),
+      ...expandRange('0878', 96, 99),
+      ...expandRange('0831', 60, 79),
+      ...expandRange('0896', 25, 29),
+    ],
+  },
+  {
+    hubCityId: 'balikpapan',
+    clusterTitle: 'Kota Balikpapan (Cluster Kalimantan)',
+    coverage: 'Kota Balikpapan, Samarinda, Banjarmasin, Pontianak, Palangka Raya & Tarakan',
+    provinceLabel: 'Kalimantan Timur / Kalsel / Kalbar / Kalteng / Kaltara',
+    prefixes: [
+      ...expandRange('0812', 50, 51),
+      ...expandRange('0812', 53, 58),
+      ...expandRange('0813', 45, 52),
+      ...expandRange('0821', 48, 59),
+      ...expandRange('0822', 50, 56),
+      ...expandRange('0822', 58, 59),
+      ...expandRange('0823', 50, 59),
+      ...expandRange('0852', 45, 52),
+      ...expandRange('0853', 45, 52),
+      ...expandRange('0853', 86, 93),
+      ...expandRange('0815', 20, 22),
+      ...expandRange('0815', 28, 28),
+      ...expandRange('0815', 45, 45),
+      ...expandRange('0815', 49, 49),
+      ...expandRange('0856', 50, 54),
+      ...expandRange('0857', 50, 54),
+      ...expandRange('0857', 87, 87),
+      ...expandRange('0858', 20, 22),
+      ...expandRange('0858', 28, 28),
+      ...expandRange('0858', 45, 45),
+      ...expandRange('0858', 49, 49),
+      ...expandRange('0819', 52, 55),
+      ...expandRange('0877', 14, 19),
+      ...expandRange('0878', 14, 19),
+      ...expandRange('0831', 40, 53),
+      ...expandRange('0896', 90, 94),
+    ],
+  },
+  {
+    hubCityId: 'makassar',
+    clusterTitle: 'Kota Makassar (Cluster Sulawesi)',
+    coverage: 'Kota Makassar, Parepare, Manado, Palu, Kendari & Gorontalo',
+    provinceLabel: 'Sulawesi Selatan / Sulut / Sulteng / Sultra / Gorontalo',
+    prefixes: [
+      ...expandRange('0812', 40, 45),
+      ...expandRange('0813', 40, 43),
+      ...expandRange('0813', 54, 56),
+      ...expandRange('0821', 87, 96),
+      ...expandRange('0822', 59, 62),
+      ...expandRange('0822', 90, 96),
+      ...expandRange('0823', 43, 49),
+      ...expandRange('0823', 93, 96),
+      ...expandRange('0852', 40, 43),
+      ...expandRange('0852', 54, 56),
+      ...expandRange('0852', 98, 99),
+      ...expandRange('0853', 40, 43),
+      ...expandRange('0853', 94, 99),
+      ...expandRange('0815', 23, 27),
+      ...expandRange('0815', 43, 43),
+      ...expandRange('0856', 56, 57),
+      ...expandRange('0856', 96, 96),
+      ...expandRange('0857', 56, 57),
+      ...expandRange('0857', 96, 96),
+      ...expandRange('0858', 23, 27),
+      ...expandRange('0819', 40, 44),
+      ...expandRange('0877', 40, 43),
+      ...expandRange('0878', 40, 46),
+      ...expandRange('0831', 30, 39),
+      ...expandRange('0896', 95, 97),
+    ],
+  },
+  {
+    hubCityId: 'jayapura',
+    clusterTitle: 'Kota Jayapura (Cluster Maluku & Tanah Papua)',
+    coverage: 'Kota Jayapura, Sorong, Manokwari, Merauke, Timika, Ambon & Ternate',
+    provinceLabel: 'Papua / Papua Barat / Maluku / Maluku Utara',
+    prefixes: [
+      ...expandRange('0812', 47, 48),
+      ...expandRange('0813', 44, 44),
+      ...expandRange('0821', 97, 99),
+      ...expandRange('0822', 38, 39),
+      ...expandRange('0822', 48, 48),
+      ...expandRange('0823', 97, 99),
+      ...expandRange('0852', 44, 44),
+      ...expandRange('0853', 44, 44),
+      ...expandRange('0853', 54, 54),
+      ...expandRange('0815', 29, 29),
+    ],
+  },
+];
+
+// Build deduplicated O(1) prefix maps + normalized city coordinate lookup
 const CURATED_PREFIX_MAP = new Map<string, CityGeoInfo>();
+const CLUSTER_PREFIX_MAP = new Map<
+  string,
+  {
+    hub: CityGeoInfo;
+    clusterTitle: string;
+    coverage: string;
+    provinceLabel: string;
+  }
+>();
 const CITY_NAME_TO_GEO = new Map<string, CityGeoInfo>();
 
 function normCityKey(raw: string): string {
@@ -1049,6 +1810,7 @@ function normCityKey(raw: string): string {
     .toLowerCase()
     .replace(/\b(kota|kabupaten|kab\.?)\b/g, '')
     .replace(/\([^)]*\)/g, '')
+    .replace(/\d+$/g, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
@@ -1056,6 +1818,50 @@ for (const info of Object.values(CITY_GEO_REGISTRY)) {
   const k = normCityKey(info.city);
   if (k && !CITY_NAME_TO_GEO.has(k)) {
     CITY_NAME_TO_GEO.set(k, info);
+  }
+}
+
+// Common Indonesian short aliases in HLR tables -> canonical CITY_GEO_REGISTRY entries
+const CITY_ALIAS_TO_ID: Record<string, CityId> = {
+  jakarta: 'jakarta',
+  surakarta: 'solo',
+  solo: 'solo',
+  jogja: 'yogyakarta',
+  yogya: 'yogyakarta',
+  diyogyakarta: 'yogyakarta',
+  dki: 'jakarta',
+  dkijakarta: 'jakarta',
+  jakartatimur: 'jakarta',
+  jakartabarat: 'jakarta',
+  jakartaselatan: 'jakarta',
+  jakartautara: 'jakarta',
+  tangerangselatan: 'tangsel',
+  ujungpandang: 'makassar',
+  padangsidimpuan: 'padangsidempuan',
+  padangsidempuan: 'padangsidempuan',
+  tanjungpandan: 'belitung',
+  belitung: 'belitung',
+  tanjungtabalong: 'tabalong',
+  tabalong: 'tabalong',
+  tanjungbalaikarimun: 'karimun',
+  karimun: 'karimun',
+  kotawaringintimur: 'sampit',
+  kotawaringinbarat: 'pangkalanbun',
+  baritoutara: 'muarateweh',
+  kutaitimur: 'bontang',
+  tanatoraja: 'rantepao',
+  toraja: 'rantepao',
+  bone: 'watampone',
+  okutimur: 'martapura',
+  lampungutara: 'kotabumi',
+  sumbawa: 'sumbawa',
+  sumbawabesar: 'sumbawa',
+  muntok: 'mentok',
+};
+
+for (const [alias, id] of Object.entries(CITY_ALIAS_TO_ID)) {
+  if (!CITY_NAME_TO_GEO.has(alias)) {
+    CITY_NAME_TO_GEO.set(alias, CITY_GEO_REGISTRY[id]);
   }
 }
 
@@ -1068,89 +1874,300 @@ for (const rule of SINGLE_CITY_HLR_RULES) {
   }
 }
 
-const MACRO_UMBRELLA_RE =
-  /\b(jabodetabek|sumatera bagian|sumatra bagian|indonesia timur|priangan|bandung raya|eks-flexi)\b/i;
+for (const rule of CLUSTER_HLR_RULES) {
+  const hub = CITY_GEO_REGISTRY[rule.hubCityId];
+  const entry = {
+    hub,
+    clusterTitle: rule.clusterTitle || `${hub.city} (Cluster Regional HLR)`,
+    coverage: rule.coverage,
+    provinceLabel: rule.provinceLabel || hub.province,
+  };
+  for (const rawPrefix of rule.prefixes) {
+    const p = rawPrefix.trim();
+    if (!p || CLUSTER_PREFIX_MAP.has(p)) continue;
+    CLUSTER_PREFIX_MAP.set(p, entry);
+  }
+}
 
-function resolveSingleCityFromDbIndex(
-  dbIdx: number
-): { city: string; province: string; coordinates?: { lat: number; lon: number } } | null {
+interface DbResolvedEntry {
+  city: string;
+  province: string;
+  clusterCoverage?: string;
+  coordinates?: { lat: number; lon: number };
+  isCluster: boolean;
+}
+
+function resolveZeroDropFromDbIndex(dbIdx: number): DbResolvedEntry | null {
   const tuple = HLR_CITY_TABLE[dbIdx];
   if (!tuple) return null;
   const [rawLabel, rawMapQuery] = tuple;
-  if (MACRO_UMBRELLA_RE.test(rawLabel)) return null;
+  const cleanLabel = rawLabel.replace(/\b([A-Za-z]+)\d+\b/g, '$1').trim();
 
-  // Reject multi-city comma lists like "Bandung, Cirebon, Cianjur, Tasikmalaya"
-  const commaParts = rawLabel.split(',').map((s) => s.trim()).filter(Boolean);
-  if (commaParts.length >= 3) return null;
-
-  // Extract primary city name (normalizing "Kota & Kab. X" -> "Kota X" first!)
-  const rawCityPart = (commaParts[0] || '')
-    .replace(/^kota\s*[&/]\s*kab\.?\s+/i, 'Kota ')
-    .split('/')[0]
-    .split('&')[0]
-    .replace(/\([^)]*\)/g, '')
-    .trim();
-  if (!rawCityPart || /^(kota|kab\.?|kabupaten)$/i.test(rawCityPart)) return null;
-
-  // Reject bare province/island names masquerading as a city
-  if (
-    /^(jawa barat|jawa tengah|jawa timur|bali|sumatera|sumatra|kalimantan|sulawesi|maluku|papua)$/i.test(
-      rawCityPart
-    )
-  ) {
-    return null;
-  }
-
-  const matchedGeo = CITY_NAME_TO_GEO.get(normCityKey(rawCityPart));
-  if (matchedGeo) {
+  // 1. Jabodetabek & Greater Jakarta satellite/umbrella clusters
+  if (/\bjabodetabek\b/i.test(cleanLabel)) {
+    if (/^bekasi\b/i.test(cleanLabel)) {
+      const geo = CITY_GEO_REGISTRY.bekasi;
+      return {
+        city: geo.city,
+        province: geo.province,
+        clusterCoverage: 'Kota Bekasi & Jakarta Timur (Jabodetabek)',
+        coordinates: { lat: geo.lat, lon: geo.lon },
+        isCluster: true,
+      };
+    }
+    if (/^bogor\b/i.test(cleanLabel)) {
+      const geo = CITY_GEO_REGISTRY.bogor;
+      return {
+        city: geo.city,
+        province: geo.province,
+        clusterCoverage: 'Bogor, Depok & Tangerang (Jabodetabek)',
+        coordinates: { lat: geo.lat, lon: geo.lon },
+        isCluster: true,
+      };
+    }
+    if (/^dki jakarta\s*&\s*tangerang/i.test(cleanLabel)) {
+      const geo = CITY_GEO_REGISTRY.jakarta;
+      return {
+        city: geo.city,
+        province: 'DKI Jakarta / Banten',
+        clusterCoverage: 'DKI Jakarta & Tangerang (Jabodetabek)',
+        coordinates: { lat: geo.lat, lon: geo.lon },
+        isCluster: true,
+      };
+    }
+    // General Jabodetabek HLR Pool (incl. 08810 / 088108 Smartfren, 0811/0812/0815/0817/0896 Jabodetabek)
+    const geo = CITY_GEO_REGISTRY.jakarta;
     return {
-      city: matchedGeo.city,
-      province: matchedGeo.province,
-      coordinates: { lat: matchedGeo.lat, lon: matchedGeo.lon },
+      city: 'DKI Jakarta (Cluster Jabodetabek)',
+      province: 'DKI Jakarta / Jawa Barat / Banten',
+      clusterCoverage: 'DKI Jakarta, Bekasi, Tangerang, Bogor & Depok',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
     };
   }
 
-  // Fallback province extraction from label or mapQuery
+  // 2. Macro regional/island rows in HLR_CITY_TABLE -> map to official MSC hub city (ZERO drop!)
+  if (/^jawa barat\b/i.test(cleanLabel) || /\b(priangan|bandung raya)\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.bandung;
+    return {
+      city: `${geo.city} (Cluster Jawa Barat)`,
+      province: geo.province,
+      clusterCoverage: cleanLabel.replace(/,\s*Jawa Barat$/i, ''),
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^jawa tengah\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.semarang;
+    return {
+      city: `${geo.city} (Cluster Jateng & DIY)`,
+      province: 'Jawa Tengah / DI Yogyakarta',
+      clusterCoverage: 'Kota Semarang, Surakarta (Solo), Purwokerto & DI Yogyakarta',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^jawa timur\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.surabaya;
+    return {
+      city: `${geo.city} (Cluster Jawa Timur)`,
+      province: geo.province,
+      clusterCoverage: 'Kota Surabaya, Sidoarjo, Malang, Kediri & Jember',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^bali\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.denpasar;
+    return {
+      city: `${geo.city} (Cluster Bali & Nusra)`,
+      province: 'Bali / NTB / NTT',
+      clusterCoverage: 'Kota Denpasar, Singaraja, Mataram & Kupang',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^kalimantan\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.balikpapan;
+    return {
+      city: `${geo.city} (Cluster Kalimantan)`,
+      province: 'Kalimantan Timur / Kalsel / Kalbar / Kalteng',
+      clusterCoverage: 'Kota Balikpapan, Samarinda, Banjarmasin & Pontianak',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^sumat(e)?ra\s+bagian\s+tengah/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.pekanbaru;
+    return {
+      city: `${geo.city} (Cluster Sumatera Bagian Tengah)`,
+      province: 'Riau / Sumatera Barat / Kepulauan Riau',
+      clusterCoverage: 'Kota Pekanbaru, Padang & Batam',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+  if (/^sumat(e)?ra\b/i.test(cleanLabel)) {
+    const geo = CITY_GEO_REGISTRY.medan;
+    return {
+      city: `${geo.city} (Cluster Sumatera Utara)`,
+      province: 'Sumatera Utara / Aceh',
+      clusterCoverage: 'Kota Medan, Deli Serdang, Pematangsiantar & Banda Aceh',
+      coordinates: { lat: geo.lat, lon: geo.lon },
+      isCluster: true,
+    };
+  }
+
+  // 3. Standard single-city OR multi-city regional HLR entries (e.g. "Bandung, Cirebon...", "Kota Surabaya & Sidoarjo", "Kota Medan (Sumatera Bagian Utara)", "Eks-Flexi HLR")
+  const labelWithoutFlexi = cleanLabel.replace(/\(\s*eks-flexi[^)]*\)/gi, '').trim();
+  const normalizedKotaKab = labelWithoutFlexi.replace(/^kota\s*[&/]\s*kab\.?\s+/i, 'Kota ');
+  const commaParts = normalizedKotaKab
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const firstSegment = commaParts[0] || '';
+  const hasMultiCityConnector =
+    /\s+(?:&|\/|dan)\s+/i.test(firstSegment) ||
+    commaParts.length >= 3 ||
+    /\b(sumatera bagian|indonesia timur|jateng-diy)\b/i.test(labelWithoutFlexi);
+
+  const primaryRawCity = firstSegment
+    .split(/\s*(?:\/|&)\s*/)[0]
+    .replace(/\([^)]*\)/g, '')
+    .trim();
+
+  // Also check rawMapQuery's primary city when primaryRawCity isn't in CITY_NAME_TO_GEO
+  const mapCityCandidate = (rawMapQuery.split(',')[0] || '')
+    .replace(/\([^)]*\)/g, '')
+    .trim();
+
+  const matchedGeo =
+    CITY_NAME_TO_GEO.get(normCityKey(primaryRawCity)) ||
+    CITY_NAME_TO_GEO.get(normCityKey(mapCityCandidate));
+
   const mapParts = rawMapQuery
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s && !/^indonesia$/i.test(s));
-  const rawProvince = (
-    commaParts[1] ||
+  const fallbackProvince = (
+    (!hasMultiCityConnector ? commaParts[1] : '') ||
     (mapParts.length >= 2 ? mapParts[mapParts.length - 1] : '') ||
+    matchedGeo?.province ||
     'Indonesia'
   )
-    .split('/')[0]
     .replace(/^d\.i\.\s*yogyakarta$/i, 'DI Yogyakarta')
     .trim();
 
+  const resolvedCity = matchedGeo ? matchedGeo.city : primaryRawCity || mapCityCandidate;
+  const resolvedProvince = matchedGeo ? matchedGeo.province : fallbackProvince;
+  const resolvedCoords = matchedGeo
+    ? { lat: matchedGeo.lat, lon: matchedGeo.lon }
+    : undefined;
+
+  if (hasMultiCityConnector) {
+    return {
+      city: resolvedCity,
+      province: resolvedProvince,
+      clusterCoverage: normalizedKotaKab,
+      ...(resolvedCoords ? { coordinates: resolvedCoords } : {}),
+      isCluster: true,
+    };
+  }
+
   return {
-    city: rawCityPart,
-    province: rawProvince || 'Indonesia',
+    city: resolvedCity,
+    province: resolvedProvince,
+    ...(resolvedCoords ? { coordinates: resolvedCoords } : {}),
+    isCluster: false,
   };
+}
+
+function fallbackFifthDigitCluster(clean08: string): {
+  hub: CityGeoInfo;
+  clusterTitle: string;
+  coverage: string;
+  provinceLabel: string;
+  fifthDigit: string;
+} {
+  const fifth = clean08[4] || '0';
+  switch (fifth) {
+    case '0':
+    case '1':
+      return {
+        hub: CITY_GEO_REGISTRY.jakarta,
+        clusterTitle: 'DKI Jakarta (Cluster Jabodetabek)',
+        coverage: 'DKI Jakarta, Bekasi, Tangerang, Bogor & Depok',
+        provinceLabel: 'DKI Jakarta / Jawa Barat / Banten',
+        fifthDigit: fifth,
+      };
+    case '2':
+      return {
+        hub: CITY_GEO_REGISTRY.bandung,
+        clusterTitle: 'Kota Bandung (Cluster Jawa Barat)',
+        coverage: 'Kota Bandung, Cimahi, Cirebon, Tasikmalaya & Jawa Barat',
+        provinceLabel: 'Jawa Barat',
+        fifthDigit: fifth,
+      };
+    case '3':
+    case '4':
+      return {
+        hub: CITY_GEO_REGISTRY.semarang,
+        clusterTitle: 'Kota Semarang (Cluster Jateng & DIY)',
+        coverage: 'Kota Semarang, Surakarta (Solo), Yogyakarta & Purwokerto',
+        provinceLabel: 'Jawa Tengah / DI Yogyakarta',
+        fifthDigit: fifth,
+      };
+    case '5':
+      return {
+        hub: CITY_GEO_REGISTRY.surabaya,
+        clusterTitle: 'Kota Surabaya (Cluster Jawa Timur)',
+        coverage: 'Kota Surabaya, Sidoarjo, Malang, Kediri & Jember',
+        provinceLabel: 'Jawa Timur',
+        fifthDigit: fifth,
+      };
+    case '6':
+      return {
+        hub: CITY_GEO_REGISTRY.medan,
+        clusterTitle: 'Kota Medan (Cluster Sumatera Utara & Tengah)',
+        coverage: 'Kota Medan, Pekanbaru, Padang, Batam & Banda Aceh',
+        provinceLabel: 'Sumatera Utara / Riau / Sumbar / Kepri / Aceh',
+        fifthDigit: fifth,
+      };
+    case '7':
+      return {
+        hub: CITY_GEO_REGISTRY.palembang,
+        clusterTitle: 'Kota Palembang (Cluster Sumatera Bagian Selatan)',
+        coverage: 'Kota Palembang, Bandar Lampung, Jambi, Bengkulu & Pangkalpinang',
+        provinceLabel: 'Sumatera Selatan / Lampung / Jambi / Bengkulu',
+        fifthDigit: fifth,
+      };
+    case '8':
+      return {
+        hub: CITY_GEO_REGISTRY.denpasar,
+        clusterTitle: 'Kota Denpasar (Cluster Bali, Nusra & Kalimantan)',
+        coverage: 'Kota Denpasar, Mataram, Balikpapan, Banjarmasin & Pontianak',
+        provinceLabel: 'Bali / NTB / Kalimantan',
+        fifthDigit: fifth,
+      };
+    default:
+      return {
+        hub: CITY_GEO_REGISTRY.makassar,
+        clusterTitle: 'Kota Makassar (Cluster Kawasan Timur Indonesia)',
+        coverage: 'Kota Makassar, Manado, Palu, Kendari, Ambon & Jayapura',
+        provinceLabel: 'Sulawesi / Maluku / Papua',
+        fifthDigit: fifth,
+      };
+  }
 }
 
 export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
   const clean = local08.replace(/\D/g, '');
   const p4 = clean.slice(0, 4);
-
-  if (p4 === '0851' && /^0851[5-9]/.test(clean)) {
-    return {
-      city: 'Pool Nasional Digital (by.U)',
-      province: 'Seluruh Indonesia (Non-Geografis)',
-      region: 'Alokasi Nasional Digital (by.U / Telkomsel Online — Non-Geografis)',
-      mapQuery: 'Indonesia',
-      matchedPrefix: clean.slice(0, 5),
-      accuracyTier: 'national',
-      precisionLevel: 'national_pool',
-      precisionLabel: 'Pool Nasional Digital (Non-Geografis)',
-      basisNote:
-        'Blok kartu digital by.U/Telkomsel yang diterbitkan secara online nasional (tidak terikat satu kota HLR tertentu).',
-    };
-  }
-
   const maxLen = Math.min(clean.length, 10);
-  for (let len = maxLen; len >= 4; len--) {
+
+  // TIER 1 & TIER 2: Longest-prefix-first (10 -> 5 digits) across Curated 1-City Rules + 42,000+ HLR_PREFIX_INDEX (Zero Data Drop!)
+  for (let len = maxLen; len >= 5; len--) {
     const sub = clean.slice(0, len);
 
     const curated = CURATED_PREFIX_MAP.get(sub);
@@ -1167,18 +2184,19 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
         accuracyTier: 'high',
         precisionLevel: isDeepCityPrefix ? 'city_6_8_digit' : 'city_5_digit',
         precisionLabel: isDeepCityPrefix
-          ? `Presisi Tinggi — 1 Kota HLR (${len} Digit)`
+          ? `Presisi Tinggi — Kota/Kabupaten HLR (${len} Digit)`
           : `Presisi Kota Induk HLR (${len} Digit)`,
         basisNote: `Tabel Kode HLR Spesifik Operator (Prefix \`${sub}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
       };
     }
 
-    if (len >= 6) {
-      const dbIdx = HLR_PREFIX_INDEX[sub];
-      if (dbIdx !== undefined) {
-        const resolved = resolveSingleCityFromDbIndex(dbIdx);
-        if (resolved) {
-          const { city, province, coordinates } = resolved;
+    const dbIdx = HLR_PREFIX_INDEX[sub];
+    if (dbIdx !== undefined) {
+      const resolved = resolveZeroDropFromDbIndex(dbIdx);
+      if (resolved) {
+        const { city, province, clusterCoverage, coordinates, isCluster } = resolved;
+        if (!isCluster) {
+          const isDeep = len >= 6;
           return {
             city,
             province,
@@ -1187,56 +2205,118 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
             ...(coordinates ? { coordinates } : {}),
             matchedPrefix: sub,
             accuracyTier: 'high',
-            precisionLevel: 'city_6_8_digit',
-            precisionLabel: `Presisi Tinggi — 1 Kota HLR (${len} Digit)`,
-            basisNote: `Tabel Kode HLR Spesifik Operator (Prefix \`${sub}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
+            precisionLevel: isDeep ? 'city_6_8_digit' : 'city_5_digit',
+            precisionLabel: isDeep
+              ? `Presisi Tinggi — Kota/Kabupaten HLR (${len} Digit)`
+              : `Presisi Kota Induk HLR (${len} Digit)`,
+            basisNote: `Database HLR Operator Indonesia (Prefix \`${sub}\` → kota registrasi awal kartu **${city}**, **${province}**).`,
           };
         }
+
+        const cleanMapCity = city.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        return {
+          city,
+          province,
+          region: clusterCoverage ? `${city} — Cakupan: ${clusterCoverage}` : `${city}, ${province}`,
+          clusterCoverage,
+          mapQuery: `${cleanMapCity}, Indonesia`,
+          ...(coordinates ? { coordinates } : {}),
+          matchedPrefix: sub,
+          accuracyTier: 'cluster',
+          precisionLevel: 'regional_cluster',
+          precisionLabel: `Presisi Cluster Regional HLR (${len} Digit)`,
+          basisNote: `Database HLR Regional Operator (Prefix \`${sub}\` → sentral HLR **${cleanMapCity}** dengan cakupan area **${clusterCoverage || province}**).`,
+        };
+      }
+    }
+
+    // TIER 3: Restored Versi Pertama Multi-Digit Regional Cluster HLR Rules (6 -> 5 digits)
+    const clusterRule = CLUSTER_PREFIX_MAP.get(sub);
+    if (clusterRule) {
+      const { hub, clusterTitle, coverage, provinceLabel } = clusterRule;
+      return {
+        city: clusterTitle,
+        province: provinceLabel,
+        region: `${clusterTitle} — Cakupan: ${coverage}`,
+        clusterCoverage: coverage,
+        mapQuery: `${hub.city}, ${hub.province}, Indonesia`,
+        coordinates: { lat: hub.lat, lon: hub.lon },
+        matchedPrefix: sub,
+        accuracyTier: 'cluster',
+        precisionLevel: 'regional_cluster',
+        precisionLabel: `Presisi Cluster Regional HLR (${len} Digit)`,
+        basisNote: `Tabel Blok HLR Regional Operator (Prefix \`${sub}\` → sentral HLR **${hub.city}**, cakupan **${coverage}**).`,
+      };
+    }
+  }
+
+  // TIER 4A: Telkomsel by.U Digital Block (08515–08519) -> Central HLR Jakarta Pusat (after 085100-085149 city/Flexi rules!)
+  if (p4 === '0851' && /^0851[5-9]/.test(clean)) {
+    const jp = CITY_GEO_REGISTRY.jakartapusat;
+    return {
+      city: 'Jakarta Pusat (Sentral Registrasi Digital by.U)',
+      province: 'DKI Jakarta (Distribusi Online Nasional)',
+      region: 'Jakarta Pusat — Registrasi Digital Nasional (by.U / Telkomsel)',
+      clusterCoverage: 'Sentral Core HLR Jakarta Pusat (Distribusi Kartu Digital Nasional)',
+      mapQuery: 'Jakarta Pusat, DKI Jakarta, Indonesia',
+      coordinates: { lat: jp.lat, lon: jp.lon },
+      matchedPrefix: clean.slice(0, 5),
+      accuracyTier: 'cluster',
+      precisionLevel: 'national_pool',
+      precisionLabel: 'Sentral Digital Jakarta Pusat (by.U)',
+      basisNote:
+        'Blok kartu digital by.U/Telkomsel (`08515`–`08519`) tercatat pada sentral core HLR **Jakarta Pusat** dengan distribusi online nasional.',
+    };
+  }
+
+  // TIER 4B: Specific 4-digit operator regional prefix (e.g. 0883 Semarang, 0884 Solo, 0885 Yogyakarta, 0886 Surabaya, 0887 Medan)
+  if (
+    p4 === '0883' ||
+    p4 === '0884' ||
+    p4 === '0885' ||
+    p4 === '0886' ||
+    p4 === '0887' ||
+    p4 === '0832' ||
+    p4 === '0833'
+  ) {
+    const dbIdx4 = HLR_PREFIX_INDEX[p4];
+    if (dbIdx4 !== undefined) {
+      const resolved4 = resolveZeroDropFromDbIndex(dbIdx4);
+      if (resolved4) {
+        const cleanMapCity = resolved4.city.replace(/\s*\([^)]*\)\s*/g, '').trim();
+        return {
+          city: resolved4.city,
+          province: resolved4.province,
+          region: resolved4.clusterCoverage
+            ? `${resolved4.city} — Cakupan: ${resolved4.clusterCoverage}`
+            : `${resolved4.city}, ${resolved4.province}`,
+          clusterCoverage: resolved4.clusterCoverage,
+          mapQuery: `${cleanMapCity}, Indonesia`,
+          ...(resolved4.coordinates ? { coordinates: resolved4.coordinates } : {}),
+          matchedPrefix: p4,
+          accuracyTier: 'cluster',
+          precisionLevel: 'regional_cluster',
+          precisionLabel: 'Presisi Area Induk Operator (4 Digit)',
+          basisNote: `Alokasi HLR Regional Operator (Prefix \`${p4}\` → area induk **${resolved4.city}**).`,
+        };
       }
     }
   }
 
-  if (p4.startsWith('089')) {
-    return {
-      city: 'Pool Nasional Digital (Tri / 3)',
-      province: 'Seluruh Indonesia (Non-Geografis)',
-      region: 'Alokasi Nasional Digital (Tri 3 IOH — Non-Geografis)',
-      mapQuery: 'Indonesia',
-      matchedPrefix: p4,
-      accuracyTier: 'national',
-      precisionLevel: 'national_pool',
-      precisionLabel: 'Pool Nasional Digital (Non-Geografis)',
-      basisNote:
-        'Blok nomor Tri (3) dialokasikan dari pool nasional/e-commerce tanpa penguncian satu kota HLR spesifik.',
-    };
-  }
-
-  if (p4.startsWith('088')) {
-    return {
-      city: 'Pool Nasional Digital (Smartfren / eSIM)',
-      province: 'Seluruh Indonesia (Non-Geografis)',
-      region: 'Alokasi Nasional Digital (Smartfren / eSIM — Non-Geografis)',
-      mapQuery: 'Indonesia',
-      matchedPrefix: p4,
-      accuracyTier: 'national',
-      precisionLevel: 'national_pool',
-      precisionLabel: 'Pool Nasional Digital (Non-Geografis)',
-      basisNote:
-        'Blok nomor Smartfren baru/eSIM dialokasikan secara nasional lintas wilayah (non-geografis).',
-    };
-  }
-
+  // TIER 4C: Fifth-Digit Regional MSC Safety Net (Versi Pertama Zero-Blank-Indonesia Guarantee)
+  const fb = fallbackFifthDigitCluster(clean);
   return {
-    city: 'Pool Seluler Nasional',
-    province: 'Seluruh Indonesia (Non-Geografis)',
-    region: 'Alokasi Seluler Nasional Indonesia (Blok Modern / E-Commerce / MNP)',
-    mapQuery: 'Indonesia',
-    matchedPrefix: clean.slice(0, Math.min(6, clean.length)),
-    accuracyTier: 'national',
-    precisionLevel: 'national_pool',
-    precisionLabel: 'Pool Nasional Digital (Non-Geografis)',
-    basisNote:
-      'Blok prefix ini berstatus distribusi nasional/modern (tidak dipatok ke satu kota HLR agar tidak salah menunjuk kota pemilik).',
+    city: fb.clusterTitle,
+    province: fb.provinceLabel,
+    region: `${fb.clusterTitle} — Cakupan: ${fb.coverage}`,
+    clusterCoverage: fb.coverage,
+    mapQuery: `${fb.hub.city}, ${fb.hub.province}, Indonesia`,
+    coordinates: { lat: fb.hub.lat, lon: fb.hub.lon },
+    matchedPrefix: clean.slice(0, Math.min(5, clean.length)),
+    accuracyTier: 'cluster',
+    precisionLevel: 'regional_cluster',
+    precisionLabel: 'Estimasi Cluster Regional MSC (5 Digit)',
+    basisNote: `Estimasi Blok HLR Regional Operator berdasarkan digit area ke-5 (\`${fb.fifthDigit}\` → sentral MSC **${fb.hub.city}**, cakupan **${fb.coverage}**).`,
   };
 }
 

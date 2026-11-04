@@ -436,9 +436,12 @@ export async function analyzeWhatsAppOsint(
       },
     ];
 
-    if (hlr && hlr.accuracyTier === 'high') {
+    if (hlr && hlr.accuracyTier !== 'national') {
+      const shortMapCity = hlr.city
+        .replace(/\s*\((?:Cluster|Sentral)[^)]*\)/gi, '')
+        .trim();
       actionLinks.unshift({
-        label: `📍 Buka ${hlr.city} di Google Maps`,
+        label: `📍 Buka ${shortMapCity.slice(0, 32)} di Google Maps`,
         url: buildGoogleMapsSearchUrl(
           hlr.coordinates
             ? `${hlr.coordinates.lat},${hlr.coordinates.lon}`
@@ -466,7 +469,9 @@ export async function analyzeWhatsAppOsint(
       `| **Nomor Target (E.164)** | \`+${e164}\` (${local08}) |`,
       `| **Tautan Direct WA** | \`https://wa.me/${e164}\` |`,
       hlr
-        ? `| **Kota Registrasi Awal (HLR)** | **${hlr.city}** — ${hlr.province} (\`${hlr.precisionLabel}\`) |`
+        ? `| **Kota / Wilayah HLR** | **${hlr.city}**${
+            hlr.clusterCoverage ? ` — _${hlr.clusterCoverage}_` : ` — ${hlr.province}`
+          } (\`${hlr.precisionLabel}\`) |`
         : '',
       prefilledText
         ? `| **Pesan Otomatis (\`?text=\`)** | _"${prefilledText.slice(0, 160)}"_ |`

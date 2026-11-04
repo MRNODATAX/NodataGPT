@@ -20,14 +20,16 @@ import {
   X,
 } from 'lucide-react';
 import {
-  isMikuCharacterProfile,
+  isBuiltInExpressionProfile,
   setPrivateWaifuEnabled,
 } from '../services/waifuExpressions';
 import {
+  DEFAULT_ALYA_ID,
   DEFAULT_MIKU_AVATAR_URL,
   DEFAULT_MIKU_ID,
   WAIFU_ARCHETYPE_PRESETS,
   compressAvatarFileToDataUrl,
+  createDefaultAlyaProfile,
   createDefaultMikuProfile,
   exportWaifuToTavernCardV2,
   importWaifuFromTavernJson,
@@ -183,6 +185,15 @@ export function WaifuStudioModal({
     );
   };
 
+  const handleResetToDefaultAlya = () => {
+    setDraft(createDefaultAlyaProfile());
+    setAvatarUrlDraft('');
+    flashFeedback(
+      'ok',
+      'Profil dikembalikan ke setelan bawaan Alya Kujou. Klik Simpan untuk menerapkan.'
+    );
+  };
+
   const handleCreateNewCustomProfile = () => {
     const newId = `waifu-${Date.now().toString(36)}`;
     const customBlank: WaifuProfile = {
@@ -306,6 +317,7 @@ export function WaifuStudioModal({
 
   const isBuiltInMiku =
     draft.id === DEFAULT_MIKU_ID || Boolean(draft.isBuiltInDefault);
+  const isBuiltInAlya = draft.id === DEFAULT_ALYA_ID;
 
   return (
     <div
@@ -614,7 +626,7 @@ export function WaifuStudioModal({
                     Peran & Panggilan untuk Kamu
                   </span>
                   <div className="flex flex-wrap items-center gap-3">
-                    {isMikuCharacterProfile(draft) && (
+                    {isBuiltInExpressionProfile(draft) && (
                       <label className="inline-flex items-center gap-1.5 text-xs text-[#CBD5E1] cursor-pointer">
                         <input
                           type="checkbox"
@@ -1006,7 +1018,10 @@ export function WaifuStudioModal({
                           <span>Chat</span>
                         </button>
 
-                        {!item.isBuiltInDefault && item.id !== DEFAULT_MIKU_ID && (
+                        {!item.isBuiltInDefault &&
+                          !item.isBuiltInCharacter &&
+                          item.id !== DEFAULT_MIKU_ID &&
+                          item.id !== DEFAULT_ALYA_ID && (
                           <button
                             type="button"
                             onClick={() => {
@@ -1043,6 +1058,15 @@ export function WaifuStudioModal({
             >
               <RotateCcw className="h-3.5 w-3.5 text-[#FB923C]" />
               <span>Reset Default Miku</span>
+            </button>
+          ) : isBuiltInAlya ? (
+            <button
+              type="button"
+              onClick={handleResetToDefaultAlya}
+              className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#CBD5E1] transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-[#FB923C]" />
+              <span>Reset Default Alya</span>
             </button>
           ) : (
             <button

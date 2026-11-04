@@ -30,8 +30,10 @@ import {
 import { WaifuStudioModal } from './components/WaifuStudioModal';
 import { WaifuScenarioBubbleModal } from './components/WaifuScenarioBubbleModal';
 import {
+  DEFAULT_ALYA_ID,
   DEFAULT_MIKU_ID,
   buildCasualAyangSnapshot,
+  createDefaultAlyaProfile,
   createDefaultMikuProfile,
   isCasualAyangScenario,
   loadWaifuStore,
@@ -494,11 +496,13 @@ export function App() {
   );
 
   const handleDeleteWaifuProfile = useCallback((profileId: string) => {
-    if (profileId === DEFAULT_MIKU_ID) return;
+    if (profileId === DEFAULT_MIKU_ID || profileId === DEFAULT_ALYA_ID) return;
     setWaifuStore((prev) => {
       const remaining = prev.profiles.filter((p) => p.id !== profileId);
       const ensured =
-        remaining.length > 0 ? remaining : [createDefaultMikuProfile()];
+        remaining.length > 0
+          ? remaining
+          : [createDefaultMikuProfile(), createDefaultAlyaProfile()];
       const nextActive =
         prev.activeWaifuId === profileId ? ensured[0].id : prev.activeWaifuId;
       return {

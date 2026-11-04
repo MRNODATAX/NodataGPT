@@ -23,7 +23,7 @@ import {
   isCasualAyangScenario,
   resolveWaifuAvatarUrl,
 } from '../services/waifuPresets';
-import { isMikuCharacterProfile } from '../services/waifuExpressions';
+import { isBuiltInExpressionProfile } from '../services/waifuExpressions';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import type {
   WaifuProfile,
@@ -89,7 +89,7 @@ export function WaifuScenarioBubbleModal({
     if (selectedProfile.scenarioPresets && selectedProfile.scenarioPresets.length > 0) {
       return selectedProfile.scenarioPresets;
     }
-    if (isMikuCharacterProfile(selectedProfile)) {
+    if (isBuiltInExpressionProfile(selectedProfile)) {
       return MIKU_SCENARIO_PRESETS;
     }
     return [];

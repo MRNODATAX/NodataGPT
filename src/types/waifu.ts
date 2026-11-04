@@ -56,6 +56,7 @@ export interface WaifuProfile {
   affectionMeterEnabled: boolean;
   expressionImagesEnabled?: boolean;
   isBuiltInDefault?: boolean;
+  isBuiltInCharacter?: boolean;
   updatedAt: number;
 }
 

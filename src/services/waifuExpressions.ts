@@ -1,4 +1,17 @@
 import mikuManifestRaw from '../assets/waifu/miku/manifest.json';
+import alyaManifestRaw from '../assets/waifu/alya/manifest.json';
+import alyaHeartHandsUrl from '../assets/waifu/alya/alya-heart-hands.jpg';
+import alyaLaughUrl from '../assets/waifu/alya/alya-laugh.jpg';
+import alyaPapPeaceUrl from '../assets/waifu/alya/alya-pap-peace.jpg';
+import alyaPlayfulCatUrl from '../assets/waifu/alya/alya-playful-cat.png';
+import alyaPoutArmsCrossedUrl from '../assets/waifu/alya/alya-pout-arms-crossed.jpg';
+import alyaPoutEyesClosedUrl from '../assets/waifu/alya/alya-pout-eyes-closed.jpg';
+import alyaScreamUrl from '../assets/waifu/alya/alya-scream.jpg';
+import alyaShyUrl from '../assets/waifu/alya/alya-shy.jpg';
+import alyaSmugUrl from '../assets/waifu/alya/alya-smug.jpg';
+import alyaStartledUrl from '../assets/waifu/alya/alya-startled.jpg';
+import alyaWarmSmileUrl from '../assets/waifu/alya/alya-warm-smile.jpg';
+import alyaYellUrl from '../assets/waifu/alya/alya-yell.jpg';
 import mikuCemberutUrl from '../assets/waifu/miku/miku-cemberut.jpg';
 import mikuGugupUrl from '../assets/waifu/miku/miku-gugup.jpg';
 import mikuMaluCloseupUrl from '../assets/waifu/miku/miku-malu-closeup.jpg';
@@ -110,6 +123,29 @@ let inMemoryPrivateOptIn = true;
 
 export const MIKU_EXPRESSION_MANIFEST: MikuExpressionManifest =
   mikuManifestRaw as MikuExpressionManifest;
+export const ALYA_EXPRESSION_MANIFEST: MikuExpressionManifest =
+  alyaManifestRaw as MikuExpressionManifest;
+
+const BUNDLED_ALYA_ASSET_URLS: Record<string, string> = {
+  'alya-heart-hands.jpg': alyaHeartHandsUrl,
+  'alya-laugh.jpg': alyaLaughUrl,
+  'alya-pap-peace.jpg': alyaPapPeaceUrl,
+  'alya-playful-cat.png': alyaPlayfulCatUrl,
+  'alya-pout-arms-crossed.jpg': alyaPoutArmsCrossedUrl,
+  'alya-pout-eyes-closed.jpg': alyaPoutEyesClosedUrl,
+  'alya-scream.jpg': alyaScreamUrl,
+  'alya-shy.jpg': alyaShyUrl,
+  'alya-smug.jpg': alyaSmugUrl,
+  'alya-startled.jpg': alyaStartledUrl,
+  'alya-warm-smile.jpg': alyaWarmSmileUrl,
+  'alya-yell.jpg': alyaYellUrl,
+};
+
+function getExpressionPack(profile?: WaifuProfile) {
+  return isAlyaCharacterProfile(profile)
+    ? { manifest: ALYA_EXPRESSION_MANIFEST, assets: BUNDLED_ALYA_ASSET_URLS }
+    : { manifest: MIKU_EXPRESSION_MANIFEST, assets: BUNDLED_MIKU_ASSET_URLS };
+}
 
 export interface ManifestValidationReport {
   valid: boolean;
@@ -185,10 +221,19 @@ export function validateMikuExpressionManifest(
 
 export function isMikuCharacterProfile(profile?: WaifuProfile): boolean {
   if (!profile) return false;
-  if (profile.id === 'miku-nakano-default' || profile.isBuiltInDefault) {
+  if (profile.id === 'miku-nakano-default' || profile.id === 'miku-nakano' || profile.isBuiltInDefault) {
     return true;
   }
   return /\bmiku(?:\s+nakano)?\b/i.test(profile.name.trim());
+}
+
+export function isAlyaCharacterProfile(profile?: WaifuProfile): boolean {
+  if (!profile) return false;
+  return profile.id === 'alya-kujou' || /\balya(?:\s+kujou)?\b/i.test(profile.name.trim());
+}
+
+export function isBuiltInExpressionProfile(profile?: WaifuProfile): boolean {
+  return isMikuCharacterProfile(profile) || isAlyaCharacterProfile(profile);
 }
 
 function readScopeLastAsset(scopeKey: string): string {
@@ -510,7 +555,7 @@ export function classifyWaifuExpression(
 
   // --- Afeksi / Pujian / Malu / Flirting Ringan ---
   if (
-    /\b(?:cantik(?:\s+banget|nya)?|manis(?:\s+banget|nya)?|imut(?:\s+banget|nya)?|gemas|gemesin|menggemaskan|sayang(?:\s+kamu|\s+miku|\s+banget)?|aku\s+suka\s+(?:sama\s+)?kamu|cinta\s+(?:sama\s+)?kamu|jatuh\s+cinta|pacarku|calon\s+istri|gombal|bikin\s+baper|bikin\s+deg-degan|senyummu\s+manis|suaramu\s+lembut|matamu\s+indah)\b/i.test(
+    /\b(?:cantik(?:\s+banget|nya)?|manis(?:\s+banget|nya)?|imut(?:\s+banget|nya)?|gemas|gemesin|menggemaskan|sayang(?:\s+kamu|\s+miku|\s+alya|\s+alysa|\s+banget)?|aku\s+suka\s+(?:sama\s+)?kamu|cinta\s+(?:sama\s+)?kamu|jatuh\s+cinta|pacarku|calon\s+istri|gombal|bikin\s+baper|bikin\s+deg-degan|senyummu\s+manis|suaramu\s+lembut|matamu\s+indah)\b/i.test(
       userText
     )
   ) {
@@ -529,7 +574,7 @@ export function classifyWaifuExpression(
 
   // --- Hangat / Kangen / Sapaan Ramah ---
   if (
-    /\b(?:kangen(?:\s+banget|\s+miku|\s+kamu)?|rindu(?:\s+banget|\s+miku|\s+kamu)?|selamat\s+(?:pagi|siang|sore|malam)|met\s+(?:pagi|siang|sore|malam)|lama\s+(?:nggak|gak|tidak)\s+(?:ketemu|ngobrol)|senang\s+(?:bisa\s+)?(?:ketemu|ngobrol)|apa\s+kabar\s+miku|halo\s+miku|hai\s+miku|pagi\s+miku|malam\s+miku)\b/i.test(
+    /\b(?:kangen(?:\s+banget|\s+miku|\s+kamu)?|rindu(?:\s+banget|\s+miku|\s+kamu)?|selamat\s+(?:pagi|siang|sore|malam)|met\s+(?:pagi|siang|sore|malam)|lama\s+(?:nggak|gak|tidak)\s+(?:ketemu|ngobrol)|senang\s+(?:bisa\s+)?(?:ketemu|ngobrol)|apa\s+kabar\s+(?:miku|alya)|halo\s+(?:miku|alya)|hai\s+(?:miku|alya)|pagi\s+(?:miku|alya)|malam\s+(?:miku|alya))\b/i.test(
       userText
     )
   ) {
@@ -664,12 +709,12 @@ function buildScopeKey(input: SelectWaifuExpressionInput): string {
  */
 export function selectWaifuExpressionForTurn(
   input: SelectWaifuExpressionInput,
-  assetUrlMap: Record<string, string> = BUNDLED_MIKU_ASSET_URLS
+  assetUrlMap?: Record<string, string>
 ): SelectedWaifuExpression | null {
   const { userPrompt, assistantReply, waifuProfile } = input;
 
-  // 1. Must have a valid Miku profile & non-empty reply
-  if (!isMikuCharacterProfile(waifuProfile)) return null;
+  // 1. Must have a supported built-in character profile & non-empty reply
+  if (!isBuiltInExpressionProfile(waifuProfile)) return null;
   if (!String(assistantReply || '').trim()) return null;
 
   // 2. Explicit commands supersede automatic Waifu image triggers
@@ -691,7 +736,8 @@ export function selectWaifuExpressionForTurn(
 
   // 4. Classify context locally
   const classification = classifyWaifuExpression(userPrompt, assistantReply);
-  const manifest = MIKU_EXPRESSION_MANIFEST;
+  const { manifest, assets: selectedAssetUrlMap } = getExpressionPack(waifuProfile);
+  const assetUrls = assetUrlMap || selectedAssetUrlMap;
   if (!manifest?.categories || !Array.isArray(manifest.assets)) {
     return null;
   }
@@ -708,15 +754,18 @@ export function selectWaifuExpressionForTurn(
   const forbidden = new Set<string>(requestedCat.forbiddenAssets || []);
   let orderedFileNames = [...(requestedCat.priorityAssets || [])];
 
-  // Subtle refinement inside 'tsundere': prefer miku-gugup.jpg when Miku is flustered/nervous rather than pouting
+  // For flustered tsundere replies, prioritize the character's nervous asset if present.
+  const nervousAsset = isAlyaCharacterProfile(waifuProfile)
+    ? 'alya-shy.jpg'
+    : 'miku-gugup.jpg';
   if (
     classification.category === 'tsundere' &&
     classification.preferNervousInTsundere &&
-    orderedFileNames.includes('miku-gugup.jpg')
+    orderedFileNames.includes(nervousAsset)
   ) {
     orderedFileNames = [
-      'miku-gugup.jpg',
-      ...orderedFileNames.filter((f) => f !== 'miku-gugup.jpg'),
+      nervousAsset,
+      ...orderedFileNames.filter((f) => f !== nervousAsset),
     ];
   }
 
@@ -724,7 +773,7 @@ export function selectWaifuExpressionForTurn(
   let validCandidates = orderedFileNames.filter((fileName) => {
     if (forbidden.has(fileName)) return false;
     const meta = assetMetaMap.get(fileName);
-    const url = assetUrlMap[fileName];
+    const url = assetUrls[fileName];
     return Boolean(meta && typeof url === 'string' && url.length > 0);
   });
 
@@ -740,7 +789,7 @@ export function selectWaifuExpressionForTurn(
       const fbForbidden = new Set<string>(fallbackCat.forbiddenAssets || []);
       validCandidates = (fallbackCat.priorityAssets || []).filter((fileName) => {
         if (fbForbidden.has(fileName)) return false;
-        return Boolean(assetMetaMap.get(fileName) && assetUrlMap[fileName]);
+        return Boolean(assetMetaMap.get(fileName) && assetUrls[fileName]);
       });
     }
   }
@@ -759,7 +808,7 @@ export function selectWaifuExpressionForTurn(
       : validCandidates[0];
 
   const chosenMeta = assetMetaMap.get(chosenFileName);
-  const chosenUrl = assetUrlMap[chosenFileName];
+  const chosenUrl = assetUrls[chosenFileName];
   if (!chosenMeta || !chosenUrl) return null;
 
   writeScopeLastAsset(scopeKey, chosenFileName);
@@ -783,8 +832,8 @@ export function resolveMikuExpressionUrl(
   fileName?: string,
   fallbackUrl?: string
 ): string | undefined {
-  if (fileName && BUNDLED_MIKU_ASSET_URLS[fileName]) {
-    return BUNDLED_MIKU_ASSET_URLS[fileName];
+  if (fileName && (BUNDLED_MIKU_ASSET_URLS[fileName] || BUNDLED_ALYA_ASSET_URLS[fileName])) {
+    return BUNDLED_MIKU_ASSET_URLS[fileName] || BUNDLED_ALYA_ASSET_URLS[fileName];
   }
   return fallbackUrl;
 }

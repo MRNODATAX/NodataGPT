@@ -10,7 +10,7 @@ import {
   Pencil,
   Sparkles,
 } from 'lucide-react';
-import { isMikuCharacterProfile } from '../services/waifuExpressions';
+import { isBuiltInExpressionProfile } from '../services/waifuExpressions';
 import {
   DEFAULT_MIKU_AVATAR_URL,
   analyzeWaifuMoodAndAffection,
@@ -159,7 +159,7 @@ export function WaifuBannerBar({
   }
 
   const mood = analyzeWaifuMoodAndAffection(messages, allWaifuMessageLists);
-  const supportsExpressionPack = isMikuCharacterProfile(profile);
+  const supportsExpressionPack = isBuiltInExpressionProfile(profile);
   const photosEnabled = profile.expressionImagesEnabled !== false;
 
   const moodToneClasses: Record<string, string> = {

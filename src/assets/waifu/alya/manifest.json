@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "characterId": "alya-kujou",
+  "characterName": "Alya Kujou",
+  "fallbackCategory": "netral",
+  "categories": {
+    "dukungan": {
+      "label": "Dukungan & Empati",
+      "description": "Curhat, sedih, stres, lelah, atau butuh dukungan emosional",
+      "priorityAssets": ["alya-warm-smile.jpg", "alya-shy.jpg"],
+      "forbiddenAssets": ["alya-laugh.jpg", "alya-smug.jpg", "alya-scream.jpg"]
+    },
+    "afeksi": {
+      "label": "Tersipu & Afeksi",
+      "description": "Pujian, malu, perhatian, atau flirting ringan yang sopan",
+      "priorityAssets": ["alya-heart-hands.jpg", "alya-shy.jpg", "alya-smug.jpg"],
+      "forbiddenAssets": []
+    },
+    "hangat": {
+      "label": "Sapaan Hangat & Rindu",
+      "description": "Sapaan akrab, rindu, atau percakapan hangat",
+      "priorityAssets": ["alya-warm-smile.jpg", "alya-heart-hands.jpg"],
+      "forbiddenAssets": []
+    },
+    "ceria": {
+      "label": "Candaan & Bahagia",
+      "description": "Candaan ringan, tawa, atau kabar menyenangkan",
+      "priorityAssets": ["alya-laugh.jpg", "alya-playful-cat.png", "alya-pap-peace.jpg"],
+      "forbiddenAssets": []
+    },
+    "tsundere": {
+      "label": "Cemberut & Salah Tingkah",
+      "description": "Kesal ringan, gengsi, ngambek, cemburu, atau gugup karena digoda",
+      "priorityAssets": ["alya-pout-arms-crossed.jpg", "alya-pout-eyes-closed.jpg", "alya-shy.jpg"],
+      "forbiddenAssets": []
+    },
+    "terkejut": {
+      "label": "Terkejut & Tak Terduga",
+      "description": "Kabar mengejutkan atau reaksi kaget kontekstual",
+      "priorityAssets": ["alya-startled.jpg", "alya-scream.jpg", "alya-yell.jpg"],
+      "forbiddenAssets": []
+    },
+    "pap": {
+      "label": "PAP & Selfie Alya",
+      "description": "Permintaan eksplisit pengguna untuk foto atau selfie Alya",
+      "priorityAssets": ["alya-pap-peace.jpg", "alya-warm-smile.jpg"],
+      "forbiddenAssets": []
+    },
+    "netral": {
+      "label": "Ramah & Santai",
+      "description": "Fallback untuk konteks netral atau sinyal emosi yang belum cukup",
+      "priorityAssets": ["alya-warm-smile.jpg", "alya-shy.jpg"],
+      "forbiddenAssets": []
+    }
+  },
+  "assets": [
+    {"fileName":"alya-heart-hands.jpg","mimeType":"image/jpeg","label":"Afeksi Heart Hands","categories":["afeksi","hangat"],"objectPosition":"center 30%"},
+    {"fileName":"alya-laugh.jpg","mimeType":"image/jpeg","label":"Tertawa Ceria","categories":["ceria"],"objectPosition":"center 30%"},
+    {"fileName":"alya-pap-peace.jpg","mimeType":"image/jpeg","label":"PAP Peace Sign","categories":["pap","ceria"],"objectPosition":"center 30%"},
+    {"fileName":"alya-playful-cat.png","mimeType":"image/png","label":"Pose Kucing Playful","categories":["ceria","pap"],"objectPosition":"center 28%"},
+    {"fileName":"alya-pout-arms-crossed.jpg","mimeType":"image/jpeg","label":"Cemberut Tangan Bersilang","categories":["tsundere"],"objectPosition":"center 30%"},
+    {"fileName":"alya-pout-eyes-closed.jpg","mimeType":"image/jpeg","label":"Pout Malu","categories":["tsundere","afeksi"],"objectPosition":"center 28%"},
+    {"fileName":"alya-scream.jpg","mimeType":"image/jpeg","label":"Kaget Berteriak","categories":["terkejut"],"objectPosition":"center 28%"},
+    {"fileName":"alya-shy.jpg","mimeType":"image/jpeg","label":"Malu dan Tersipu","categories":["afeksi","hangat","dukungan","netral"],"objectPosition":"center 26%"},
+    {"fileName":"alya-smug.jpg","mimeType":"image/jpeg","label":"Senyum Jahil","categories":["afeksi","ceria"],"objectPosition":"center 28%"},
+    {"fileName":"alya-startled.jpg","mimeType":"image/jpeg","label":"Terkejut","categories":["terkejut"],"objectPosition":"center 28%"},
+    {"fileName":"alya-warm-smile.jpg","mimeType":"image/jpeg","label":"Senyum Hangat","categories":["hangat","dukungan","netral","pap"],"objectPosition":"center 24%"},
+    {"fileName":"alya-yell.jpg","mimeType":"image/jpeg","label":"Ekspresif / Semangat","categories":["ceria","terkejut"],"objectPosition":"center 28%"}
+  ]
+}

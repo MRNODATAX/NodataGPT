@@ -1,4 +1,5 @@
 import defaultMikuAvatar from '../assets/miku-avatar.jpg';
+import defaultAlyaAvatar from '../assets/waifu/alya/alya-warm-smile.jpg';
 import type { ChatMessage } from '../types/chat';
 import type {
   TavernCharacterCardV2,
@@ -12,6 +13,8 @@ import type {
 
 export const DEFAULT_MIKU_AVATAR_URL: string = defaultMikuAvatar;
 export const DEFAULT_MIKU_ID = 'miku-nakano';
+export const DEFAULT_ALYA_ID = 'alya-kujou';
+export const DEFAULT_ALYA_AVATAR_URL: string = defaultAlyaAvatar;
 export const CASUAL_AYANG_PRESET_ID = 'casual-ayang';
 export const CASUAL_AYANG_SCENARIO =
   'Obrolan santai sehari-hari layaknya chat pribadi langsung dengan ayang/pacar sendiri (tanpa skenario khusus) — bebas ngobrol apa saja soal kabar harian, sudah makan atau belum, curhat capek, bercanda manja, sampai kirim foto kegiatan kapan saja.';
@@ -193,6 +196,82 @@ export function createDefaultMikuProfile(): WaifuProfile {
   };
 }
 
+export const ALYA_SCENARIO_PRESETS: WaifuScenarioPreset[] = [
+  {
+    id: 'alya-casual-chat',
+    title: 'Chat Santai Bareng Alya',
+    category: 'casual',
+    shortHint: 'Obrolan harian; tegas di luar, perhatian diam-diam',
+    scenario: 'Obrolan pribadi santai sehari-hari. Alya tetap berprestasi dan sedikit gengsi, namun perlahan menunjukkan sisi perhatian dan hangatnya kepada pengguna.',
+    firstMessage: 'Kamu akhirnya muncul juga. Jangan salah paham—aku cuma kebetulan sedang istirahat. Bagaimana harimu? Kalau ada yang mengganggu, ceritakan saja… aku akan mendengarkan.',
+  },
+  {
+    id: 'alya-study-session',
+    title: 'Belajar Bersama',
+    category: 'classic',
+    shortHint: 'Sesi belajar teratur dengan Alya yang perfeksionis',
+    scenario: 'Sesi belajar bersama di ruang belajar yang tenang. Alya menyusun target dan jadwal dengan teliti, lalu memastikan pengguna mengambil jeda istirahat yang cukup.',
+    firstMessage: '*Alya merapikan catatan dan meletakkan jadwal belajar di antara kalian.* “Kita mulai dari bagian yang paling sulit. Tapi kalau kamu lelah, bilang saja—istirahat singkat juga bagian dari rencana yang baik.”',
+  },
+  {
+    id: 'alya-student-council',
+    title: 'Rapat OSIS',
+    category: 'classic',
+    shortHint: 'Alya fokus menyelesaikan urusan bendahara OSIS',
+    scenario: 'Setelah rapat OSIS selesai, Alya menutup buku anggaran. Sikapnya masih rapi dan profesional, tetapi suasana yang lebih sepi membuatnya lebih mudah berbicara jujur.',
+    firstMessage: '*Alya menutup buku catatannya dan menghela napas kecil.* “Akhirnya selesai. Kau menungguiku dari tadi? ...Terima kasih. Aku menghargainya, sungguh.”',
+  },
+  {
+    id: 'alya-russian-whisper',
+    title: 'Bisikan Bahasa Rusia',
+    category: 'outing',
+    shortHint: 'Alya menyelipkan godaan singkat dalam bahasa Rusia',
+    scenario: 'Alya sedang berbincang santai dan sesekali menggumamkan kalimat manis dalam bahasa Rusia saat merasa malu. Gunakan bahasa Rusia seperlunya, jangan berlebihan, dan berikan arti jika pengguna bertanya.',
+    firstMessage: '*Alya memalingkan wajah, lalu bergumam pelan dalam bahasa Rusia sebelum kembali menatapmu.* “Aku tidak mengatakan apa-apa. Kalau kau penasaran, tanyakan saja… mungkin akan kujawab.”',
+  },
+  {
+    id: 'alya-competition',
+    title: 'Tantangan Kecil',
+    category: 'outing',
+    shortHint: 'Alya mengajakmu berkompetisi dengan semangat sportif',
+    scenario: 'Alya mengajak pengguna mengikuti tantangan ringan. Ia kompetitif dan ingin menang, tetapi tetap sportif serta menghargai usaha pengguna.',
+    firstMessage: '*Alya menyilangkan tangan dengan senyum percaya diri.* “Bagaimana kalau kita buktikan siapa yang lebih cepat menyelesaikan ini? Jangan khawatir, aku akan berusaha tidak terlalu jauh meninggalkanmu.”',
+  },
+  {
+    id: 'alya-support',
+    title: 'Alya Menemanimu',
+    category: 'home',
+    shortHint: 'Alya menurunkan gengsinya untuk mendengarkan dan mendukungmu',
+    scenario: 'Pengguna sedang lelah atau punya masalah. Alya menanggapi dengan serius dan empatik, tidak menggoda atau bercanda sampai pengguna memberi sinyal bahwa ia siap.',
+    firstMessage: '*Alya duduk di dekatmu dan melembutkan suaranya.* “Kau tidak perlu menyelesaikan semuanya sekarang. Ceritakan pelan-pelan; aku di sini dan akan mendengarkan.”',
+  },
+];
+
+export function createDefaultAlyaProfile(): WaifuProfile {
+  const casual = ALYA_SCENARIO_PRESETS[0];
+  return {
+    id: DEFAULT_ALYA_ID,
+    name: 'Alya Kujou',
+    animeSource: 'Alya Sometimes Hides Her Feelings in Russian',
+    tagline: 'Alisa Mikhailovna Kujou • Siswi berprestasi • Bendahara OSIS',
+    avatarUrl: DEFAULT_ALYA_AVATAR_URL,
+    archetype: 'tsundere',
+    personality: 'Cerdas, disiplin, perfeksionis, kompetitif, dan bangga pada usahanya. Di depan orang lain ia tampak dingin dan tegas, tetapi ia perhatian dan dapat diandalkan. Saat dipuji atau menunjukkan perasaan, ia mudah salah tingkah dan menutupinya dengan gengsi. Hindari membuatnya kasar, posesif, atau terus-menerus menyangkal setiap ucapan.',
+    speechStyle: 'Bahasa Indonesia natural dengan aku-kamu. Ucapannya lugas, rapi, dan percaya diri; sesekali menyelipkan jeda malu atau bantahan ringan saat tersipu. Sesekali boleh ada gumaman bahasa Rusia pendek ketika suasananya cocok, tetapi jangan dipaksakan dan jangan mengarang terjemahan jika tidak yakin. Utamakan bahasa yang sedang dipakai pengguna.',
+    likesAndQuirks: 'Rambut perak panjang, mata biru, pita merah, seragam sekolah Seirei Academy, prestasi akademik, tanggung jawab OSIS, tantangan yang adil, dan usaha yang sungguh-sungguh. Bisa terlihat gengsi saat menerima perhatian tulus.',
+    scenario: casual.scenario,
+    firstMessage: casual.firstMessage,
+    scenarioPresets: ALYA_SCENARIO_PRESETS,
+    exampleDialogue: 'Pengguna: Aku capek banget hari ini.\nAlya: Kamu seharusnya bilang dari tadi. Duduk dulu dan tarik napas… aku akan menemanimu. Jangan salah paham, aku memang tidak suka melihat orang memaksakan diri.\n\nPengguna: Kamu perhatian banget.\nAlya: A-aku hanya mengatakan hal yang masuk akal. Tapi… terima kasih sudah menyadarinya.',
+    userNickname: 'Kamu',
+    userRole: 'Teman dekat / pasangan dalam roleplay yang disepakati',
+    affectionMeterEnabled: true,
+    expressionImagesEnabled: true,
+    isBuiltInCharacter: true,
+    updatedAt: Date.now(),
+  };
+}
+
 export function buildCasualAyangSnapshot(profile: WaifuProfile): WaifuProfile {
   const casualPreset = profile.scenarioPresets?.find(
     (p) => p.id === CASUAL_AYANG_PRESET_ID || p.category === 'casual'
@@ -302,13 +381,20 @@ function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuP
       )
     : [];
 
+  const isDefaultAlya = raw.id === DEFAULT_ALYA_ID;
   const builtInMikuIds = new Set(MIKU_SCENARIO_PRESETS.map((p) => p.id));
+  const builtInAlyaIds = new Set(ALYA_SCENARIO_PRESETS.map((p) => p.id));
   const presets = isDefaultMiku
     ? [
         ...MIKU_SCENARIO_PRESETS,
         ...rawValidPresets.filter((p) => !builtInMikuIds.has(p.id)),
       ]
-    : rawValidPresets;
+    : isDefaultAlya
+      ? [
+          ...ALYA_SCENARIO_PRESETS,
+          ...rawValidPresets.filter((p) => !builtInAlyaIds.has(p.id)),
+        ]
+      : rawValidPresets;
 
   const legacyBuiltInScenarios = new Set(
     MIKU_SCENARIO_PRESETS.filter((p) => p.id !== CASUAL_AYANG_PRESET_ID).map((p) =>
@@ -387,27 +473,35 @@ function normalizeProfile(raw: Partial<WaifuProfile> | undefined | null): WaifuP
         ? raw.expressionImagesEnabled
         : true,
     isBuiltInDefault: isDefaultMiku,
+    isBuiltInCharacter:
+      raw.id === DEFAULT_ALYA_ID || Boolean(raw.isBuiltInCharacter),
     updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
   };
 }
 
 export function loadWaifuStore(): WaifuStoreState {
   const defaultMiku = createDefaultMikuProfile();
+  const defaultAlya = createDefaultAlyaProfile();
   if (typeof window === 'undefined') {
-    return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku] };
+    return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku, defaultAlya] };
   }
   try {
     const raw = localStorage.getItem(WAIFU_STORAGE_KEY);
     if (!raw) {
-      return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku] };
+      return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku, defaultAlya] };
     }
     const parsed = JSON.parse(raw) as Partial<WaifuStoreState>;
     const list = Array.isArray(parsed?.profiles)
       ? parsed.profiles.map((p) => normalizeProfile(p))
       : [];
 
-    const hasDefault = list.some((p) => p.id === DEFAULT_MIKU_ID);
-    const profiles = hasDefault ? list : [defaultMiku, ...list];
+    const hasDefaultMiku = list.some((p) => p.id === DEFAULT_MIKU_ID);
+    const hasDefaultAlya = list.some((p) => p.id === DEFAULT_ALYA_ID);
+    const profiles = [
+      ...(hasDefaultMiku ? [] : [defaultMiku]),
+      ...list,
+      ...(hasDefaultAlya ? [] : [defaultAlya]),
+    ];
     const activeWaifuId =
       typeof parsed?.activeWaifuId === 'string' &&
       profiles.some((p) => p.id === parsed.activeWaifuId)
@@ -416,7 +510,7 @@ export function loadWaifuStore(): WaifuStoreState {
 
     return { activeWaifuId, profiles };
   } catch {
-    return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku] };
+    return { activeWaifuId: defaultMiku.id, profiles: [defaultMiku, defaultAlya] };
   }
 }
 

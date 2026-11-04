@@ -36,35 +36,7 @@ export interface PreparedChatAttachment {
   pendingPublicUrlPromise?: Promise<string | undefined>;
 }
 
-export type CctvStreamKind = 'hls' | 'snapshot' | 'youtube' | 'iframe' | 'portal';
 
-export interface CctvCameraAngle {
-  label: string;
-  streamType: CctvStreamKind;
-  streamUrl: string;
-  fallbackEmbedUrl?: string;
-  proxyHlsFirst?: boolean;
-}
-
-export interface CctvCameraItem {
-  id: string;
-  name: string;
-  city: string;
-  provinceOrCountry: string;
-  scope: 'indonesia' | 'world';
-  regionGroup: string;
-  lat: number;
-  lon: number;
-  streamType: CctvStreamKind;
-  streamUrl: string;
-  fallbackEmbedUrl?: string;
-  proxyHlsFirst?: boolean;
-  angles?: CctvCameraAngle[];
-  posterUrl?: string;
-  portalUrl: string;
-  operator: string;
-  badge: string;
-}
 
 export interface ChatMessage {
   id: string;
@@ -89,7 +61,6 @@ export interface ChatMessage {
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   actionLinks?: ToolActionLink[];
-  cctvCameras?: CctvCameraItem[];
   summarizeTranscript?: string;
   isImageRequest?: boolean;
   waifuExpressionUrl?: string;

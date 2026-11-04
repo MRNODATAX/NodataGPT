@@ -14,7 +14,6 @@ import {
   Film,
   Globe,
   ImagePlus,
-  LayoutGrid,
   Loader2,
   LocateFixed,
   Mail,
@@ -23,7 +22,6 @@ import {
   Play,
   QrCode,
   Radar,
-  Radio,
   ScanSearch,
   Search,
   Sparkles,
@@ -53,7 +51,6 @@ interface ToolsStudioModalProps {
   onClose: () => void;
   onRunCommand: (commandText: string, displayLabel?: string) => void;
   onInsertCommand: (commandText: string) => void;
-  onOpenCctvCommandCenter?: () => void;
 }
 
 const CATEGORY_META: Record<
@@ -66,9 +63,9 @@ const CATEGORY_META: Record<
   }
 > = {
   OSINT: {
-    shortTab: '🛰️ OSINT & CCTV',
-    sectionTitle: 'OSINT, Forensik & Live CCTV',
-    sectionSubtitle: 'Live CCTV Indonesia/Dunia, pelacakan nomor, medsos, QRIS, EXIF & jaringan',
+    shortTab: '🛰️ OSINT',
+    sectionTitle: 'OSINT & Forensik Digital',
+    sectionSubtitle: 'Pelacakan nomor, medsos, QRIS, EXIF & jaringan',
     accent: 'emerald',
   },
   A: {
@@ -117,7 +114,6 @@ export function ToolsStudioModal({
   onClose,
   onRunCommand,
   onInsertCommand,
-  onOpenCctvCommandCenter,
 }: ToolsStudioModalProps) {
   const [activeCategory, setActiveCategory] = useState<'all' | WebToolCategoryId>(
     'all'
@@ -428,7 +424,6 @@ export function ToolsStudioModal({
   };
 
   const getToolIcon = (tool: WebToolDefinition) => {
-    if (tool.id === 'cctv') return Radio;
     if (tool.id === 'qris') return QrCode;
     if (tool.id === 'ceknomor') return PhoneCall;
     if (tool.id === 'waosint') return MessageCircle;
@@ -447,7 +442,6 @@ export function ToolsStudioModal({
     return Sparkles;
   };
 
-  const cctvToolDef = WEB_TOOLS_CATALOG.find((t) => t.id === 'cctv');
 
   return (
     <div
@@ -538,21 +532,6 @@ export function ToolsStudioModal({
                       {selectedTool.description}
                     </p>
 
-                    {selectedTool.id === 'cctv' && onOpenCctvCommandCenter && (
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClose();
-                            onOpenCctvCommandCenter();
-                          }}
-                          className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-400/45 bg-emerald-500/18 px-3.5 text-xs font-bold text-emerald-200 transition-colors hover:bg-emerald-500/28 cursor-pointer"
-                        >
-                          <LayoutGrid className="h-3.5 w-3.5 text-emerald-300" />
-                          <span>Buka Ruang Pantau Multi-CCTV (Grid 2×2 &amp; Peta Wilayah)</span>
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -994,7 +973,7 @@ export function ToolsStudioModal({
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari fitur: Live CCTV, QRIS, Nomor HP, TikTok, WA, Cuaca, Lirik..."
+                  placeholder="Cari fitur: QRIS, Nomor HP, TikTok, WA, Cuaca, Lirik..."
                   className="h-10 w-full rounded-xl border border-white/12 bg-black/55 pr-3 pl-10 text-sm text-white placeholder-[#94A3B8] transition-colors focus:border-[#22D3EE] focus:outline-none"
                 />
               </div>
@@ -1031,62 +1010,6 @@ export function ToolsStudioModal({
 
             {/* Airy Grouped Catalog Body */}
             <div className="pb-safe min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              {/* Featured Spotlight: Live Public CCTV Command Center */}
-              {!searchQuery.trim() &&
-                (activeCategory === 'all' || activeCategory === 'OSINT') &&
-                cctvToolDef && (
-                  <div
-                    data-testid="tools-cctv-spotlight"
-                    className="relative overflow-hidden rounded-2xl border border-emerald-400/30 bg-gradient-to-r from-[#051B1B]/95 via-[#071525]/95 to-[#181008]/90 p-4 shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
-                  >
-                    <div className="flex flex-col justify-between gap-3.5 sm:flex-row sm:items-center">
-                      <div className="flex items-start gap-3">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-300">
-                          <Radio className="h-5 w-5" />
-                        </span>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/16 px-2 py-0.5 font-mono-code text-[10px] font-bold text-emerald-300">
-                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                              BARU · LIVE GEOINT
-                            </span>
-                            <h3 className="font-display text-sm font-bold text-white sm:text-base">
-                              Ruang Pantau Live CCTV Indonesia &amp; Dunia
-                            </h3>
-                          </div>
-                          <p className="mt-1 text-xs leading-relaxed text-[#CBD5E1]">
-                            Pantau jalan raya ATCS kota/kabupaten se-Indonesia, Jalan Tol/Nasional, Makkah, Singapura, NYC, Tokyo &amp; NASA ISS lengkap titik Google Maps.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        {onOpenCctvCommandCenter && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-                              onOpenCctvCommandCenter();
-                            }}
-                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-[0_0_16px_rgba(16,185,129,0.28)] transition-colors hover:bg-emerald-500 cursor-pointer"
-                          >
-                            <LayoutGrid className="h-3.5 w-3.5" />
-                            <span>Ruang Pantau 2×2</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleChooseTool(cctvToolDef)}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.06] px-3 text-xs font-semibold text-white transition-colors hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/15 cursor-pointer"
-                        >
-                          <Terminal className="h-3.5 w-3.5 text-[#22D3EE]" />
-                          <span>/cctv di Chat</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
               {filteredTools.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-12 text-center">
                   <p className="font-display text-sm font-semibold text-white">

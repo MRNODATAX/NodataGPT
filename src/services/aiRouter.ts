@@ -1,7 +1,6 @@
 import type {
   AIModelDefinition,
   AppSettings,
-  CctvCameraItem,
   ChatMessage,
   MediaDownloadItem,
   ToolActionLink,
@@ -2821,7 +2820,6 @@ export interface RouterResult {
   galleryAspect?: 'square' | 'portrait' | 'landscape';
   downloadItems?: MediaDownloadItem[];
   actionLinks?: ToolActionLink[];
-  cctvCameras?: CctvCameraItem[];
   summarizeTranscript?: string;
 }
 
@@ -2855,12 +2853,6 @@ const KEYLESS_VISION_MODELS: Array<{
     id: 'zelai-ciora-vision',
     modelId: 'ciora-vision-free',
     shortName: 'Ciora Vision',
-    provider: 'ZelAI Vision',
-  },
-  {
-    id: 'zelai-gemini15-vision',
-    modelId: 'gemini-1.5-pro-free',
-    shortName: 'Gemini 1.5 Pro Vision',
     provider: 'ZelAI Vision',
   },
 ];
@@ -2954,14 +2946,56 @@ async function executeVisionMultiModelChat({
 
   const basePersona = buildSystemPersona(settings, 'full', waifuProfile);
   const visionDirective = waifuProfile
-    ? isCasualAyangScenario(waifuProfile.scenario)
-      ? `\n\nKonteks Visual Saat Ini: Pacar/ayangmu baru saja mengirimkan sebuah foto kepadamu di chat. Amati seluruh isi, objek, suasana, maupun teks di dalam foto tersebut secara nyata dan akurat, lalu komentari langsung sebagai ${waifuProfile.name} dengan gaya chat pacar sehari-hari yang hangat, perhatian, dan luwes — jangan menjawab kaku seperti asisten AI teknis.`
-      : `\n\nKonteks Visual Saat Ini: Lawan bicara baru saja memperlihatkan sebuah foto kepadamu. Perhatikan seluruh isi, objek, suasana, maupun teks di dalam foto tersebut secara nyata dan akurat, lalu tanggapi langsung sebagai ${waifuProfile.name} dengan format roleplay (*ekspresi/gerakan* dan "dialog langsung" dalam Bahasa Indonesia) sesuai kepribadian dan skenario saat ini — jangan menjawab kaku seperti asisten AI teknis.`
-    : '\n\nKonteks Analisis Visual: Pengguna melampirkan sebuah foto/gambar. Amati seluruh detail visual, objek, warna, tata letak, maupun teks yang tampak di dalam gambar dengan cermat, lalu jawab permintaan pengguna secara akurat, terstruktur, dan jelas dalam Bahasa Indonesia (kecuali diminta bahasa lain).';
+    ? `\n\nTugas tahap penglihatan: Amati gambar dan tulis catatan faktual ringkas tentang objek, suasana, komposisi, dan teks yang benar-benar terlihat. Jangan menjawab pertanyaan pengguna, jangan roleplay, jangan menebak detail yang tidak tampak. Nyatakan ketidakpastian secara eksplisit.`
+    : '\n\nTugas tahap penglihatan: Tulis catatan faktual ringkas tentang objek, suasana, komposisi, dan teks yang benar-benar terlihat. Jangan menjawab pertanyaan pengguna atau menebak detail yang tidak tampak. Nyatakan ketidakpastian secara eksplisit.';
   const deepThinkDirective = deepThink
     ? '\n\nMode DeepThink aktif: Lakukan analisis mendalam langkah demi langkah di dalam tag <think>...</think> terlebih dahulu, lalu berikan jawaban akhir di luar tag tersebut.'
     : '';
   const fullVisionSystem = `${basePersona}${visionDirective}${deepThinkDirective}`;
+
+  const answerFromVisualEvidence = async (
+    observations: string,
+    visionProvider: string,
+    visualAttempts: number
+  ): Promise<RouterResult> => {
+    const groundedPrompt = [
+      '[Analisis visual terverifikasi dari gambar yang dilampirkan]',
+      observations.trim().slice(0, 7000),
+      '',
+      '[Pertanyaan pengguna tentang gambar]',
+      effectivePrompt,
+      '',
+      'Jawab pertanyaan berdasarkan catatan visual di atas. Jangan mengarang detail yang tidak tercatat; jika bukti visual kurang, jelaskan keterbatasannya.',
+    ].join('\n');
+
+    try {
+      const answer = await sendMultiModelChat({
+        prompt: groundedPrompt,
+        history,
+        settings,
+        deepThink,
+        waifuProfile,
+        signal,
+        onStatus,
+      });
+      return {
+        ...answer,
+        answeredByName: `${answer.answeredByName} + ${visionProvider} Vision`,
+        usedFallback: answer.usedFallback || visualAttempts > 1,
+        attemptsCount: visualAttempts + answer.attemptsCount,
+      };
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      // Keep a useful image-grounded answer available if the selected reasoning route is down.
+      return {
+        content: `### Analisis gambar\n\n${observations.trim()}\n\n_(Jalur model penjawab sedang gagal; hasil di atas berasal dari tahap analisis visual.)_`,
+        answeredById: 'vision-observation-fallback',
+        answeredByName: `${visionProvider} Vision · Jawaban cadangan`,
+        usedFallback: true,
+        attemptsCount: visualAttempts,
+      };
+    }
+  };
 
   const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   if (settings.memoryContextEnabled && history.length > 0) {
@@ -3010,16 +3044,11 @@ async function executeVisionMultiModelChat({
           signal,
         });
         if (!isBlindVisionRefusal(routerRes.content)) {
-          return {
-            content: routerRes.content,
-            thinkingContent: routerRes.thinkingContent,
-            answeredById: isRouterModelSelection(settings.selectedModelId)
-              ? settings.selectedModelId
-              : 'custom-ai-router-vision',
-            answeredByName: `${routerRes.resolvedModel} · ${routerRes.providerLabel}`,
-            usedFallback: false,
-            attemptsCount: attempt,
-          };
+          return answerFromVisualEvidence(
+            routerRes.content,
+            `${routerRes.resolvedModel} · ${routerRes.providerLabel}`,
+            attempt
+          );
         }
         lastFailedModel = `${providerLabel} (${targetRouterModel})`;
         lastReason = 'Model router aktif belum mendukung input gambar.';
@@ -3035,8 +3064,9 @@ async function executeVisionMultiModelChat({
     }
   }
 
-  // Tier 0B: Official Google Gemini 2.5 Flash Vision (when user configured Gemini API key)
+  // Tier 0B: Official Gemini Vision; use Pro for DeepThink, Flash otherwise.
   const geminiKey = settings.geminiApiKey.trim();
+  const geminiVisionModel = deepThink ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
   const rawDataUrl = attachmentImage.dataUrl || '';
   const commaPos = rawDataUrl.indexOf(',');
   const inlineBase64 = commaPos >= 0 ? rawDataUrl.slice(commaPos + 1) : '';
@@ -3048,7 +3078,7 @@ async function executeVisionMultiModelChat({
   if (geminiKey && inlineBase64) {
     attempt += 1;
     onStatus?.({
-      modelName: 'Gemini 2.5 Flash Vision (Resmi)',
+      modelName: `Gemini ${deepThink ? '2.5 Pro' : '2.5 Flash'} Vision (Resmi)`,
       attempt,
       isFallback: attempt > 1,
       previousFailedModel: lastFailedModel,
@@ -3076,7 +3106,7 @@ async function executeVisionMultiModelChat({
       ];
       const gemRes = await callGateway(
         {
-          targetUrl: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          targetUrl: `https://generativelanguage.googleapis.com/v1beta/models/${geminiVisionModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -3094,14 +3124,11 @@ async function executeVisionMultiModelChat({
             'gemini-resmi',
             Math.max(85, Math.round(performance.now() - gemStart))
           );
-          return {
-            content: parsed.content,
-            thinkingContent: parsed.thinkingContent,
-            answeredById: 'gemini-resmi',
-            answeredByName: 'Gemini 2.5 Flash Vision · Google Resmi',
-            usedFallback: attempt > 1,
-            attemptsCount: attempt,
-          };
+          return answerFromVisualEvidence(
+            parsed.content,
+            `Gemini ${deepThink ? '2.5 Pro' : '2.5 Flash'} Resmi`,
+            attempt
+          );
         }
       }
       lastFailedModel = 'Gemini 2.5 Flash Resmi';
@@ -3173,14 +3200,11 @@ async function executeVisionMultiModelChat({
               visionModel.id,
               Math.max(85, Math.round(performance.now() - modelStart))
             );
-            return {
-              content: parsed.content,
-              thinkingContent: parsed.thinkingContent,
-              answeredById: visionModel.id,
-              answeredByName: `${visionModel.shortName} · ${visionModel.provider}`,
-              usedFallback: attempt > 1,
-              attemptsCount: attempt,
-            };
+            return answerFromVisualEvidence(
+              parsed.content,
+              `${visionModel.shortName} · ${visionModel.provider}`,
+              attempt
+            );
           }
         }
         lastReason = res.error || `${visionModel.shortName} belum mengembalikan analisis.`;
@@ -3363,7 +3387,6 @@ export async function sendMultiModelChat({
       galleryAspect: toolRes.galleryAspect,
       downloadItems: toolRes.downloadItems,
       actionLinks: toolRes.actionLinks,
-      cctvCameras: toolRes.cctvCameras,
       summarizeTranscript: toolRes.summarizeTranscript,
     };
   }

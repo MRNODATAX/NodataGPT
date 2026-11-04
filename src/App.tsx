@@ -17,7 +17,6 @@ import { ChatThread } from './components/ChatThread';
 import { ChatComposer } from './components/ChatComposer';
 import { ModelPickerModal } from './components/ModelPickerModal';
 import { ToolsStudioModal } from './components/ToolsStudioModal';
-import { CctvCommandCenterModal } from './components/CctvCommandCenterModal';
 import { SettingsModal } from './components/SettingsModal';
 import { InstallPwaModal } from './components/InstallPwaModal';
 import { AccessGateModal } from './components/AccessGateModal';
@@ -84,7 +83,6 @@ import {
 } from './utils/storage';
 import type {
   AppSettings,
-  CctvCameraItem,
   ChatMessage,
   Conversation,
   MediaDownloadItem,
@@ -134,9 +132,6 @@ export function App() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelPickerTab, setModelPickerTab] = useState<'chat' | 'image'>('chat');
   const [toolsStudioOpen, setToolsStudioOpen] = useState(false);
-  const [cctvModalOpen, setCctvModalOpen] = useState(false);
-  const [cctvInitialCamera, setCctvInitialCamera] =
-    useState<CctvCameraItem | null>(null);
   const [waifuStore, setWaifuStore] = useState<WaifuStoreState>(() =>
     loadWaifuStore()
   );
@@ -846,8 +841,7 @@ export function App() {
           result.imageUrl ||
             result.videoUrl ||
             result.audioUrl ||
-            (result.galleryUrls && result.galleryUrls.length > 0) ||
-            (result.cctvCameras && result.cctvCameras.length > 0)
+            (result.galleryUrls && result.galleryUrls.length > 0)
         );
 
         const selectedWaifuExpr =
@@ -899,7 +893,6 @@ export function App() {
                     galleryAspect: result.galleryAspect,
                     downloadItems: result.downloadItems,
                     actionLinks: result.actionLinks,
-                    cctvCameras: result.cctvCameras,
                     summarizeTranscript: result.summarizeTranscript,
                     status: 'done',
                     isError: false,
@@ -1984,10 +1977,6 @@ export function App() {
                     `Tolong buatkan ringkasan eksekutif dan poin-poin inti yang rapi dari transkrip video YouTube berikut:\n\n${transcript}`
                   )
                 }
-                onOpenCctvCommandCenter={(cam) => {
-                  setCctvInitialCamera(cam || null);
-                  setCctvModalOpen(true);
-                }}
               />
             </>
           )}
@@ -2049,16 +2038,6 @@ export function App() {
         onClose={() => setToolsStudioOpen(false)}
         onRunCommand={handleRunDirectCommand}
         onInsertCommand={(cmd) => setDraft(cmd)}
-        onOpenCctvCommandCenter={() => {
-          setCctvInitialCamera(null);
-          setCctvModalOpen(true);
-        }}
-      />
-
-      <CctvCommandCenterModal
-        isOpen={cctvModalOpen}
-        initialCamera={cctvInitialCamera}
-        onClose={() => setCctvModalOpen(false)}
       />
 
       <ModelPickerModal

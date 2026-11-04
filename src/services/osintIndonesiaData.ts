@@ -2035,84 +2035,6 @@ function resolveZeroDropFromDbIndex(dbIdx: number): DbResolvedEntry | null {
   };
 }
 
-function fallbackFifthDigitCluster(clean08: string): {
-  hub: CityGeoInfo;
-  clusterTitle: string;
-  coverage: string;
-  provinceLabel: string;
-  fifthDigit: string;
-} {
-  const fifth = clean08[4] || '0';
-  switch (fifth) {
-    case '0':
-    case '1':
-      return {
-        hub: CITY_GEO_REGISTRY.jakarta,
-        clusterTitle: 'DKI Jakarta (Cluster Jabodetabek)',
-        coverage: 'DKI Jakarta, Bekasi, Tangerang, Bogor & Depok',
-        provinceLabel: 'DKI Jakarta / Jawa Barat / Banten',
-        fifthDigit: fifth,
-      };
-    case '2':
-      return {
-        hub: CITY_GEO_REGISTRY.bandung,
-        clusterTitle: 'Kota Bandung (Cluster Jawa Barat)',
-        coverage: 'Kota Bandung, Cimahi, Cirebon, Tasikmalaya & Jawa Barat',
-        provinceLabel: 'Jawa Barat',
-        fifthDigit: fifth,
-      };
-    case '3':
-    case '4':
-      return {
-        hub: CITY_GEO_REGISTRY.semarang,
-        clusterTitle: 'Kota Semarang (Cluster Jateng & DIY)',
-        coverage: 'Kota Semarang, Surakarta (Solo), Yogyakarta & Purwokerto',
-        provinceLabel: 'Jawa Tengah / DI Yogyakarta',
-        fifthDigit: fifth,
-      };
-    case '5':
-      return {
-        hub: CITY_GEO_REGISTRY.surabaya,
-        clusterTitle: 'Kota Surabaya (Cluster Jawa Timur)',
-        coverage: 'Kota Surabaya, Sidoarjo, Malang, Kediri & Jember',
-        provinceLabel: 'Jawa Timur',
-        fifthDigit: fifth,
-      };
-    case '6':
-      return {
-        hub: CITY_GEO_REGISTRY.medan,
-        clusterTitle: 'Kota Medan (Cluster Sumatera Utara & Tengah)',
-        coverage: 'Kota Medan, Pekanbaru, Padang, Batam & Banda Aceh',
-        provinceLabel: 'Sumatera Utara / Riau / Sumbar / Kepri / Aceh',
-        fifthDigit: fifth,
-      };
-    case '7':
-      return {
-        hub: CITY_GEO_REGISTRY.palembang,
-        clusterTitle: 'Kota Palembang (Cluster Sumatera Bagian Selatan)',
-        coverage: 'Kota Palembang, Bandar Lampung, Jambi, Bengkulu & Pangkalpinang',
-        provinceLabel: 'Sumatera Selatan / Lampung / Jambi / Bengkulu',
-        fifthDigit: fifth,
-      };
-    case '8':
-      return {
-        hub: CITY_GEO_REGISTRY.denpasar,
-        clusterTitle: 'Kota Denpasar (Cluster Bali, Nusra & Kalimantan)',
-        coverage: 'Kota Denpasar, Mataram, Balikpapan, Banjarmasin & Pontianak',
-        provinceLabel: 'Bali / NTB / Kalimantan',
-        fifthDigit: fifth,
-      };
-    default:
-      return {
-        hub: CITY_GEO_REGISTRY.makassar,
-        clusterTitle: 'Kota Makassar (Cluster Kawasan Timur Indonesia)',
-        coverage: 'Kota Makassar, Manado, Palu, Kendari, Ambon & Jayapura',
-        provinceLabel: 'Sulawesi / Maluku / Papua',
-        fifthDigit: fifth,
-      };
-  }
-}
-
 // Corrupted / obsolete legacy entries in HLR_PREFIX_INDEX (e.g. Flexi Papua ghosts on
 // Kartu As Jabodetabek 08528x, Fren 2008 CDMA ghosts on 08886x/70-71, and over-broad
 // 5-digit catch-alls that hijacked sub-blocks across islands).
@@ -2127,14 +2049,14 @@ const IGNORED_CORRUPT_DB_PREFIXES = new Set<string>([
 
 export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
   const clean = local08.replace(/\D/g, '');
-  const p4 = clean.slice(0, 4);
   const maxLen = Math.min(clean.length, 10);
 
   // TIER 1 & TIER 2: Longest-prefix-first (10 -> 5 digits) across Curated 1-City Rules + 42,000+ HLR_PREFIX_INDEX
   for (let len = maxLen; len >= 5; len--) {
     const sub = clean.slice(0, len);
 
-    const curated = CURATED_PREFIX_MAP.get(sub);
+    const triLongNeedsShiftedPrefix = clean.startsWith('0895') && clean.length >= 13 && len < 7;
+    const curated = triLongNeedsShiftedPrefix ? undefined : CURATED_PREFIX_MAP.get(sub);
     if (curated) {
       const { city, province, lat, lon } = curated;
       const isDeepCityPrefix = len >= 6;
@@ -2154,7 +2076,10 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
       };
     }
 
-    const dbIdx = !IGNORED_CORRUPT_DB_PREFIXES.has(sub) ? HLR_PREFIX_INDEX[sub] : undefined;
+    // Older Tri tables often encode short prefixes without the shifted HLR digits used by 13-digit ranges.
+    const dbIdx = !triLongNeedsShiftedPrefix && !IGNORED_CORRUPT_DB_PREFIXES.has(sub)
+      ? HLR_PREFIX_INDEX[sub]
+      : undefined;
     if (dbIdx !== undefined) {
       const resolved = resolveZeroDropFromDbIndex(dbIdx);
       if (resolved) {
@@ -2214,38 +2139,18 @@ export function lookupIndonesianMobileHlr(local08: string): HlrLookupMatch {
     }
   }
 
-  // TIER 4A: Telkomsel by.U Digital Block (08515–08519) -> Central HLR Jakarta Pusat (after 085100-085149 city/Flexi rules!)
-  if (p4 === '0851' && /^0851[5-9]/.test(clean)) {
-    const jp = CITY_GEO_REGISTRY.jakartapusat;
-    return {
-      city: 'Jakarta Pusat (Sentral Digital by.U)',
-      province: 'DKI Jakarta',
-      region: 'Jakarta Pusat (Registrasi Digital Nasional by.U / Telkomsel)',
-      clusterCoverage: 'Distribusi Kartu Digital Nasional (Core HLR Jakarta Pusat)',
-      mapQuery: 'Jakarta Pusat, DKI Jakarta, Indonesia',
-      coordinates: { lat: jp.lat, lon: jp.lon },
-      matchedPrefix: clean.slice(0, 5),
-      accuracyTier: 'cluster',
-      precisionLevel: 'national_pool',
-      precisionLabel: 'Sentral Digital Jakarta Pusat (by.U)',
-      basisNote: `Blok Digital by.U \`${clean.slice(0, 5)}\` (Core HLR Jakarta Pusat)`,
-    };
-  }
-
-  // TIER 4B: Fifth-Digit Regional MSC Safety Net (Versi Pertama Zero-Blank-Indonesia Guarantee)
-  const fb = fallbackFifthDigitCluster(clean);
+  // Unknown/mobile allocations are national or unverified; do not infer a city from one digit.
   return {
-    city: fb.clusterTitle,
-    province: fb.provinceLabel,
-    region: `${fb.clusterTitle} — ${fb.coverage}`,
-    clusterCoverage: fb.coverage,
-    mapQuery: `${fb.hub.city}, ${fb.hub.province}, Indonesia`,
-    coordinates: { lat: fb.hub.lat, lon: fb.hub.lon },
-    matchedPrefix: clean.slice(0, Math.min(5, clean.length)),
-    accuracyTier: 'cluster',
-    precisionLevel: 'regional_cluster',
-    precisionLabel: 'Cluster Regional HLR Operator',
-    basisNote: `Blok Regional Operator Digit ke-5 (\`${fb.fifthDigit}\` → Sentral ${fb.hub.city})`,
+    city: 'Alokasi Seluler Nasional',
+    province: 'Indonesia (non-geografis)',
+    region: 'Alokasi Seluler Nasional (kota tidak dapat dipastikan dari prefix)',
+    clusterCoverage: 'Prefix tidak memiliki pemetaan HLR regional yang cukup terverifikasi',
+    mapQuery: 'Indonesia',
+    matchedPrefix: clean.slice(0, Math.min(4, clean.length)),
+    accuracyTier: 'national',
+    precisionLevel: 'national_pool',
+    precisionLabel: 'Alokasi Nasional — lokasi kota tidak terverifikasi',
+    basisNote: 'NDC seluler bersifat non-geografis; tidak menebak kota dari digit yang tidak tervalidasi',
   };
 }
 

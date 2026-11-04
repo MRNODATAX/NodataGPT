@@ -1340,6 +1340,20 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
         }
       }
 
+      const plainPhoneQuery = trimmed.match(
+        /^(?:ceknomor|cek\s+nomor|cekno|cekhp)\s+([+0-9][0-9\s().-]{7,22})(?:\s+(?:daerah\s+mana|kota\s+mana|kartu\s+apa|operator\s+apa|hlr))?\??$/i
+      ) || trimmed.match(
+        /^(?:nomor\s+)?([+0-9][0-9\s().-]{7,22})\s+(?:daerah\s+mana|kota\s+mana|kartu\s+apa|operator\s+apa|hlr)\??$/i
+      ) || trimmed.match(
+        /^nomor\s+([+0-9][0-9\s().-]{7,22})\s+(?:kartu\s+apa|operator\s+apa|hlr)\??$/i
+      );
+      if (plainPhoneQuery && plainPhoneQuery[1]) {
+        const digitsCheck = plainPhoneQuery[1].replace(/\D/g, '');
+        if (digitsCheck.length >= 7 && digitsCheck.length <= 16) {
+          return { toolId: 'ceknomor', arg: plainPhoneQuery[1].trim() };
+        }
+      }
+
       const natWa = trimmed.match(
         /^(?:tolong\s+|coba\s+)?(?:cek|osint|periksa|lacak)\s+(?:grup\s+wa|wa|whatsapp)\s+([^\n?]{4,180})\??$/i
       );

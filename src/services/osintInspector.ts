@@ -2353,8 +2353,26 @@ export async function analyzePhoneInput(
   const cleanedRaw = rawInput
     .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '')
     .trim();
-  const hasPlus = cleanedRaw.startsWith('+');
-  const digitsOnly = cleanedRaw.replace(/\D/g, '');
+  if (!cleanedRaw || /^\/(?:ceknomor|cekno|cekhp)\s*$/i.test(cleanedRaw)) {
+    return { content: 'Masukkan nomor yang ingin diperiksa. Contoh: `/ceknomor 081234567890` atau `/ceknomor +6281234567890`. Lokasi HLR hanya estimasi area alokasi, bukan lokasi real-time.' };
+  }
+  // Extract one phone-like token; never concatenate unrelated dates, times, or list numbers.
+  const phoneCandidates = cleanedRaw.match(/(?:\+|00)?[0-9](?:[0-9\s().-]*[0-9])?/g) || [];
+  const candidate = phoneCandidates
+    .map((token) => token.trim())
+    .filter((token) => token.replace(/\D/g, '').length >= 7 && token.replace(/\D/g, '').length <= 16)
+    .sort((a, b) => b.replace(/\D/g, '').length - a.replace(/\D/g, '').length)[0] || cleanedRaw;
+  let digitsOnly = candidate.replace(/\D/g, '');
+  let hasPlus = candidate.trim().startsWith('+');
+  if (/^00(?:62)?0?8\d{7,12}$/.test(digitsOnly)) {
+    digitsOnly = digitsOnly.replace(/^00(?:62)?0?/, '62');
+    hasPlus = true;
+  } else if (/^62(?:0)?8\d{7,12}$/.test(digitsOnly)) {
+    digitsOnly = digitsOnly.replace(/^62(?:0)?/, '62');
+  } else if (/^8\d{8,13}$/.test(digitsOnly)) {
+    digitsOnly = `0${digitsOnly}`;
+    hasPlus = false;
+  }
 
   if (digitsOnly.length < 7 || digitsOnly.length > 16) {
     throw new Error(
@@ -2373,7 +2391,7 @@ export async function analyzePhoneInput(
     countryInfo = INTERNATIONAL_COUNTRY_CODES[0];
   } else if (digitsOnly.startsWith('62')) {
     e164Digits = digitsOnly;
-    localIdNumber = `0${digitsOnly.slice(2)}`;
+    localIdNumber = digitsOnly.startsWith('6208') ? `0${digitsOnly.slice(3)}` : `0${digitsOnly.slice(2)}`;
     countryInfo = INTERNATIONAL_COUNTRY_CODES[0];
   } else {
     // Match longest international country calling code
@@ -2493,7 +2511,7 @@ export async function analyzePhoneInput(
 
   const effectiveLengthCheck = isIndonesian ? localIdNumber.length : digitsOnly.length;
   const isLengthValid = isIndonesian
-    ? effectiveLengthCheck >= 9 && effectiveLengthCheck <= 13
+    ? effectiveLengthCheck >= 8 && effectiveLengthCheck <= 14
     : digitsOnly.length >= 8 && digitsOnly.length <= 15;
 
   const actionLinks: ToolActionLink[] = [
@@ -2548,7 +2566,7 @@ export async function analyzePhoneInput(
       ? `- **Koordinat Pusat Wilayah**: \`${resolvedCoords.lat}, ${resolvedCoords.lon}\``
       : '',
     '',
-    `> ℹ️ **Catatan Akurasi**: HLR menunjukkan wilayah registrasi awal kartu perdana oleh operator, bukan posisi GPS perangkat secara *real-time*.`,
+    `> ℹ️ **Catatan Akurasi**: Area HLR adalah estimasi blok alokasi, bukan lokasi real-time; nomor daur ulang, eSIM, dan pembelian lintas wilayah dapat membuat lokasi pengguna berbeda.`,
   ].filter(Boolean);
 
   return {

@@ -2400,8 +2400,6 @@ export async function analyzePhoneInput(
   let primaryCityLabel = countryInfo.country;
   let provinceLabel = '';
   let clusterCoverageLabel = '';
-  let precisionBadgeLabel = '';
-  let matchedHlrPrefix = '';
   let staticCoordinates: { lat: number; lon: number } | undefined;
   let mapSearchQuery = countryInfo.mapQuery;
   let hlrNote = '';
@@ -2413,7 +2411,7 @@ export async function analyzePhoneInput(
       operatorLabel = 'Layanan Korporat / Call Center Bebas Pulsa';
       primaryCityLabel = 'Layanan Bebas Pulsa Nasional';
       provinceLabel = 'Seluruh Indonesia (Non-Geografis)';
-      precisionBadgeLabel = 'Saluran Korporasi Nasional';
+      hlrNote = 'Nomor layanan korporat bebas pulsa nasional (0800)';
       mapSearchQuery = 'Indonesia';
       isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('1500') || localIdNumber.startsWith('01500')) {
@@ -2421,7 +2419,7 @@ export async function analyzePhoneInput(
       operatorLabel = 'Layanan Pelanggan Korporasi';
       primaryCityLabel = 'Contact Center Nasional';
       provinceLabel = 'Seluruh Indonesia (Non-Geografis)';
-      precisionBadgeLabel = 'Saluran Korporasi Nasional';
+      hlrNote = 'Nomor layanan pelanggan korporat nasional (1500xxx)';
       mapSearchQuery = 'Indonesia';
       isNationalNonCityBlock = true;
     } else if (localIdNumber.startsWith('08')) {
@@ -2439,8 +2437,6 @@ export async function analyzePhoneInput(
       primaryCityLabel = hlr.city;
       provinceLabel = hlr.province;
       clusterCoverageLabel = hlr.clusterCoverage || '';
-      precisionBadgeLabel = hlr.precisionLabel;
-      matchedHlrPrefix = hlr.matchedPrefix;
       staticCoordinates = hlr.coordinates;
       mapSearchQuery = hlr.mapQuery;
       hlrNote = hlr.basisNote;
@@ -2458,13 +2454,11 @@ export async function analyzePhoneInput(
         brandLabel = `Kode Wilayah PSTN ${matchedCode}`;
         primaryCityLabel = areaMatch.city;
         provinceLabel = areaMatch.province;
-        precisionBadgeLabel = `Presisi Sentral PSTN (${matchedCode})`;
-        matchedHlrPrefix = matchedCode;
         const primaryPstnMapCity = areaMatch.city.split(/\s*(?:&|\/|,)\s*/)[0].trim();
         mapSearchQuery = `${primaryPstnMapCity}, ${areaMatch.province}, Indonesia`;
         hlrNote =
           areaMatch.coverageNote ||
-          `Kode Area Geografis Tetap (\`${matchedCode}\`) — terikat langsung pada sentral kabel telepon tetap **${areaMatch.city}**, **${areaMatch.province}**.`;
+          `Kode Area Telepon Tetap \`${matchedCode}\` (${areaMatch.city}, ${areaMatch.province})`;
       } else {
         primaryCityLabel = `Sentral Telepon (${p4})`;
         provinceLabel = 'Indonesia';
@@ -2474,25 +2468,10 @@ export async function analyzePhoneInput(
     }
   }
 
-  // Parallel: Geocode PSTN/HLR if static coordinates not pre-pinned + Hunt Free Public Caller-ID Mentions
-  const callerIdDorkQuery = isIndonesian
-    ? `"${localIdNumber}" OR "${e164Digits}" OR "+${e164Digits}"`
-    : `"+${e164Digits}" OR "${e164Digits}"`;
-
-  const [geo, rawPublicMentions] = await Promise.all([
+  const geo =
     isIndonesian && !isNationalNonCityBlock && !staticCoordinates
-      ? geocodePlaceIndonesia(mapSearchQuery, signal)
-      : Promise.resolve(null),
-    searchPublicWebSnippets(callerIdDorkQuery, 6, signal),
-  ]);
-
-  const coreSubscriberDigits = isIndonesian ? localIdNumber.slice(1) : e164Digits;
-  const publicMentions = rawPublicMentions
-    .filter((item) => {
-      const hayDigits = `${item.title} ${item.snippet} ${item.url}`.replace(/\D/g, '');
-      return coreSubscriberDigits.length >= 6 && hayDigits.includes(coreSubscriberDigits);
-    })
-    .slice(0, 5);
+      ? await geocodePlaceIndonesia(mapSearchQuery, signal)
+      : null;
 
   const resolvedCoords =
     staticCoordinates ||
@@ -2502,15 +2481,15 @@ export async function analyzePhoneInput(
     ? `+62 ${localIdNumber.slice(1, 4)}-${localIdNumber.slice(4, 8)}-${localIdNumber.slice(8)}`
     : `+${e164Digits}`;
 
-  const locationSummaryForTable = clusterCoverageLabel
-    ? `${primaryCityLabel} — ${clusterCoverageLabel}`
-    : provinceLabel && !primaryCityLabel.includes(provinceLabel)
-    ? `${primaryCityLabel}, ${provinceLabel}`
-    : primaryCityLabel;
-
-  const mapButtonCityLabel = primaryCityLabel
+  const cleanCityName = primaryCityLabel
     .replace(/\s*\((?:Cluster|Sentral)[^)]*\)/gi, '')
     .trim();
+
+  const regionHeadline = clusterCoverageLabel
+    ? clusterCoverageLabel.toLowerCase().includes(cleanCityName.toLowerCase())
+      ? clusterCoverageLabel
+      : `${cleanCityName} (${clusterCoverageLabel})`
+    : primaryCityLabel;
 
   const effectiveLengthCheck = isIndonesian ? localIdNumber.length : digitsOnly.length;
   const isLengthValid = isIndonesian
@@ -2521,7 +2500,7 @@ export async function analyzePhoneInput(
     {
       label: isNationalNonCityBlock
         ? '📍 Buka Peta Indonesia di Google Maps'
-        : `📍 Buka ${mapButtonCityLabel.slice(0, 34)} di Google Maps`,
+        : `📍 Buka Wilayah (${cleanCityName.slice(0, 30)}) di Google Maps`,
       url: buildGoogleMapsSearchUrl(
         resolvedCoords
           ? `${resolvedCoords.lat},${resolvedCoords.lon}`
@@ -2530,45 +2509,19 @@ export async function analyzePhoneInput(
       kind: 'maps',
     },
     {
-      label: '💬 Cek Profil & Nama Bisnis WA (wa.me)',
+      label: '💬 Cek Akun WhatsApp (wa.me)',
       url: `https://wa.me/${e164Digits}`,
       kind: 'whatsapp',
     },
     {
-      label: '🔍 Cek Nama Caller-ID (Truecaller Web)',
-      url: `https://www.truecaller.com/search/${
-        isIndonesian ? 'id' : 'global'
-      }/${encodeURIComponent(isIndonesian ? localIdNumber : `+${e164Digits}`)}`,
-      kind: 'external',
-    },
-    {
-      label: '📞 Cek Laporan Spam Telepon (Tellows)',
-      url: `https://id.tellows.com/num/${encodeURIComponent(
-        isIndonesian ? localIdNumber : `+${e164Digits}`
-      )}`,
-      kind: 'verify',
-    },
-    {
-      label: '🛡️ CekRekening / E-Wallet Penipu (Komdigi)',
+      label: '🛡️ Cek Riwayat Penipuan E-Wallet/Rekening (Komdigi)',
       url: 'https://cekrekening.id/',
       kind: 'verify',
     },
   ];
 
-  const mentionLines =
-    publicMentions.length > 0
-      ? publicMentions.map(
-          (item, i) =>
-            `${i + 1}. **[${item.title}](${item.url})**\n   _${item.snippet || 'Tercantum di halaman publik.'}_`
-        )
-      : [
-          `- Tidak ditemukan eksposur publik terbuka di mesin pencari untuk nomor \`${
-            localIdNumber || `+${e164Digits}`
-          }\` (pertanda pemilik menjaga privasi nomor di web publik). Gunakan tombol **Cek Profil WA** atau **Truecaller Web** di bawah untuk pengecekan nama kontak langsung.`,
-        ];
-
   const lines = [
-    `### 📱 Hasil Deep OSINT Nomor Telepon, Kota HLR Multi-Digit & Free Caller-ID`,
+    `### 📱 Hasil OSINT Nomor Telepon, Operator & Area HLR`,
     '',
     `| Parameter | Detail Teridentifikasi |`,
     `| :--- | :--- |`,
@@ -2578,14 +2531,8 @@ export async function analyzePhoneInput(
     `| **Jenis Saluran (Line Type)** | ${lineType} |`,
     `| **Operator Telekomunikasi** | **${operatorLabel}** |`,
     brandLabel !== '-' ? `| **Produk / Kartu / Kode Area** | ${brandLabel} |` : '',
-    isIndonesian
-      ? `| **Lokasi Kota / Wilayah HLR** | **${locationSummaryForTable}** |`
-      : '',
-    resolvedCoords
-      ? `| **Koordinat Pusat Kota (GPS)** | \`${resolvedCoords.lat}, ${resolvedCoords.lon}\` |`
-      : '',
     networkLabel !== '-' ? `| **Teknologi Jaringan** | ${networkLabel} |` : '',
-    `| **Validitas Panjang Digit** | ${effectiveLengthCheck} digit${
+    `| **Panjang Digit** | ${effectiveLengthCheck} digit${
       isIndonesian ? ' lokal' : ''
     } (${
       isLengthValid
@@ -2593,26 +2540,15 @@ export async function analyzePhoneInput(
         : '⚠️ Panjang tidak lazim — periksa kembali digit'
     }) |`,
     '',
-    `#### 📍 Analisis Kota & Wilayah HLR (5–10 Digit Operator) / Sentral Area`,
-    `- **Kota / Sentral Registrasi Awal (HLR)**: **${primaryCityLabel}**`,
-    clusterCoverageLabel
-      ? `- **Cakupan Wilayah Cluster HLR**: **${clusterCoverageLabel}**`
-      : '',
+    `#### 📍 Analisis Wilayah Registrasi / Kode Area`,
+    `- **Kota / Wilayah HLR**: **${regionHeadline}**`,
     provinceLabel ? `- **Provinsi**: **${provinceLabel}**` : '',
-    precisionBadgeLabel
-      ? `- **Tingkat Presisi**: \`${precisionBadgeLabel}\`${
-          matchedHlrPrefix ? ` (Prefix cocok: \`${matchedHlrPrefix}\`)` : ''
-        }`
-      : '',
-    hlrNote ? `- **Basis Tabel HLR**: ${hlrNote}` : '',
+    hlrNote ? `- **Basis Identifikasi**: ${hlrNote}` : '',
     resolvedCoords
-      ? `- **Koordinat Pusat Kota / Sentral**: \`${resolvedCoords.lat}, ${resolvedCoords.lon}\``
+      ? `- **Koordinat Pusat Wilayah**: \`${resolvedCoords.lat}, ${resolvedCoords.lon}\``
       : '',
     '',
-    `#### 🕵️ Free Caller-ID & Jejak Nama Publik di Internet (Marketplace / Medsos / Dokumen)`,
-    ...mentionLines,
-    '',
-    `> ℹ️ **Penting (HLR vs Lokasi Device Real-Time)**: Kode HLR memetakan **kota atau sentral wilayah tempat kartu perdana diterbitkan pertama kali**, bukan GPS perangkat saat ini (bila kartu dibeli online lintas kota atau pemilik merantau, kode HLR tetap mengikuti kota asal penerbitan kartu). Posisi *device* real-time via menara BTS/SS7 dikunci oleh operator seluler sesuai **UU PDP No. 27/2022**.`,
+    `> ℹ️ **Catatan Akurasi**: HLR menunjukkan wilayah registrasi awal kartu perdana oleh operator, bukan posisi GPS perangkat secara *real-time*.`,
   ].filter(Boolean);
 
   return {

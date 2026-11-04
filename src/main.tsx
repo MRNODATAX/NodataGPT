@@ -6,12 +6,26 @@ import App from './App';
 
 installSameOriginApiShield();
 
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
-    refreshing = true;
-    window.location.reload();
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+  }
+  const triggerSwUpdate = () => {
+    void navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.update())
+      .catch(() => undefined);
+  };
+  window.addEventListener('load', triggerSwUpdate, { once: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      triggerSwUpdate();
+    }
   });
 }
 

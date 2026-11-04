@@ -83,46 +83,75 @@ export async function searchPublicWebSnippets(
   maxItems = 5,
   signal?: AbortSignal
 ): Promise<PublicWebMention[]> {
+  const results: PublicWebMention[] = [];
+  const seenUrls = new Set<string>();
+
+  const pushHit = (rawHref: string, rawTitle: string, rawSnippet: string) => {
+    let href = decodeHtmlEntities(rawHref || '').trim();
+    const uddgMatch = href.match(/[?&]uddg=([^&]+)/);
+    if (uddgMatch) {
+      try {
+        href = decodeURIComponent(uddgMatch[1]);
+      } catch {
+        // keep href
+      }
+    }
+    const cleanTitle = decodeHtmlEntities((rawTitle || '').replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim();
+    const cleanSnippet = decodeHtmlEntities((rawSnippet || '').replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (
+      cleanTitle &&
+      /^https?:\/\//i.test(href) &&
+      !href.includes('duckduckgo.com') &&
+      !seenUrls.has(href) &&
+      results.length < maxItems
+    ) {
+      seenUrls.add(href);
+      results.push({
+        title: cleanTitle.slice(0, 110),
+        url: href,
+        snippet: cleanSnippet.slice(0, 180),
+      });
+    }
+  };
+
   const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const res = await fetchProxyTextSafe(ddgUrl, {
     headers: {
       'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8',
     },
-    timeoutMs: 7500,
+    timeoutMs: 6500,
     signal,
   });
-  if (!res?.body) return [];
 
-  const results: PublicWebMention[] = [];
-  const blockRegex =
-    /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]{0,600}?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>)/gi;
-
-  let m: RegExpExecArray | null;
-  while ((m = blockRegex.exec(res.body)) !== null && results.length < maxItems) {
-    let rawHref = decodeHtmlEntities(m[1] || '').trim();
-    const uddgMatch = rawHref.match(/[?&]uddg=([^&]+)/);
-    if (uddgMatch) {
-      try {
-        rawHref = decodeURIComponent(uddgMatch[1]);
-      } catch {
-        // keep rawHref
-      }
+  if (res?.body && !/anomaly-modal|cc=botnet/i.test(res.body)) {
+    const blockRegex =
+      /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]{0,600}?(?:<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = blockRegex.exec(res.body)) !== null && results.length < maxItems) {
+      pushHit(m[1] || '', m[2] || '', (m[3] || m[4] || '') as string);
     }
-    const cleanTitle = decodeHtmlEntities((m[2] || '').replace(/<[^>]+>/g, ' '))
-      .replace(/\s+/g, ' ')
-      .trim();
-    const cleanSnippet = decodeHtmlEntities(
-      ((m[3] || m[4] || '') as string).replace(/<[^>]+>/g, ' ')
-    )
-      .replace(/\s+/g, ' ')
-      .trim();
+  }
 
-    if (cleanTitle && /^https?:\/\//i.test(rawHref)) {
-      results.push({
-        title: cleanTitle.slice(0, 110),
-        url: rawHref,
-        snippet: cleanSnippet.slice(0, 180),
-      });
+  if (results.length === 0) {
+    const liteUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+    const liteRes = await fetchProxyTextSafe(liteUrl, {
+      headers: {
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8',
+      },
+      timeoutMs: 6000,
+      signal,
+    });
+    if (liteRes?.body && !/anomaly-modal|cc=botnet/i.test(liteRes.body)) {
+      const liteRegex =
+        /<a[^>]*class=['"][^'"]*result-link[^'"]*['"][^>]*href=['"]([^'"]+)['"][^>]*>([\s\S]*?)<\/a>[\s\S]{0,700}?(?:<td[^>]*class=['"][^'"]*result-snippet[^'"]*['"][^>]*>([\s\S]*?)<\/td>)?/gi;
+      let lm: RegExpExecArray | null;
+      while ((lm = liteRegex.exec(liteRes.body)) !== null && results.length < maxItems) {
+        pushHit(lm[1] || '', lm[2] || '', lm[3] || '');
+      }
     }
   }
 
@@ -2321,13 +2350,15 @@ export async function analyzePhoneInput(
   rawInput: string,
   signal?: AbortSignal
 ): Promise<OsintExecutionOutput> {
-  const cleanedRaw = rawInput.trim();
+  const cleanedRaw = rawInput
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, '')
+    .trim();
   const hasPlus = cleanedRaw.startsWith('+');
   const digitsOnly = cleanedRaw.replace(/\D/g, '');
 
   if (digitsOnly.length < 7 || digitsOnly.length > 16) {
     throw new Error(
-      'Nomor telepon tidak valid (panjang harus 7–16 digit). Contoh: `/ceknomor 081280123456` atau `/ceknomor 0215551234`.'
+      'Nomor telepon tidak valid (panjang harus 7–16 digit). Contoh: `/ceknomor 0881080593445` atau `/ceknomor 0215551234`.'
     );
   }
 
@@ -2448,12 +2479,20 @@ export async function analyzePhoneInput(
     ? `"${localIdNumber}" OR "${e164Digits}" OR "+${e164Digits}"`
     : `"+${e164Digits}" OR "${e164Digits}"`;
 
-  const [geo, publicMentions] = await Promise.all([
+  const [geo, rawPublicMentions] = await Promise.all([
     isIndonesian && !isNationalNonCityBlock && !staticCoordinates
       ? geocodePlaceIndonesia(mapSearchQuery, signal)
       : Promise.resolve(null),
-    searchPublicWebSnippets(callerIdDorkQuery, 5, signal),
+    searchPublicWebSnippets(callerIdDorkQuery, 6, signal),
   ]);
+
+  const coreSubscriberDigits = isIndonesian ? localIdNumber.slice(1) : e164Digits;
+  const publicMentions = rawPublicMentions
+    .filter((item) => {
+      const hayDigits = `${item.title} ${item.snippet} ${item.url}`.replace(/\D/g, '');
+      return coreSubscriberDigits.length >= 6 && hayDigits.includes(coreSubscriberDigits);
+    })
+    .slice(0, 5);
 
   const resolvedCoords =
     staticCoordinates ||

@@ -194,11 +194,36 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,webmanifest}'],
+        globIgnores: ['**/hls-*.js', '**/miku-*.{jpg,png,jpeg,webp}'],
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
+        runtimeCaching: [
+          {
+            urlPattern: /\/assets\/.*\.(?:png|jpg|jpeg|svg|webp|woff2)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'nodatagpt-media-assets-v1',
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+              },
+            },
+          },
+          {
+            urlPattern: /\/assets\/hls-.*\.js$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'nodatagpt-hls-chunk-v1',
+              expiration: {
+                maxEntries: 6,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+              },
+            },
+          },
+        ],
       },
     }),
   ],

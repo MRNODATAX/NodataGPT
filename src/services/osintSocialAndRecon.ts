@@ -401,9 +401,10 @@ export async function analyzeWhatsAppOsint(
     }
   }
 
-  const digitsCandidate = waLinkPhoneMatch
-    ? waLinkPhoneMatch[1]
-    : trimmed.replace(/[\s().+-]/g, '');
+  const digitsCandidate = (
+    waLinkPhoneMatch ? waLinkPhoneMatch[1] : trimmed
+  )
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0\s().+-]/g, '');
 
   if (/^\d{8,16}$/.test(digitsCandidate)) {
     const e164 = digitsCandidate.startsWith('0')
@@ -414,7 +415,14 @@ export async function analyzeWhatsAppOsint(
     const hlr = isIdMobile ? lookupIndonesianMobileHlr(local08) : null;
 
     const waFootprintQuery = `"wa.me/${e164}" OR "phone=${e164}" OR ("${local08}" "whatsapp")`;
-    const mentions = await searchPublicWebSnippets(waFootprintQuery, 5, signal);
+    const rawMentions = await searchPublicWebSnippets(waFootprintQuery, 6, signal);
+    const coreWaDigits = e164.startsWith('62') ? e164.slice(2) : e164;
+    const mentions = rawMentions
+      .filter((m) => {
+        const hayDigits = `${m.title} ${m.snippet} ${m.url}`.replace(/\D/g, '');
+        return coreWaDigits.length >= 6 && hayDigits.includes(coreWaDigits);
+      })
+      .slice(0, 5);
 
     const actionLinks: ToolActionLink[] = [
       {

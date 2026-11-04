@@ -232,15 +232,15 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     badge: 'HLR Akurat + Caller-ID + Maps',
     description:
       'Database HLR 6–8 digit spesifik per operator (Telkomsel, Indosat, XL, Axis, Tri, Smartfren), pemburu jejak nama kontak gratis di web/marketplace, tombol Truecaller Web, Tellows, WA, CekRekening & Google Maps.',
-    placeholder: 'Masukkan nomor HP atau telepon rumah (contoh: 081280123456 / 0274512345)',
-    exampleInput: '081280123456',
+    placeholder: 'Masukkan nomor HP atau telepon rumah (contoh: 0881080593445 / 081280123456 / 0274512345)',
+    exampleInput: '0881080593445',
     requiresInput: true,
     usageNotice: {
-      title: 'Cara Pakai OSINT Nomor Telepon, HLR 6–8 Digit & Caller-ID',
+      title: 'Cara Pakai OSINT Nomor Telepon, Kota HLR Multi-Digit & Caller-ID',
       syntax: '/ceknomor <08xx / +62xx / 021xx>',
       notes:
-        'Menggunakan tabel blok HLR 6–8 digit asli tiap operator Indonesia, membedakan nomor Alokasi Nasional/Digital secara jujur, memindai jejak Caller-ID publik, dan membuka wilayah di Google Maps.',
-      examples: ['/ceknomor 081280123456', '/ceknomor 081220123456', '/ceknomor 0274556677'],
+        'Menggunakan database HLR 5–10 digit tiap operator Indonesia + 242 kode area PSTN, memetakan Kota/Sentral HLR beserta cakupan cluster wilayah, memindai jejak Caller-ID publik, dan membuka kota di Google Maps.',
+      examples: ['/ceknomor 0881080593445', '/ceknomor 081280123456', '/ceknomor 0274556677'],
     },
   },
   {
@@ -1296,7 +1296,9 @@ export function extractTrailingImageCount(
 }
 
 export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | null {
-  const trimmed = rawInput.trim();
+  const trimmed = rawInput
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00A0]/g, ' ')
+    .trim();
   if (!trimmed.startsWith('/')) {
     // Direct raw EMVCo QRIS string pasted without slash command
     if (/^000201[\x20-\x7E]{20,650}6304[0-9A-Fa-f]{4}$/.test(trimmed)) {
@@ -1329,10 +1331,13 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       }
 
       const natPhone = trimmed.match(
-        /^(?:tolong\s+|coba\s+)?(?:cek|osint|lacak|periksa)\s+(?:nomor|no\.?\s*hp|nomor\s+hp|nomor\s+telepon|hlr)\s+([+0-9][0-9\s().-]{6,20})\??$/i
+        /^(?:tolong\s+|coba\s+)?(?:cek|osint|lacak|periksa|info|cari)\s+(?:(?:nomor|no\.?(?:\s*(?:hp|telp|telepon))?|nomor\s+(?:hp|telp|telepon)|kartu|hlr|operator|lokasi(?:\s+(?:no|nomor))?|kota(?:\s+(?:no|nomor))?|daerah(?:\s+(?:no|nomor))?)\s*:?\s*)?([+0-9][0-9\s().-]{7,22})\??$/i
       );
       if (natPhone && natPhone[1]?.trim()) {
-        return { toolId: 'ceknomor', arg: natPhone[1].trim() };
+        const digitsCheck = natPhone[1].replace(/\D/g, '');
+        if (digitsCheck.length >= 8 && digitsCheck.length <= 16) {
+          return { toolId: 'ceknomor', arg: natPhone[1].trim() };
+        }
       }
 
       const natWa = trimmed.match(
@@ -1704,10 +1709,14 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
     case 'osintemail':
       return { toolId: 'cekemail', arg: rest };
     case 'ceknomor':
+    case 'cekno':
     case 'cekhp':
+    case 'nomor':
+    case 'nohp':
     case 'phoneosint':
     case 'hlr':
     case 'lacaknomor':
+    case 'lacakno':
     case 'callerid':
       return { toolId: 'ceknomor', arg: rest };
     case 'waosint':

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Aperture,
   ArrowLeft,
+  BookOpen,
   Camera,
+  CloudLightning,
+  Coins,
   Check,
   ChevronDown,
   ChevronRight,
@@ -10,6 +13,16 @@ import {
   CloudSun,
   CreditCard,
   Download,
+  FolderDown,
+  Image,
+  Languages,
+  Music2,
+  Newspaper,
+  Quote,
+  ScanText,
+  Sun,
+  TrendingUp,
+  Youtube,
   FileText,
   Film,
   Globe,
@@ -26,6 +39,7 @@ import {
   Search,
   Sparkles,
   Terminal,
+  Type,
   UserCheck,
   Video,
   Wand2,
@@ -111,6 +125,64 @@ const CATEGORY_TABS: Array<{
     count: WEB_TOOLS_CATALOG.filter((t) => t.category === catId).length,
   })),
 ];
+
+// Original, semantically matched glyphs for the current tool catalog.
+const TOOL_ICON_MAP = {
+  'visual-vault': Sparkles,
+  tempmail: Mail,
+  storyhd: Image,
+  qris: QrCode,
+  ceknomor: PhoneCall,
+  waosint: MessageCircle,
+  ttosint: Video,
+  igosint: Camera,
+  cekemail: Mail,
+  exif: Aperture,
+  username: UserCheck,
+  domain: Globe,
+  ip: Radar,
+  ceknik: CreditCard,
+  tiktok: Video,
+  youtube: Youtube,
+  spotify: Music2,
+  aio: Music2,
+  soundcloud: Music2,
+  cloudfile: FolderDown,
+  pixiv: Image,
+  yttranscript: FileText,
+  text2video: Film,
+  tts: MessageCircle,
+  aisong: Music2,
+  gempa: CloudLightning,
+  berita: Newspaper,
+  websearch: Search,
+  translate: Languages,
+  ocr: ScanText,
+  meme: Sparkles,
+  stalker: ScanSearch,
+  randomimg: ImagePlus,
+  pinterest: Image,
+  lirik: Music2,
+  wikipedia: BookOpen,
+  emojimix: Sparkles,
+  bratvid: Type,
+  stylefont: Type,
+  'removebg-tool': Image,
+  'hd-tool': ImagePlus,
+  cuaca: CloudSun,
+  sholat: Sun,
+  kurs: Coins,
+  emas: Coins,
+  crypto: Coins,
+  saham: TrendingUp,
+  quote: Quote,
+  'siput-cnn': Newspaper,
+  'siput-kompas': Newspaper,
+  'siput-cnbc': Newspaper,
+  'bintang-antara': Newspaper,
+  'synox-antara': Newspaper,
+  'nexray-antara': Newspaper,
+} as const;
 
 export function ToolsStudioModal({
   isOpen,
@@ -427,7 +499,10 @@ export function ToolsStudioModal({
     onInsertCommand(cmd);
   };
 
+  const isStandalonePage = typeof window !== 'undefined' && window.location.pathname === '/tools';
+
   const getToolIcon = (tool: WebToolDefinition) => {
+    if (tool.id in TOOL_ICON_MAP) return TOOL_ICON_MAP[tool.id as keyof typeof TOOL_ICON_MAP];
     if (tool.id === 'qris') return QrCode;
     if (tool.id === 'ceknomor') return PhoneCall;
     if (tool.id === 'waosint') return MessageCircle;
@@ -449,20 +524,20 @@ export function ToolsStudioModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role={isStandalonePage ? undefined : 'dialog'}
+      aria-modal={isStandalonePage ? undefined : true}
       aria-labelledby="nodatagpt-tools-studio-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-xs sm:items-center sm:p-4"
+      className={isStandalonePage ? 'fixed inset-0 z-50 flex min-h-0 items-stretch justify-center bg-[#0a0913]' : 'fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-xs sm:items-center sm:p-4'}
       onClick={(event) => {
         if (event.target === event.currentTarget && selectedTool?.id !== 'tempmail') onClose();
       }}
     >
       <div
-        className="nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-5xl sm:rounded-3xl"
+        className={isStandalonePage ? 'flex h-dvh w-full max-w-none flex-col overflow-hidden border-0 bg-[#0e0b18] shadow-none' : 'nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-5xl sm:rounded-3xl'}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Grabber Handle */}
-        <div className="flex shrink-0 justify-center pt-2.5 sm:hidden">
+        <div className={isStandalonePage ? 'hidden' : 'flex shrink-0 justify-center pt-2.5 sm:hidden'}>
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
@@ -978,10 +1053,10 @@ export function ToolsStudioModal({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Tutup Tools Studio"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer"
+                aria-label={isStandalonePage ? 'Kembali ke chat NodataGPT' : 'Tutup Tools Studio'}
+                className={`flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer ${isStandalonePage ? 'px-2.5 text-xs font-semibold' : 'w-9'}`}
               >
-                <X className="h-5 w-5" />
+                {isStandalonePage ? <><ArrowLeft className="h-4 w-4" /><span>Kembali ke Chat</span></> : <X className="h-5 w-5" />}
               </button>
             </div>
 

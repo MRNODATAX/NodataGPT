@@ -115,7 +115,7 @@ interface PendingStreamState {
 }
 
 export function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => typeof window === 'undefined' || window.location.pathname !== '/tools');
   const [conversations, setConversations] = useState<Conversation[]>(() =>
     loadConversations()
   );
@@ -133,7 +133,21 @@ export function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelPickerTab, setModelPickerTab] = useState<'chat' | 'image'>('chat');
-  const [toolsStudioOpen, setToolsStudioOpen] = useState(false);
+  const [toolsStudioOpen, setToolsStudioOpen] = useState(() => typeof window !== 'undefined' && window.location.pathname === '/tools');
+  const openToolsPage = useCallback(() => {
+    if (window.location.pathname !== '/tools') window.history.pushState({ view: 'tools' }, '', '/tools');
+    setToolsStudioOpen(true);
+    setMobileSidebarOpen(false);
+  }, []);
+  const closeToolsPage = useCallback(() => {
+    if (window.location.pathname === '/tools') window.history.replaceState({}, '', '/');
+    setToolsStudioOpen(false);
+  }, []);
+  useEffect(() => {
+    const syncToolsRoute = () => setToolsStudioOpen(window.location.pathname === '/tools');
+    window.addEventListener('popstate', syncToolsRoute);
+    return () => window.removeEventListener('popstate', syncToolsRoute);
+  }, []);
   const [waifuStore, setWaifuStore] = useState<WaifuStoreState>(() =>
     loadWaifuStore()
   );
@@ -1722,7 +1736,7 @@ export function App() {
           if (activeConversation) exportConversationMarkdown(activeConversation);
         }}
         onOpenSettings={() => setSettingsOpen(true)}
-        onOpenToolsStudio={() => setToolsStudioOpen(true)}
+        onOpenToolsStudio={openToolsPage}
         onOpenInstallModal={() => setInstallModalOpen(true)}
       />
 
@@ -1946,7 +1960,7 @@ export function App() {
                 }}
                 onSelectStarter={handleSelectStarter}
                 onOpenModelPicker={() => openModelPicker(imageMode ? 'image' : 'chat')}
-                onOpenToolsStudio={() => setToolsStudioOpen(true)}
+                onOpenToolsStudio={openToolsPage}
                 onStartWaifuChat={handleOpenWaifuScenarioBubble}
               />
             </div>
@@ -2039,7 +2053,7 @@ export function App() {
 
       <ToolsStudioModal
         isOpen={toolsStudioOpen}
-        onClose={() => setToolsStudioOpen(false)}
+        onClose={closeToolsPage}
         onRunCommand={handleRunDirectCommand}
         onInsertCommand={(cmd) => setDraft(cmd)}
       />

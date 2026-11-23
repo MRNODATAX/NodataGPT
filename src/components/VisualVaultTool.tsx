@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react';
 const VISUALS = [
   { id: 'aurora', title: 'Aurora Holografik', label: 'GRADIENT', style: 'from-cyan-400/60 via-violet-500/45 to-fuchsia-500/50' },
   { id: 'orbit', title: 'Orbit Kosmik', label: 'CSS ORBIT', style: 'from-indigo-500/50 via-sky-400/30 to-slate-950' },
-  { id: 'sakura', title: 'Sakura Senja', label: 'ANIME MOOD', style: 'from-pink-300/50 via-rose-500/30 to-violet-950' },
+  { id: 'sakura', title: 'Sakura Senja', label: 'COLOR STUDY', style: 'from-pink-300/50 via-rose-500/30 to-violet-950' },
   { id: 'neon', title: 'Neon Grid', label: 'PERSPECTIVE', style: 'from-emerald-400/40 via-cyan-500/25 to-slate-950' },
   { id: 'moon', title: 'Moon Garden', label: 'NIGHTSCAPE', style: 'from-blue-300/45 via-indigo-600/35 to-slate-950' },
   { id: 'prism', title: 'Prism Bloom', label: 'COLOR STUDY', style: 'from-amber-300/45 via-fuchsia-500/35 to-indigo-950' },

@@ -47,9 +47,7 @@ import {
 import { ToolsIcon } from './ToolsIcon';
 import { StoryHdTool } from './StoryHdTool';
 import { TempMailTool } from './TempMailTool';
-import { AnimeDiscoverTool } from './AnimeDiscoverTool';
 import { VisualVaultTool } from './VisualVaultTool';
-import { AnimeAvatarStudio } from './AnimeAvatarStudio';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -468,29 +466,13 @@ export function ToolsStudioModal({
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {selectedTool?.id === 'anime-avatar' ? (
-          <>
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
-              <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
-              <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto"><AnimeAvatarStudio /></div>
-          </>
-        ) : selectedTool?.id === 'visual-vault' ? (
+        {selectedTool?.id === 'visual-vault' ? (
           <>
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
               <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
               <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto"><VisualVaultTool /></div>
-          </>
-        ) : selectedTool?.id === 'anime-discover' ? (
-          <>
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
-              <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
-              <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto"><AnimeDiscoverTool /></div>
           </>
         ) : selectedTool?.id === 'tempmail' ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1003,23 +985,20 @@ export function ToolsStudioModal({
               </button>
             </div>
 
-            {/* Original anime-inspired feature banner; artwork is CSS-only, not copied from reference sites. */}
-            <div className="shrink-0 px-4 pt-3 sm:px-6">
-              <button
-                type="button"
-                onClick={() => {
-                  const animeTool = WEB_TOOLS_CATALOG.find((tool) => tool.id === 'anime-discover');
-                  if (animeTool) handleChooseTool(animeTool);
-                }}
-                className="group relative flex min-h-[88px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border border-fuchsia-300/20 bg-[radial-gradient(ellipse_at_78%_20%,rgba(217,70,239,.22),transparent_45%),linear-gradient(110deg,#10152c,#15102a_60%,#07131f)] px-4 py-3 text-left hover:border-fuchsia-200/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-300"
-              >
-                <span className="relative z-10 min-w-0">
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.18em] text-fuchsia-200">ANIME CORNER · DISCOVER</span>
-                  <span className="mt-1 block text-sm font-black text-white sm:text-base">Jelajahi anime & temukan tontonan baru</span>
-                  <span className="mt-0.5 block text-xs text-slate-300">Katalog baca-saja · tanpa login</span>
-                </span>
-                <span aria-hidden="true" className="relative z-10 shrink-0 rounded-full border border-fuchsia-200/20 bg-fuchsia-200/10 px-3 py-2 text-xl">✦</span>
-              </button>
+            {/* Hub intro */}
+            <div className="shrink-0 px-4 pt-4 sm:px-6">
+              <div className="relative overflow-hidden rounded-2xl border border-cyan-200/15 bg-[radial-gradient(ellipse_at_82%_0%,rgba(34,211,238,.2),transparent_42%),linear-gradient(115deg,#0b1424,#101a2b_58%,#111827)] p-4 sm:p-5">
+                <div className="pointer-events-none absolute -right-7 -top-12 h-36 w-36 rounded-full border border-cyan-100/10 bg-cyan-300/5 blur-[1px]" />
+                <div className="relative flex flex-wrap items-end justify-between gap-3">
+                  <div><span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200">NODATAGPT · TOOLKIT</span>
+                    <h3 className="mt-1 text-lg font-black text-white sm:text-xl">Satu hub untuk semua kebutuhan</h3>
+                    <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-300">Cari, filter, dan jalankan utilitas langsung dari ruang kerja NodataGPT.</p></div>
+                  <div className="flex gap-2 text-center">
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{WEB_TOOLS_CATALOG.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-400">tools</span></div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{CATEGORY_ORDER.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-400">kategori</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Clean Search + Crisp Short Category Pills */}

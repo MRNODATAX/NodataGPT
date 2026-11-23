@@ -1060,31 +1060,6 @@ export function ToolsStudioModal({
               </button>
             </div>
 
-            {/* Pastel anime-inspired header, illustrated with original CSS decoration. */}
-            <div className="shrink-0 px-4 pt-3 sm:px-6 sm:pt-4">
-              <div className="relative isolate overflow-hidden rounded-[22px] border border-fuchsia-200/20 bg-[radial-gradient(ellipse_at_88%_18%,rgba(251,207,232,.24),transparent_32%),radial-gradient(ellipse_at_12%_100%,rgba(165,243,252,.17),transparent_42%),linear-gradient(115deg,#17152b,#18162b_52%,#10202e)] px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-                <div aria-hidden="true" className="pointer-events-none absolute -right-9 -top-12 -z-10 h-44 w-44 rounded-full border border-pink-100/15 bg-gradient-to-br from-pink-200/15 via-fuchsia-300/10 to-cyan-200/15 blur-[1px]" />
-                <div aria-hidden="true" className="pointer-events-none absolute right-[14%] top-10 -z-10 h-24 w-24 rounded-full bg-fuchsia-300/10 blur-2xl" />
-                <div className="mb-3 flex items-center justify-between gap-2 border-b border-white/10 pb-2.5">
-                  <div className="flex min-w-0 items-center gap-2 text-[14px] leading-none sm:text-base" aria-hidden="true">
-                    <span>🌸</span><span>✨</span><span>☁️</span><span>🍒</span><span>🦋</span><span>💫</span>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-cyan-100/20 bg-cyan-200/10 px-2.5 py-1 text-[9px] font-bold tracking-[0.14em] text-cyan-100 sm:text-[10px]">NODATA · TOOLKIT</span>
-                </div>
-                <div className="relative flex flex-wrap items-end justify-between gap-4">
-                  <div className="min-w-0">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-100/20 bg-pink-100/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-pink-100"><Sparkles className="h-3 w-3" /> Your creative utility space</span>
-                    <h3 className="mt-2 font-display text-xl font-black tracking-tight text-white sm:text-2xl">Tools <span className="bg-gradient-to-r from-pink-200 via-violet-200 to-cyan-200 bg-clip-text text-transparent">NodataGPT</span></h3>
-                    <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-200/85 sm:text-[13px]">Temukan tool favoritmu, pilih kategori, lalu mulai dalam satu klik.</p>
-                  </div>
-                  <div className="flex shrink-0 gap-2 text-center">
-                    <div className="min-w-[66px] rounded-xl border border-pink-100/15 bg-black/20 px-3 py-2"><strong className="block text-sm text-pink-100">{WEB_TOOLS_CATALOG.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-300">tools</span></div>
-                    <div className="min-w-[66px] rounded-xl border border-cyan-100/15 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{CATEGORY_ORDER.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-300">kategori</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Clean Search + Crisp Short Category Pills */}
             <div className="shrink-0 space-y-2.5 border-b border-white/10 bg-[#050914]/75 px-4 py-3 sm:px-6">
               <div className="relative">

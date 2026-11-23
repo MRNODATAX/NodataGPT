@@ -45,6 +45,10 @@ import {
   extractExifTokenFromFile,
 } from '../services/osintSocialAndRecon';
 import { ToolsIcon } from './ToolsIcon';
+import { StoryHdTool } from './StoryHdTool';
+import { TempMailTool } from './TempMailTool';
+import { AnimeDiscoverTool } from './AnimeDiscoverTool';
+import { VisualVaultTool } from './VisualVaultTool';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -152,6 +156,7 @@ export function ToolsStudioModal({
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (selectedTool?.id === 'tempmail') return;
         if (selectedTool) {
           setSelectedTool(null);
         } else {
@@ -449,7 +454,9 @@ export function ToolsStudioModal({
       aria-modal="true"
       aria-labelledby="nodatagpt-tools-studio-title"
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-xs sm:items-center sm:p-4"
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && selectedTool?.id !== 'tempmail') onClose();
+      }}
     >
       <div
         className="nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-3xl"
@@ -460,7 +467,29 @@ export function ToolsStudioModal({
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {selectedTool ? (
+        {selectedTool?.id === 'visual-vault' ? (
+          <>
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
+              <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
+              <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto"><VisualVaultTool /></div>
+          </>
+        ) : selectedTool?.id === 'anime-discover' ? (
+          <>
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
+              <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
+              <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto"><AnimeDiscoverTool /></div>
+          </>
+        ) : selectedTool?.id === 'tempmail' ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <TempMailTool onBack={() => setSelectedTool(null)} onClose={onClose} />
+          </div>
+        ) : selectedTool?.id === 'storyhd' ? (
+          <StoryHdTool onBack={() => setSelectedTool(null)} onClose={onClose} />
+        ) : selectedTool ? (
           /* =================================================================
              STEP 2: FOCUSED TOOL RUNNER VIEW (Unclippable Mobile & Desktop)
              ================================================================= */
@@ -962,6 +991,25 @@ export function ToolsStudioModal({
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer"
               >
                 <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Original anime-inspired feature banner; artwork is CSS-only, not copied from reference sites. */}
+            <div className="shrink-0 px-4 pt-3 sm:px-6">
+              <button
+                type="button"
+                onClick={() => {
+                  const animeTool = WEB_TOOLS_CATALOG.find((tool) => tool.id === 'anime-discover');
+                  if (animeTool) handleChooseTool(animeTool);
+                }}
+                className="group relative flex min-h-[88px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border border-fuchsia-300/20 bg-[radial-gradient(ellipse_at_78%_20%,rgba(217,70,239,.22),transparent_45%),linear-gradient(110deg,#10152c,#15102a_60%,#07131f)] px-4 py-3 text-left hover:border-fuchsia-200/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-300"
+              >
+                <span className="relative z-10 min-w-0">
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.18em] text-fuchsia-200">ANIME CORNER · DISCOVER</span>
+                  <span className="mt-1 block text-sm font-black text-white sm:text-base">Jelajahi anime & temukan tontonan baru</span>
+                  <span className="mt-0.5 block text-xs text-slate-300">Katalog baca-saja · tanpa login</span>
+                </span>
+                <span aria-hidden="true" className="relative z-10 shrink-0 rounded-full border border-fuchsia-200/20 bg-fuchsia-200/10 px-3 py-2 text-xl">✦</span>
               </button>
             </div>
 

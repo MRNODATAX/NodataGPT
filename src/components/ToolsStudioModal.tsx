@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   BookOpen,
   Camera,
+  Calculator,
+  Code2,
   CloudLightning,
   Coins,
   Check,
@@ -62,6 +64,9 @@ import { ToolsIcon } from './ToolsIcon';
 import { StoryHdTool } from './StoryHdTool';
 import { TempMailTool } from './TempMailTool';
 import { VisualVaultTool } from './VisualVaultTool';
+import { QrGeneratorTool } from './QrGeneratorTool';
+import { MbgCalculatorTool } from './MbgCalculatorTool';
+import { CodeSnapTool } from './CodeSnapTool';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -128,6 +133,9 @@ const CATEGORY_TABS: Array<{
 
 // Original, semantically matched glyphs for the current tool catalog.
 const TOOL_ICON_MAP = {
+  'qr-generator': QrCode,
+  'mbg-calculator': Calculator,
+  'code-snap': Code2,
   'visual-vault': Sparkles,
   tempmail: Mail,
   storyhd: Image,
@@ -541,7 +549,13 @@ export function ToolsStudioModal({
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {selectedTool?.id === 'visual-vault' ? (
+        {selectedTool?.id === 'qr-generator' ? (
+          <QrGeneratorTool onBack={() => setSelectedTool(null)} onClose={onClose} />
+        ) : selectedTool?.id === 'mbg-calculator' ? (
+          <MbgCalculatorTool onBack={() => setSelectedTool(null)} onClose={onClose} />
+        ) : selectedTool?.id === 'code-snap' ? (
+          <CodeSnapTool onBack={() => setSelectedTool(null)} onClose={onClose} />
+        ) : selectedTool?.id === 'visual-vault' ? (
           <>
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
               <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
@@ -1230,9 +1244,7 @@ export function ToolsStudioModal({
                                 </div>
 
                                 <div className="flex shrink-0 items-center gap-1">
-                                  <code className="rounded-lg border border-white/10 bg-black/55 px-2 py-0.5 font-mono-code text-[10.5px] text-[#CBD5E1] group-hover:border-[#22D3EE]/35 group-hover:text-[#A5F3FC]">
-                                    {tool.slashCommand}
-                                  </code>
+                                  {tool.slashCommand && <code className="rounded-lg border border-white/10 bg-black/55 px-2 py-0.5 font-mono-code text-[10.5px] text-[#CBD5E1] group-hover:border-[#22D3EE]/35 group-hover:text-[#A5F3FC]">{tool.slashCommand}</code>}
                                   <ChevronRight className="h-4 w-4 text-[#64748B] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[#22D3EE]" />
                                 </div>
                               </div>

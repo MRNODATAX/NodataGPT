@@ -5,7 +5,6 @@ import {
   BookOpen,
   Camera,
   Calculator,
-  Code2,
   CloudLightning,
   Coins,
   Check,
@@ -21,7 +20,6 @@ import {
   Music2,
   Newspaper,
   Quote,
-  ScanText,
   Sun,
   TrendingUp,
   Youtube,
@@ -29,6 +27,7 @@ import {
   Film,
   Globe,
   ImagePlus,
+  LayoutGrid,
   Loader2,
   LocateFixed,
   Mail,
@@ -66,7 +65,6 @@ import { TempMailTool } from './TempMailTool';
 import { VisualVaultTool } from './VisualVaultTool';
 import { QrGeneratorTool } from './QrGeneratorTool';
 import { MbgCalculatorTool } from './MbgCalculatorTool';
-import { CodeSnapTool } from './CodeSnapTool';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -85,45 +83,53 @@ const CATEGORY_META: Record<
   }
 > = {
   OSINT: {
-    shortTab: '🛰️ OSINT',
+    shortTab: 'OSINT',
     sectionTitle: 'OSINT & Forensik Digital',
     sectionSubtitle: 'Pelacakan nomor, medsos, QRIS, EXIF & jaringan',
     accent: 'emerald',
   },
   A: {
-    shortTab: '📥 Downloader',
+    shortTab: 'Downloader',
     sectionTitle: 'Downloader Media & Cloud',
     sectionSubtitle: 'Unduh video, musik MP3, galeri foto & berkas tanpa iklan',
     accent: 'cyan',
   },
   B: {
-    shortTab: '🎬 Audio & Video',
+    shortTab: 'Audio & Video',
     sectionTitle: 'Studio Audio & Video AI',
     sectionSubtitle: 'Text-to-Video, transkrip YouTube, vokal splitter, lirik & TTS',
     accent: 'orange',
   },
   D: {
-    shortTab: '✨ Kreatif & Riset',
-    sectionTitle: 'Kreatif, Gambar & Riset Web',
-    sectionSubtitle: 'Edit foto AI, 10 mode gambar HD, OCR, pencarian web & berita aktual',
+    shortTab: 'Maker',
+    sectionTitle: 'Maker, Kreatif & Riset Web',
+    sectionSubtitle: 'QR, kreasi visual, alat maker, pencarian web & berita aktual',
     accent: 'cyan',
   },
   E: {
-    shortTab: '🌤️ Cuaca & Finansial',
+    shortTab: 'Cuaca & Finansial',
     sectionTitle: 'Cuaca, Sholat & Finansial',
     sectionSubtitle: 'Cuaca tingkat desa, jadwal sholat Kemenag, kurs, emas, kripto & saham',
     accent: 'orange',
   },
 };
 
-const CATEGORY_ORDER: WebToolCategoryId[] = ['OSINT', 'A', 'B', 'D', 'E'];
+const CATEGORY_ORDER: WebToolCategoryId[] = ['D', 'A', 'B', 'OSINT', 'E'];
+const CATEGORY_ICON_MAP = {
+  all: LayoutGrid,
+  OSINT: Radar,
+  A: Download,
+  B: Film,
+  D: Sparkles,
+  E: CloudSun,
+} as const;
 
 const CATEGORY_TABS: Array<{
   id: 'all' | WebToolCategoryId;
   label: string;
   count: number;
 }> = [
-  { id: 'all', label: '⚡ Semua', count: WEB_TOOLS_CATALOG.length },
+  { id: 'all', label: 'Semua', count: WEB_TOOLS_CATALOG.length },
   ...CATEGORY_ORDER.map((catId) => ({
     id: catId,
     label: CATEGORY_META[catId].shortTab,
@@ -135,7 +141,6 @@ const CATEGORY_TABS: Array<{
 const TOOL_ICON_MAP = {
   'qr-generator': QrCode,
   'mbg-calculator': Calculator,
-  'code-snap': Code2,
   'visual-vault': Sparkles,
   tempmail: Mail,
   storyhd: Image,
@@ -165,7 +170,6 @@ const TOOL_ICON_MAP = {
   berita: Newspaper,
   websearch: Search,
   translate: Languages,
-  ocr: ScanText,
   meme: Sparkles,
   stalker: ScanSearch,
   randomimg: ImagePlus,
@@ -553,8 +557,6 @@ export function ToolsStudioModal({
           <QrGeneratorTool onBack={() => setSelectedTool(null)} onClose={onClose} />
         ) : selectedTool?.id === 'mbg-calculator' ? (
           <MbgCalculatorTool onBack={() => setSelectedTool(null)} onClose={onClose} />
-        ) : selectedTool?.id === 'code-snap' ? (
-          <CodeSnapTool onBack={() => setSelectedTool(null)} onClose={onClose} />
         ) : selectedTool?.id === 'visual-vault' ? (
           <>
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
@@ -1087,20 +1089,22 @@ export function ToolsStudioModal({
                 />
               </div>
 
-              <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-0.5">
                 {CATEGORY_TABS.map((tab) => {
                   const active = activeCategory === tab.id;
+                  const TabIcon = CATEGORY_ICON_MAP[tab.id];
                   return (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveCategory(tab.id)}
-                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                         active
-                          ? 'bg-gradient-to-r from-[#0E7490] to-[#0891B2] text-white shadow-[0_0_14px_rgba(34,211,238,0.24)]'
-                          : 'border border-white/10 bg-white/[0.04] text-[#CBD5E1] hover:border-white/25 hover:text-white'
+                          ? 'border-cyan-200/30 bg-cyan-300/12 text-cyan-50 shadow-[0_6px_20px_rgba(34,211,238,0.10)]'
+                          : 'border-white/8 bg-white/[0.025] text-[#CBD5E1] hover:border-white/20 hover:bg-white/[0.06] hover:text-white'
                       }`}
                     >
+                      <TabIcon className={`h-3.5 w-3.5 ${active ? 'text-cyan-200' : 'text-slate-400'}`} />
                       <span>{tab.label}</span>
                       <span
                         className={`rounded-md px-1.5 py-0.5 font-mono-code text-[10px] ${
@@ -1211,7 +1215,7 @@ export function ToolsStudioModal({
                                 handleChooseTool(tool);
                               }
                             }}
-                            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,.045),transparent_54%),rgba(8,15,30,.88)] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(0,0,0,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-200 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer ${cardTone} ${
+                            className={`group relative flex min-h-[164px] flex-col justify-between overflow-hidden rounded-[20px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.012)_48%,rgba(8,15,30,.92))] p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,.12)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:shadow-[0_16px_36px_rgba(0,0,0,.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer ${cardTone} ${
                               hasCatalog && expandedRandomModes ? 'sm:col-span-2' : ''
                             }`}
                           >

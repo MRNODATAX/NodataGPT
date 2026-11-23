@@ -181,19 +181,6 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
     requiresInput: false,
   },
   {
-    id: 'code-snap',
-    category: 'D',
-    categoryLabel: 'Kreatif, Riset & Info ID',
-    name: 'Code Snap · Kartu Kode PNG',
-    shortName: 'Code Snap',
-    slashCommand: '',
-    badge: 'Lokal · Ekspor PNG',
-    description: 'Buat cuplikan kode menjadi kartu gambar bertema. Kode tidak dijalankan atau diunggah.',
-    placeholder: 'Tempel cuplikan kode…',
-    exampleInput: '',
-    requiresInput: false,
-  },
-  {
     id: 'visual-vault',
     category: 'D',
     categoryLabel: 'Kreatif, Riset & Info ID',
@@ -756,21 +743,6 @@ export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
         { value: 'es', label: '🇪🇸 Spanyol' },
       ],
     },
-  },
-  {
-    id: 'ocr',
-    category: 'D',
-    categoryLabel: 'Kreatif, Riset & Info ID',
-    name: 'Baca Teks dari Gambar / Foto (OCR AI)',
-    shortName: 'OCR Baca Gambar',
-    slashCommand: '/ocr',
-    badge: 'Ekstrak Teks + Upload Foto',
-    description:
-      'Salin otomatis tulisan dari foto dokumen, struk, papan tulis, atau screenshot (dukung upload foto langsung).',
-    placeholder: 'Tempel URL gambar atau klik Upload Foto dari Perangkat...',
-    exampleInput: 'https://www.nodatagpt.web.id/logo.png',
-    requiresInput: true,
-    acceptsImageUpload: true,
   },
   {
     id: 'meme',
@@ -1685,9 +1657,6 @@ export function detectWebToolCommand(rawInput: string): ParsedWebToolCommand | n
       }
       return { toolId: 'translate', arg: rest, subOption: 'id' };
     }
-    case 'ocr':
-    case 'bacateks':
-      return { toolId: 'ocr', arg: rest };
     case 'meme': {
       const tplPipe = rest.match(/^([a-z0-9_-]{2,20})\s*\|\s*([\s\S]+\|[\s\S]+)$/i);
       if (tplPipe) {
@@ -5530,52 +5499,7 @@ export async function executeWebToolCommand({
     throw new Error('Gagal menerjemahkan teks saat ini. Silakan coba beberapa saat lagi.');
   }
 
-  // === 29. AI OCR IMAGE TEXT EXTRACTOR ===
-  if (toolId === 'ocr') {
-    if (!/^https?:\/\//i.test(arg)) {
-      throw new Error(
-        'Tempel tautan gambar publik atau gunakan tombol **Upload Foto dari Perangkat** pada menu Tools Studio (`/ocr`).'
-      );
-    }
-
-    onStatus?.({
-      toolName: 'OCR Baca Teks Gambar',
-      mirrorName: 'Faa Vision OCR',
-      attempt: 1,
-      isFallback: false,
-    });
-    const r1 = await fetchToolEndpoint(
-      `https://api-faa.my.id/faa/ocr?url=${encodeURIComponent(arg)}`,
-      26000,
-      signal
-    );
-    const j1 = safeParseJson(r1.body);
-    const resObj = j1?.result as Record<string, unknown> | string | undefined;
-    const extracted =
-      typeof resObj === 'string'
-        ? resObj.trim()
-        : typeof resObj?.text === 'string'
-          ? resObj.text.trim()
-          : typeof j1?.text === 'string'
-            ? j1.text.trim()
-            : '';
-
-    if (r1.ok && extracted) {
-      return {
-        content: `### 🔍 Hasil Ekstraksi Teks OCR\n\n\`\`\`text\n${extracted}\n\`\`\``,
-        answeredById: 'faa-ocr',
-        answeredByName: 'Vision OCR · Faa API',
-        usedFallback: false,
-        imageUrl: arg,
-      };
-    }
-
-    throw new Error(
-      'Tidak ditemukan teks yang terbaca pada gambar tersebut, atau gambar terlalu buram.'
-    );
-  }
-
-  // === 30. MEME GENERATOR HD ===
+  // === MEME GENERATOR HD ===
   if (toolId === 'meme') {
     if (!arg) {
       throw new Error(
@@ -5614,7 +5538,7 @@ export async function executeWebToolCommand({
     };
   }
 
-  // === 31. PUBLIC PROFILE & COUNTRY INFO (TIKTOK, GITHUB, NEGARA) ===
+  // === PUBLIC PROFILE & COUNTRY INFO (TIKTOK, GITHUB, NEGARA) ===
   if (toolId === 'stalker') {
     const mode = (subOption || 'tiktok').toLowerCase();
     const cleanTarget = arg.replace(/^@/, '').trim();

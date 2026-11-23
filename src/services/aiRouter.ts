@@ -1120,6 +1120,7 @@ export interface ProxyRequestSpec {
   body?: string;
   timeoutMs: number;
   clientFirst?: boolean;
+  utilityTool?: boolean;
 }
 
 export function buildModelRequests(
@@ -2621,6 +2622,7 @@ async function callGateway(
       headers: spec.headers,
       body: spec.body,
       timeoutMs: spec.timeoutMs,
+      ...(spec.utilityTool ? { usageClass: 'utility-tool' } : {}),
     }),
     signal,
   });
@@ -4356,6 +4358,7 @@ export async function generateMultiEngineImage({
           method: 'GET',
           timeoutMs: 32000,
           clientFirst: true,
+          utilityTool: true,
         },
         signal
       );

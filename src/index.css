@@ -164,6 +164,36 @@ body,
   appearance: none;
 }
 
+.nd-tools-catalog-scroll {
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
+}
+
+.nd-tools-catalog-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nd-tools-catalog-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nd-tools-catalog-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.nd-tools-catalog-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.48);
+  background-clip: padding-box;
+}
+
 .nd-glass-sheet {
   background: linear-gradient(
     180deg,

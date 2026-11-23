@@ -545,7 +545,7 @@ export function ToolsStudioModal({
       }}
     >
       <div
-        className={isStandalonePage ? 'flex h-dvh w-full max-w-none flex-col overflow-hidden border-0 bg-[#0e0b18] shadow-none' : 'nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-5xl sm:rounded-3xl'}
+        className={isStandalonePage ? 'flex h-dvh min-h-0 w-full max-w-none flex-col overflow-hidden border-0 bg-[#0e0b18] shadow-none' : 'nd-glass-sheet animate-sheet-up flex max-h-[91dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-5xl sm:rounded-3xl'}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Grabber Handle */}
@@ -1113,7 +1113,7 @@ export function ToolsStudioModal({
             </div>
 
             {/* Airy Grouped Catalog Body */}
-            <div className="pb-safe min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
+            <div tabIndex={0} aria-label="Daftar tools, dapat digulir" className="nd-tools-catalog-scroll pb-safe min-h-0 flex-1 space-y-6 p-4 sm:p-6">
               {filteredTools.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-12 text-center">
                   <p className="font-display text-sm font-semibold text-white">

@@ -1229,6 +1229,7 @@ async function fetchToolEndpoint(
       targetUrl,
       method: 'GET',
       timeoutMs,
+      usageClass: 'utility-tool',
     }),
     signal,
   });

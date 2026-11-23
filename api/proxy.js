@@ -236,6 +236,74 @@ export const config = {
   maxDuration: 60,
 };
 
+// Utility integrations are deliberately separated from metered AI/model proxy calls.
+// Keep this exact-host allowlist in sync with webTools.ts and specialized image tools.
+const FREE_UTILITY_API_HOSTS = new Set([
+  'ai.zelai.qzz.io',
+  'air-quality-api.open-meteo.com',
+  'api-faa.my.id',
+  'api-ninjas.com',
+  'api-varhad.my.id',
+  'api-synhs.my.id',
+  'api-xemoz-official.my.id',
+  'api.api-ninjas.com',
+  'api.bmkg.go.id',
+  'api.coingecko.com',
+  'api.gold-api.com',
+  'api.memegen.link',
+  'api.myquran.com',
+  'api.neosoft.best',
+  'api.nexray.eu.cc',
+  'api.open-meteo.com',
+  'api.siputzx.my.id',
+  'api.snowping.cfd',
+  'api.synoxcloud.xyz',
+  'api.niellku.web.id',
+  'apiii-xrina.my.id',
+  'bintangapi.my.id',
+  'brat.siputzx.my.id',
+  'comiku.my.id',
+  'data.bmkg.go.id',
+  'geocoding-api.open-meteo.com',
+  'my.izuka-api.xyz',
+  'nekos.best',
+  'neosoft.best',
+  'nominatim.openstreetmap.org',
+  'nexray.eu.cc',
+  'open.er-api.com',
+  'picsum.photos',
+  'query1.finance.yahoo.com',
+  'query2.finance.yahoo.com',
+  'raw.githubusercontent.com',
+  'shinana-brat.hf.space',
+  'siputzx.my.id',
+  'snowping.cfd',
+  'synoxcloud.xyz',
+  'v2.api-varhad.my.id',
+  'wallhaven.cc',
+  'wttr.in',
+  'github.com',
+  'chat.whatsapp.com',
+  'www.instagram.com',
+  'www.mediafire.com',
+  'www.nodatagpt.web.id',
+  'www.tiktok.com',
+  'www.tikwm.com',
+  'www.youtube.com',
+  'youtu.be',
+  'www.stenly.org',
+  'zenquotes.io',
+]);
+
+function isAllowlistedUtilityTarget(rawUrl) {
+  try {
+    const target = new URL(String(rawUrl || ''));
+    return target.protocol === 'https:' && !target.port && FREE_UTILITY_API_HOSTS.has(target.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -322,12 +390,16 @@ export default async function handler(req, res) {
   const hasPersonalByokRelay =
     Boolean(parsedBodyPreview?.routerRelay) &&
     (rawAuthHeader.length >= 16 || isModelsDiscovery);
+  const isAllowlistedUtilityTool =
+    parsedBodyPreview?.usageClass === 'utility-tool' &&
+    isAllowlistedUtilityTarget(rawTargetPreview);
 
   const sec = enforceNodeApiSecurity(req, res, {
     routeName: isUploadAction ? 'proxy-upload' : 'proxy',
     mode: isUploadAction ? 'media' : 'api',
     isDiagnostic: isProbePayload,
     allowByokBypass: hasPersonalByokRelay,
+    allowUtilityBypass: isAllowlistedUtilityTool,
     maxBodyBytes: isUploadAction
       ? 6 * 1024 * 1024
       : isVisionMultimodalPost

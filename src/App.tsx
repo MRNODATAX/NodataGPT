@@ -62,6 +62,7 @@ import {
 } from './services/accessGate';
 import {
   generateMultiEngineImage,
+  detectSpecializedImageTool,
   getHealthyModelCount,
   parseImagePromptIntent,
   sendMultiModelChat,
@@ -96,6 +97,10 @@ import type {
   WaifuScenarioPreset,
   WaifuStoreState,
 } from './types/waifu';
+
+function isUtilityToolPrompt(prompt: string): boolean {
+  return Boolean(detectWebToolCommand(prompt) || detectSpecializedImageTool(prompt));
+}
 
 interface PendingStreamState {
   chatId: string;
@@ -225,6 +230,7 @@ export function App() {
   );
   const showAccessGateModal =
     !showSplash &&
+    !toolsStudioOpen &&
     !(settingsOpen && configuringByokFromLock) &&
     (isHardLocked || gateModalManualOpen);
 
@@ -710,14 +716,14 @@ export function App() {
           autoFallback: settings.imageAutoFallback,
           settings,
         });
-        clearProtectedTurn(protectedTurnId);
+        if (protectedTurnId) clearProtectedTurn(protectedTurnId);
         void consumeProtectedTurnOnServer(protectedTurnId, byokActiveForTurn);
         if (!res.imageUrl) {
           throw new Error('Model gambar tidak mengembalikan URL avatar.');
         }
         return res.imageUrl;
       } catch (err) {
-        clearProtectedTurn(protectedTurnId);
+        if (protectedTurnId) clearProtectedTurn(protectedTurnId);
         throw err;
       }
     },
@@ -774,8 +780,9 @@ export function App() {
       setElapsedMs(0);
       setIsLoading(true);
       setRouterStatus(null);
-      markUserSendDispatched();
-      const protectedTurnId = beginProtectedTurn();
+      const isUtilityToolTurn = isUtilityToolPrompt(promptText);
+      if (!isUtilityToolTurn) markUserSendDispatched();
+      const protectedTurnId = isUtilityToolTurn ? '' : beginProtectedTurn();
       const byokActiveForTurn = hasPersonalByokActive(settings);
 
       const fullPrompt = attachmentText
@@ -840,7 +847,7 @@ export function App() {
               onStatus: (st) => setRouterStatus(st),
             });
 
-        clearProtectedTurn(protectedTurnId);
+        if (protectedTurnId) clearProtectedTurn(protectedTurnId);
         abortControllerRef.current = null;
         setRouterStatus(null);
 
@@ -849,7 +856,9 @@ export function App() {
           Math.round(performance.now() - turnStartRef.current)
         );
         recordModelLatency(result.answeredById, rawTurnDuration);
-        void consumeProtectedTurnOnServer(protectedTurnId, byokActiveForTurn);
+        if (!isUtilityToolTurn) {
+          void consumeProtectedTurnOnServer(protectedTurnId, byokActiveForTurn);
+        }
 
         const reducedMotion =
           typeof window !== 'undefined' &&
@@ -992,7 +1001,7 @@ export function App() {
           }
         }, 26);
       } catch (err) {
-        clearProtectedTurn(protectedTurnId);
+        if (protectedTurnId) clearProtectedTurn(protectedTurnId);
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
@@ -1092,11 +1101,12 @@ export function App() {
         return;
       }
 
-      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+      const isUtilityToolTurn = isUtilityToolPrompt(trimmed);
+      if (!isUtilityToolTurn && isGateLockedForSettings(getAccessGateState(), settings)) {
         setGateModalManualOpen(true);
         return;
       }
-      if (checkSendCooldownRemainingMs() > 0) return;
+      if (!isUtilityToolTurn && checkSendCooldownRemainingMs() > 0) return;
 
       const isWebTool = Boolean(detectWebToolCommand(trimmed));
       const implicitCasualWaifu =
@@ -1244,11 +1254,12 @@ export function App() {
     async (commandText: string, displayLabel?: string) => {
       const clean = commandText.trim();
       if (!clean || isLoading) return;
-      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+      const isUtilityToolTurn = isUtilityToolPrompt(clean);
+      if (!isUtilityToolTurn && isGateLockedForSettings(getAccessGateState(), settings)) {
         setGateModalManualOpen(true);
         return;
       }
-      if (checkSendCooldownRemainingMs() > 0) return;
+      if (!isUtilityToolTurn && checkSendCooldownRemainingMs() > 0) return;
 
       const visibleUserText = (displayLabel || clean).trim();
       const isWebTool = Boolean(detectWebToolCommand(clean));
@@ -1514,7 +1525,7 @@ export function App() {
     async (userMessageId: string, updatedContent: string) => {
       const trimmed = updatedContent.trim();
       if (!activeConversation || !trimmed) return;
-      if (isGateLockedForSettings(getAccessGateState(), settings)) {
+      if (!isUtilityToolPrompt(trimmed) && isGateLockedForSettings(getAccessGateState(), settings)) {
         setGateModalManualOpen(true);
         return;
       }

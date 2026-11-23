@@ -49,6 +49,7 @@ import { StoryHdTool } from './StoryHdTool';
 import { TempMailTool } from './TempMailTool';
 import { AnimeDiscoverTool } from './AnimeDiscoverTool';
 import { VisualVaultTool } from './VisualVaultTool';
+import { AnimeAvatarStudio } from './AnimeAvatarStudio';
 
 interface ToolsStudioModalProps {
   isOpen: boolean;
@@ -467,7 +468,15 @@ export function ToolsStudioModal({
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {selectedTool?.id === 'visual-vault' ? (
+        {selectedTool?.id === 'anime-avatar' ? (
+          <>
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
+              <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>
+              <button type="button" onClick={onClose} aria-label="Tutup Tools Studio" className="rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10">Tutup</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto"><AnimeAvatarStudio /></div>
+          </>
+        ) : selectedTool?.id === 'visual-vault' ? (
           <>
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
               <button type="button" onClick={() => setSelectedTool(null)} className="rounded-xl border border-white/15 px-3 py-2 text-xs text-slate-200 hover:bg-white/10">← Kembali ke tools</button>

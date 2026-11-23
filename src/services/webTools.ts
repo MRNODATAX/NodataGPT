@@ -155,6 +155,19 @@ export interface WebToolStatusCallback {
 // Strictly OSINT + Categories A, B, D, and E (Category C intentionally excluded per user directive)
 export const WEB_TOOLS_CATALOG: WebToolDefinition[] = [
   {
+    id: 'anime-avatar',
+    category: 'D',
+    categoryLabel: 'Kreatif, Riset & Info ID',
+    name: 'Anime Avatar Studio · Kartu Kreator',
+    shortName: 'Anime Avatar Studio',
+    slashCommand: '/avatar',
+    badge: 'Kartu PNG · Lokal & Privat',
+    description: 'Buat kartu avatar orisinal dari foto pilihan dengan tema warna dan teks yang dapat disesuaikan.',
+    placeholder: 'Pilih foto avatar…',
+    exampleInput: '',
+    requiresInput: false,
+  },
+  {
     id: 'visual-vault',
     category: 'D',
     categoryLabel: 'Kreatif, Riset & Info ID',

@@ -458,7 +458,7 @@ export function ToolsStudioModal({
       }}
     >
       <div
-        className="nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-3xl"
+        className="nd-glass-sheet animate-sheet-up flex max-h-[91dvh] w-full flex-col overflow-hidden rounded-t-[26px] sm:max-h-[88dvh] sm:max-w-5xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Mobile Grabber Handle */}
@@ -985,17 +985,26 @@ export function ToolsStudioModal({
               </button>
             </div>
 
-            {/* Hub intro */}
-            <div className="shrink-0 px-4 pt-4 sm:px-6">
-              <div className="relative overflow-hidden rounded-2xl border border-cyan-200/15 bg-[radial-gradient(ellipse_at_82%_0%,rgba(34,211,238,.2),transparent_42%),linear-gradient(115deg,#0b1424,#101a2b_58%,#111827)] p-4 sm:p-5">
-                <div className="pointer-events-none absolute -right-7 -top-12 h-36 w-36 rounded-full border border-cyan-100/10 bg-cyan-300/5 blur-[1px]" />
-                <div className="relative flex flex-wrap items-end justify-between gap-3">
-                  <div><span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200">NODATAGPT · TOOLKIT</span>
-                    <h3 className="mt-1 text-lg font-black text-white sm:text-xl">Satu hub untuk semua kebutuhan</h3>
-                    <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-300">Cari, filter, dan jalankan utilitas langsung dari ruang kerja NodataGPT.</p></div>
-                  <div className="flex gap-2 text-center">
-                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{WEB_TOOLS_CATALOG.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-400">tools</span></div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{CATEGORY_ORDER.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-400">kategori</span></div>
+            {/* Pastel anime-inspired header, illustrated with original CSS decoration. */}
+            <div className="shrink-0 px-4 pt-3 sm:px-6 sm:pt-4">
+              <div className="relative isolate overflow-hidden rounded-[22px] border border-fuchsia-200/20 bg-[radial-gradient(ellipse_at_88%_18%,rgba(251,207,232,.24),transparent_32%),radial-gradient(ellipse_at_12%_100%,rgba(165,243,252,.17),transparent_42%),linear-gradient(115deg,#17152b,#18162b_52%,#10202e)] px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+                <div aria-hidden="true" className="pointer-events-none absolute -right-9 -top-12 -z-10 h-44 w-44 rounded-full border border-pink-100/15 bg-gradient-to-br from-pink-200/15 via-fuchsia-300/10 to-cyan-200/15 blur-[1px]" />
+                <div aria-hidden="true" className="pointer-events-none absolute right-[14%] top-10 -z-10 h-24 w-24 rounded-full bg-fuchsia-300/10 blur-2xl" />
+                <div className="mb-3 flex items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+                  <div className="flex min-w-0 items-center gap-2 text-[14px] leading-none sm:text-base" aria-hidden="true">
+                    <span>🌸</span><span>✨</span><span>☁️</span><span>🍒</span><span>🦋</span><span>💫</span>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-cyan-100/20 bg-cyan-200/10 px-2.5 py-1 text-[9px] font-bold tracking-[0.14em] text-cyan-100 sm:text-[10px]">NODATA · TOOLKIT</span>
+                </div>
+                <div className="relative flex flex-wrap items-end justify-between gap-4">
+                  <div className="min-w-0">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-100/20 bg-pink-100/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-pink-100"><Sparkles className="h-3 w-3" /> Your creative utility space</span>
+                    <h3 className="mt-2 font-display text-xl font-black tracking-tight text-white sm:text-2xl">Tools <span className="bg-gradient-to-r from-pink-200 via-violet-200 to-cyan-200 bg-clip-text text-transparent">NodataGPT</span></h3>
+                    <p className="mt-1 max-w-xl text-xs leading-relaxed text-slate-200/85 sm:text-[13px]">Temukan tool favoritmu, pilih kategori, lalu mulai dalam satu klik.</p>
+                  </div>
+                  <div className="flex shrink-0 gap-2 text-center">
+                    <div className="min-w-[66px] rounded-xl border border-pink-100/15 bg-black/20 px-3 py-2"><strong className="block text-sm text-pink-100">{WEB_TOOLS_CATALOG.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-300">tools</span></div>
+                    <div className="min-w-[66px] rounded-xl border border-cyan-100/15 bg-black/20 px-3 py-2"><strong className="block text-sm text-cyan-100">{CATEGORY_ORDER.length}</strong><span className="text-[9px] uppercase tracking-wider text-slate-300">kategori</span></div>
                   </div>
                 </div>
               </div>
@@ -1098,12 +1107,30 @@ export function ToolsStudioModal({
                     </div>
 
                     {/* Airy 2-Column Tool Cards */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {section.tools.map((tool) => {
                         const Icon = getToolIcon(tool);
                         const isOrange =
                           tool.category === 'B' || tool.category === 'E';
                         const isOsint = tool.category === 'OSINT';
+                        const iconTone = tool.category === 'OSINT'
+                          ? 'border-emerald-200/30 bg-emerald-300/12 text-emerald-200 group-hover:bg-emerald-300/20'
+                          : tool.category === 'A'
+                            ? 'border-sky-200/30 bg-sky-300/12 text-sky-200 group-hover:bg-sky-300/20'
+                            : tool.category === 'B'
+                              ? 'border-amber-200/30 bg-amber-300/12 text-amber-100 group-hover:bg-amber-300/20'
+                              : tool.category === 'E'
+                                ? 'border-violet-200/30 bg-violet-300/12 text-violet-100 group-hover:bg-violet-300/20'
+                                : 'border-pink-200/30 bg-pink-300/12 text-pink-100 group-hover:bg-pink-300/20';
+                        const cardTone = tool.category === 'OSINT'
+                          ? 'hover:border-emerald-200/35 hover:bg-emerald-950/20'
+                          : tool.category === 'A'
+                            ? 'hover:border-sky-200/35 hover:bg-sky-950/20'
+                            : tool.category === 'B'
+                              ? 'hover:border-amber-200/35 hover:bg-amber-950/15'
+                              : tool.category === 'E'
+                                ? 'hover:border-violet-200/35 hover:bg-violet-950/20'
+                                : 'hover:border-pink-200/35 hover:bg-fuchsia-950/15';
                         const hasCatalog = Boolean(
                           tool.commandCatalog && tool.commandCatalog.length > 0
                         );
@@ -1120,7 +1147,7 @@ export function ToolsStudioModal({
                                 handleChooseTool(tool);
                               }
                             }}
-                            className={`group flex flex-col justify-between rounded-2xl border border-white/10 bg-[#080F1E]/75 p-4 text-left transition-all duration-150 hover:border-[#22D3EE]/40 hover:bg-[#0B162B]/90 hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)] active:scale-[0.99] cursor-pointer ${
+                            className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,.045),transparent_54%),rgba(8,15,30,.88)] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(0,0,0,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-200 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer ${cardTone} ${
                               hasCatalog && expandedRandomModes ? 'sm:col-span-2' : ''
                             }`}
                           >
@@ -1129,15 +1156,9 @@ export function ToolsStudioModal({
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex min-w-0 items-center gap-3">
                                   <span
-                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-transform duration-150 group-hover:scale-105 ${
-                                      isOsint
-                                        ? 'border-emerald-400/35 bg-emerald-500/14 text-emerald-300'
-                                        : isOrange
-                                          ? 'border-[#FB923C]/35 bg-[#FB923C]/14 text-[#FB923C]'
-                                          : 'border-[#22D3EE]/35 bg-[#22D3EE]/14 text-[#22D3EE]'
-                                    }`}
+                                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,.10)] transition-transform duration-200 group-hover:rotate-[-4deg] group-hover:scale-105 ${iconTone}`}
                                   >
-                                    <Icon className="h-4.5 w-4.5" />
+                                    <Icon className="h-[18px] w-[18px]" />
                                   </span>
 
                                   <div className="min-w-0">

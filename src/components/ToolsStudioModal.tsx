@@ -1042,52 +1042,43 @@ export function ToolsStudioModal({
              STEP 1: REDESIGNED AIRY CATALOG BROWSE VIEW (De-Cluttered & Rich)
              ================================================================= */
           <>
-            {/* Spacious Studio Header */}
-            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6 sm:py-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#22D3EE]/35 bg-[#22D3EE]/12 text-[#22D3EE] shadow-[0_0_16px_rgba(34,211,238,0.18)]">
-                  <ToolsIcon className="h-5 w-5" />
+            {/* Editorial-style tools masthead */}
+            <div className="relative isolate flex shrink-0 items-center justify-between overflow-hidden border-b border-white/[0.07] bg-[radial-gradient(ellipse_at_10%_0%,rgba(34,211,238,.11),transparent_42%),linear-gradient(115deg,#101727,#0b101b_55%,#10121e)] px-5 py-5 sm:px-8 sm:py-6">
+              <div className="pointer-events-none absolute -right-12 -top-24 -z-10 h-56 w-56 rounded-full border border-cyan-100/[0.06]" />
+              <div className="pointer-events-none absolute -right-3 -top-14 -z-10 h-40 w-40 rounded-full border border-cyan-100/[0.06]" />
+              <div className="flex min-w-0 items-center gap-3.5 sm:gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] border border-cyan-100/15 bg-cyan-200/[0.08] text-cyan-100 shadow-[0_8px_28px_rgba(34,211,238,.10)] sm:h-14 sm:w-14">
+                  <ToolsIcon className="h-6 w-6" />
                 </span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2
-                      id="nodatagpt-tools-studio-title"
-                      className="font-display text-base font-bold text-white sm:text-lg"
-                    >
-                      NodataGPT Tools Studio
-                    </h2>
-                    <span className="rounded-full border border-[#22D3EE]/30 bg-[#22D3EE]/12 px-2 py-0.5 font-mono-code text-[10.5px] font-bold text-[#67E8F9]">
-                      {WEB_TOOLS_CATALOG.length} Fitur
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-[#94A3B8]">
-                    Pilih fitur siap pakai di bawah atau cari berdasarkan nama &amp; slash command
-                  </p>
+                <div className="min-w-0">
+                  <p className="mb-1 text-[9px] font-bold uppercase tracking-[.23em] text-cyan-200/80">NODATAGPT · TOOLBOX</p>
+                  <h2 id="nodatagpt-tools-studio-title" className="font-display text-xl font-bold tracking-tight text-white sm:text-2xl">Temukan tool yang kamu butuhkan</h2>
+                  <p className="mt-1 hidden text-xs text-slate-400 sm:block">Kumpulan alat praktis untuk kreasi, media, informasi, dan produktivitas.</p>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={onClose}
                 aria-label={isStandalonePage ? 'Kembali ke chat NodataGPT' : 'Tutup Tools Studio'}
-                className={`flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl text-[#CBD5E1] hover:bg-white/10 hover:text-white cursor-pointer ${isStandalonePage ? 'px-2.5 text-xs font-semibold' : 'w-9'}`}
+                className={`ml-2 flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] text-slate-300 transition-colors hover:border-white/15 hover:bg-white/[0.08] hover:text-white cursor-pointer ${isStandalonePage ? 'px-3 text-xs font-semibold' : 'w-10'}`}
               >
                 {isStandalonePage ? <><ArrowLeft className="h-4 w-4" /><span>Kembali ke Chat</span></> : <X className="h-5 w-5" />}
               </button>
             </div>
 
-            {/* Clean Search + Crisp Short Category Pills */}
-            <div className="shrink-0 space-y-2.5 border-b border-white/10 bg-[#050914]/75 px-4 py-3 sm:px-6">
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+            {/* Search-first catalog controls */}
+            <div className="z-10 shrink-0 space-y-3 border-b border-white/[0.06] bg-[#0b101a]/95 px-4 py-4 sm:px-8 sm:py-5">
+              <label className="relative block">
+                <span className="sr-only">Cari tools</span>
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-slate-500" />
                 <input
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari fitur: QRIS, Nomor HP, TikTok, WA, Cuaca, Lirik..."
-                  className="h-10 w-full rounded-xl border border-white/12 bg-black/55 pr-3 pl-10 text-sm text-white placeholder-[#94A3B8] transition-colors focus:border-[#22D3EE] focus:outline-none"
+                  placeholder="Cari tool berdasarkan nama atau fungsi…"
+                  className="h-12 w-full rounded-2xl border border-white/[0.09] bg-[#070b13] pr-4 pl-11 text-sm text-white shadow-[inset_0_1px_2px_rgba(0,0,0,.25)] placeholder:text-slate-500 transition-colors focus:border-cyan-200/35 focus:outline-none focus:ring-4 focus:ring-cyan-200/[0.04]"
                 />
-              </div>
+              </label>
 
               <div className="no-scrollbar flex gap-2 overflow-x-auto pb-0.5">
                 {CATEGORY_TABS.map((tab) => {
@@ -1215,48 +1206,30 @@ export function ToolsStudioModal({
                                 handleChooseTool(tool);
                               }
                             }}
-                            className={`group relative flex min-h-[164px] flex-col justify-between overflow-hidden rounded-[20px] border border-white/[0.09] bg-[linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.012)_48%,rgba(8,15,30,.92))] p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,.12)] transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:shadow-[0_16px_36px_rgba(0,0,0,.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer ${cardTone} ${
+                            className={`group relative flex min-h-[186px] flex-col overflow-hidden rounded-[22px] border border-white/[0.075] bg-[#101620] p-4 text-left shadow-[0_8px_24px_rgba(0,0,0,.14)] transition-all duration-200 hover:-translate-y-1 hover:border-white/15 hover:bg-[#141d29] hover:shadow-[0_18px_42px_rgba(0,0,0,.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 cursor-pointer ${cardTone} ${
                               hasCatalog && expandedRandomModes ? 'sm:col-span-2' : ''
                             }`}
                           >
-                            <div>
-                              {/* Clean Horizontal Card Header */}
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex min-w-0 items-center gap-3">
-                                  <span
-                                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,.10)] transition-transform duration-200 group-hover:rotate-[-4deg] group-hover:scale-105 ${iconTone}`}
-                                  >
-                                    <Icon className="h-[18px] w-[18px]" />
-                                  </span>
-
-                                  <div className="min-w-0">
-                                    <h4 className="line-clamp-1 font-display text-[13.5px] font-bold text-white group-hover:text-[#ECFEFF]">
-                                      {tool.name}
-                                    </h4>
-                                    <span
-                                      className={`mt-0.5 inline-block truncate text-[11px] font-medium ${
-                                        isOsint
-                                          ? 'text-emerald-300/90'
-                                          : isOrange
-                                            ? 'text-[#FDBA74]/90'
-                                            : 'text-[#67E8F9]/90'
-                                      }`}
-                                    >
-                                      {tool.badge}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="flex shrink-0 items-center gap-1">
-                                  {tool.slashCommand && <code className="rounded-lg border border-white/10 bg-black/55 px-2 py-0.5 font-mono-code text-[10.5px] text-[#CBD5E1] group-hover:border-[#22D3EE]/35 group-hover:text-[#A5F3FC]">{tool.slashCommand}</code>}
-                                  <ChevronRight className="h-4 w-4 text-[#64748B] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[#22D3EE]" />
-                                </div>
+                            <span className={`pointer-events-none absolute -right-9 -top-10 h-28 w-28 rounded-full blur-3xl opacity-[0.07] transition-opacity group-hover:opacity-[0.15] ${isOsint ? 'bg-emerald-300' : isOrange ? 'bg-orange-300' : 'bg-cyan-300'}`} />
+                            <div className="relative">
+                              <div className="flex items-center justify-between">
+                                <span className={`flex h-12 w-12 items-center justify-center rounded-[17px] border transition-transform duration-200 group-hover:scale-105 ${iconTone}`}>
+                                  <Icon className="h-5 w-5" strokeWidth={1.8} />
+                                </span>
+                                <ChevronRight className="h-4 w-4 text-slate-600 transition-all duration-200 group-hover:translate-x-1 group-hover:text-slate-300" />
                               </div>
-
-                              {/* Clean 2-Line Description */}
-                              <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-[#94A3B8]">
+                              <h4 className="mt-4 line-clamp-1 font-display text-[15px] font-semibold tracking-[-.02em] text-slate-100 transition-colors group-hover:text-white">
+                                {tool.shortName}
+                              </h4>
+                              <p className="mt-1.5 line-clamp-2 min-h-[34px] text-[11.5px] leading-[1.55] text-slate-400">
                                 {tool.description}
                               </p>
+                            </div>
+                            <div className="relative mt-4 flex items-center justify-between gap-2 border-t border-white/[0.055] pt-3">
+                              <span className={`max-w-[78%] truncate rounded-full border px-2.5 py-1 text-[9px] font-semibold tracking-wide ${isOsint ? 'border-emerald-200/10 bg-emerald-300/[0.06] text-emerald-200/85' : isOrange ? 'border-orange-200/10 bg-orange-300/[0.06] text-orange-100/85' : 'border-cyan-200/10 bg-cyan-300/[0.06] text-cyan-100/85'}`}>
+                                {tool.badge}
+                              </span>
+                              {tool.slashCommand && <code className="shrink-0 font-mono-code text-[9px] text-slate-500">{tool.slashCommand}</code>}
                             </div>
 
                             {/* Collapsible 10-Mode Quick Picker for Random Image (Zero Crowding!) */}
